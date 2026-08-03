@@ -1,0 +1,121 @@
+// src/hooks/useAuth.js — Persistent Authentication Session Hook
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setAuthToken, apiGetProfile } from '../services/api';
+
+const AuthContext = createContext(null);
+const USER_STORAGE_KEY = '@heartlink_user_session';
+const TOKEN_STORAGE_KEY = '@heartlink_token_session';
+
+export function AuthProvider({ children }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Restore saved authentication session on app startup and sync backend DB user record
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const savedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
+        const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+
+        if (savedUser) {
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          setIsAuthenticated(true);
+        }
+
+        if (savedToken) {
+          setAuthToken(savedToken);
+          // Sync fresh profile in background with 2.5s timeout safety
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Profile sync timeout')), 2500)
+          );
+          try {
+            const res = await Promise.race([apiGetProfile(), timeoutPromise]);
+            if (res?.user) {
+              const freshUser = res.user;
+              setUser(freshUser);
+              setIsAuthenticated(true);
+              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(freshUser));
+            }
+          } catch (apiErr) {
+            console.warn('[useAuth] Backend DB sync warning:', apiErr?.message);
+          }
+        }
+      } catch (e) {
+        console.warn('[Session Storage] Failed to restore user session:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
+  }, []);
+
+  const login = async (userData, token = null) => {
+    const activeUser = userData || {
+      id: 1,
+      name: 'Alex Rivera',
+      age: 26,
+      bio: 'Living life, chasing dreams, and making meaningful connections.',
+      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
+      interests: ['Design', 'Photography', 'Travel', 'Coffee', 'Music'],
+    };
+
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(activeUser));
+      if (token) {
+        await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+        setAuthToken(token);
+      }
+    } catch (e) {
+      console.warn('[Session Storage] Failed to store login session:', e);
+    }
+
+    setUser(activeUser);
+    setIsAuthenticated(true);
+  };
+
+  const updateUser = async (updatedData) => {
+    const nextUser = {
+      ...(user || {}),
+      ...updatedData,
+    };
+
+    setUser(nextUser);
+
+    try {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    } catch (e) {
+      console.warn('[Session Storage] Failed to update stored user session:', e);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await AsyncStorage.removeItem(USER_STORAGE_KEY);
+      await AsyncStorage.removeItem(TOKEN_STORAGE_KEY);
+    } catch (e) {
+      console.warn('[Session Storage] Failed to clear stored session:', e);
+    }
+
+    setAuthToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, updateUser, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
