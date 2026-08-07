@@ -19,28 +19,62 @@ export function AuthProvider({ children }) {
         const savedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
         const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
 
+        let localUser = null;
         if (savedUser) {
-          const parsedUser = JSON.parse(savedUser);
-          setUser(parsedUser);
+          localUser = JSON.parse(savedUser);
+          setUser(localUser);
           setIsAuthenticated(true);
         }
 
         if (savedToken) {
           setAuthToken(savedToken);
-          // Sync fresh profile in background with 2.5s timeout safety
+          // Sync fresh profile in background with 4s timeout
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile sync timeout')), 2500)
+            setTimeout(() => reject(new Error('Profile sync timeout')), 4000)
           );
           try {
             const res = await Promise.race([apiGetProfile(), timeoutPromise]);
             if (res?.user) {
               const freshUser = res.user;
-              setUser(freshUser);
+
+              // Backend may return photos as DB objects [{id, photo_url, user_id}] or strings or null
+              const rawBackendPhotos = Array.isArray(freshUser.photos)
+                ? freshUser.photos
+                    .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                    .filter(Boolean)
+                : [];
+
+              // Local photos stored during registration or previous add-photo
+              const localPhotos = Array.isArray(localUser?.photos)
+                ? localUser.photos
+                    .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                    .filter(Boolean)
+                : [];
+              const localImages = Array.isArray(localUser?.images)
+                ? localUser.images.filter(p => typeof p === 'string' && p.startsWith('http'))
+                : [];
+
+              // Merge: backend updates profile fields, but preserve local photos if backend has none
+              const mergedUser = {
+                ...(localUser || {}),
+                ...freshUser,
+                photos: rawBackendPhotos.length > 0
+                  ? rawBackendPhotos
+                  : localPhotos.length > 0
+                    ? localPhotos
+                    : localImages,
+                images: localImages.length > 0 ? localImages : rawBackendPhotos,
+                avatar: freshUser.avatar || localUser?.avatar || null,
+              };
+
+              console.log('[useAuth] Synced. photos:', mergedUser.photos?.length, mergedUser.photos?.slice(0, 1));
+              setUser(mergedUser);
               setIsAuthenticated(true);
-              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(freshUser));
+              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mergedUser));
             }
           } catch (apiErr) {
             console.warn('[useAuth] Backend DB sync warning:', apiErr?.message);
+            // Keep localUser as-is — do NOT overwrite with empty data
           }
         }
       } catch (e) {
@@ -52,6 +86,7 @@ export function AuthProvider({ children }) {
 
     restoreSession();
   }, []);
+
 
   const login = async (userData, token = null) => {
     const activeUser = userData || {

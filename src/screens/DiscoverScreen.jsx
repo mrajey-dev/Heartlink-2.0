@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable,
-  Animated, Dimensions, Image, PanResponder, ActivityIndicator,
-  SafeAreaView, ScrollView, FlatList, StatusBar, Platform, Easing, BackHandler, Alert,
+  Animated, Dimensions, Image, ActivityIndicator,
+  SafeAreaView, StatusBar, Platform, Easing, BackHandler,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,33 +20,35 @@ import CustomAlertModal from '../components/CustomAlertModal';
 import MatchModal from '../components/MatchModal';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
-import { apiSwipeUser, apiGetDiscoveryFeed, apiGetRequests, apiResetDiscovery } from '../services/api';
+import { apiSwipeUser, apiGetDiscoveryFeed, apiResetDiscovery } from '../services/api';
 import { ensureArray, formatImageUrl, calculateMatchPercentage } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 
 const { width, height } = Dimensions.get('window');
 
-
-// Varied reaction copy — a fresh one is picked each time a button is pressed
 const LIKE_MESSAGES = [
-  { title: 'Liked', subtitle: 'Sending your interest their way' },
-  { title: "That's a yes", subtitle: 'Fingers crossed for a match' },
-  { title: 'Good taste', subtitle: 'Your like is on its way' },
-  { title: 'Sent with confidence', subtitle: 'Now we wait and see' },
-  { title: 'Nice pick', subtitle: 'They might just like you back' },
+  { title: 'Liked Profile', subtitle: 'Sending your interest request their way' },
+  { title: "That's a Yes", subtitle: 'Fingers crossed for a mutual match' },
+  { title: 'Great Taste', subtitle: 'Your like is registered and on its way' },
+  { title: 'Sent Interest', subtitle: 'Now we wait to see if they connect back' },
+  { title: 'Nice Pick', subtitle: 'They might just send a spark back to you' },
 ];
 
 const PASS_MESSAGES = [
-  { title: 'Passed', subtitle: 'Finding your next match' },
-  { title: 'Not this one', subtitle: 'Onto someone better suited' },
-  { title: 'Moving on', subtitle: 'The right one is still out there' },
-  { title: 'Next up', subtitle: 'Bringing a new profile your way' },
-  { title: 'Swiped past', subtitle: "That's okay, keep exploring" },
+  { title: 'Passed Profile', subtitle: 'Searching for your next potential match' },
+  { title: 'Moving On', subtitle: 'Bringing someone better suited your way' },
+  { title: 'Next Up', subtitle: 'The right connection is still out there' },
+  { title: 'Swiped Past', subtitle: 'Exploring new profiles in your feed' },
+];
+
+const SUPERLIKE_MESSAGES = [
+  { title: 'Super Spark Sent!', subtitle: 'You stand out at the top of their incoming requests' },
+  { title: 'Priority Like', subtitle: 'They will be notified of your special spark immediately' },
 ];
 
 export default function DiscoverScreen() {
   const navigation = useNavigation();
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const [fontsLoaded] = useFonts({
@@ -58,10 +60,6 @@ export default function DiscoverScreen() {
   const [photoIdx, setPhotoIdx] = useState(0);
   const [showDetail, setShowDetail] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [showBackgroundCards, setShowBackgroundCards] = useState(true);
-  const [likeMsgIdx, setLikeMsgIdx] = useState(0);
-  const [passMsgIdx, setPassMsgIdx] = useState(0);
-  const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
   const [feedLoading, setFeedLoading] = useState(true);
 
   const { user } = useAuth();
@@ -77,7 +75,13 @@ export default function DiscoverScreen() {
   const [matchModalVisible, setMatchModalVisible] = useState(false);
   const [matchModalUser, setMatchModalUser] = useState(null);
 
-  // Improved subscription check with better detection
+  // Reaction toast state
+  const [toastType, setToastType] = useState('like');
+  const [toastMsg, setToastMsg] = useState(LIKE_MESSAGES[0]);
+  const toastOpacity = useRef(new Animated.Value(0)).current;
+  const toastScale = useRef(new Animated.Value(0.85)).current;
+
+  // Active Plan Check
   const hasActivePlan = useMemo(() => {
     if (!user) return false;
     const planName = (
@@ -98,103 +102,23 @@ export default function DiscoverScreen() {
     );
   }, [user]);
 
-  // Determine if the user is on a free plan (direct DB field)
   const isFreePlan = useMemo(() => {
     const plan = (user?.subscription_plan || '').toLowerCase();
     return plan === 'free' || plan === 'basic_free' || plan === '' || plan === 'none';
   }, [user]);
 
-  const handleRewindPassedProfile = () => {
-    if (isAnimating) return;
-    if (passedHistory.length === 0) {
-      setNoRewindModalVisible(true);
-      return;
-    }
-
-    const lastPassed = passedHistory[passedHistory.length - 1];
-    setPassedHistory(prev => prev.slice(0, -1));
-
-    // Restore last passed profile back to front of active feed
-    setDbProfiles(prev => [lastPassed, ...prev.filter(p => p.id !== lastPassed.id)]);
-    resetCardPositions();
-  };
-
-  // New handler respecting free plan limit
-  const handleRewindPress = () => {
-    console.warn('Rewind press - isFreePlan:', isFreePlan, 'rewindUsed:', rewindUsed);
-    if (!isFreePlan) {
-      // Paid users – unlimited rewinds
-      handleRewindPassedProfile();
-      return;
-    }
-    // Free plan – only one rewind allowed
-    if (rewindUsed) {
-      setNoRewindModalVisible(true);
-      return;
-    }
-    setRewindUsed(true);
-    handleRewindPassedProfile();
-  };
-
   const cardHeightRef = useRef(height * 0.5);
 
-  // Create animated values for each card
+  // Animated values for Card
   const card1Pos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const card2Pos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-  const card3Pos = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
-
   const card1Scale = useRef(new Animated.Value(1)).current;
-  const card2Scale = useRef(new Animated.Value(0.97)).current;
-  const card3Scale = useRef(new Animated.Value(0.93)).current;
-
   const card1Opacity = useRef(new Animated.Value(1)).current;
-  const card2Opacity = useRef(new Animated.Value(0.8)).current;
-  const card3Opacity = useRef(new Animated.Value(0.5)).current;
 
-  // Reaction stamp + background flash — now triggered only by the action buttons
-  const likeOpacity = useRef(new Animated.Value(0)).current;
-  const nopeOpacity = useRef(new Animated.Value(0)).current;
-  const likeFlashOpacity = useRef(new Animated.Value(0)).current;
-  const passFlashOpacity = useRef(new Animated.Value(0)).current;
-
-  const sheetY = useRef(new Animated.Value(height)).current;
-
-  // Swipe-down-to-close gesture state
-  const sheetDragY = useRef(new Animated.Value(0)).current;
-  const sheetScrollY = useRef(0); // tracks ScrollView vertical offset
-
-  const sheetPanResponder = useRef(
-    PanResponder.create({
-      // Only claim the gesture when: scrolled to top AND dragging downward
-      onMoveShouldSetPanResponder: (_, gs) =>
-        sheetScrollY.current <= 0 && gs.dy > 8 && gs.dy > Math.abs(gs.dx),
-      onPanResponderGrant: () => {
-        sheetDragY.setValue(0);
-      },
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) sheetDragY.setValue(gs.dy);
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 120 || gs.vy > 0.8) {
-          // Close — reset drag offset first then animate sheetY out
-          sheetDragY.setValue(0);
-          Animated.timing(sheetY, { toValue: height, duration: 220, useNativeDriver: false }).start(
-            () => setShowDetail(false)
-          );
-        } else {
-          // Snap back
-          Animated.spring(sheetDragY, { toValue: 0, tension: 50, friction: 9, useNativeDriver: false }).start();
-        }
-      },
-    })
-  ).current;
-
-  // Active card position (only ever driven programmatically now, never by touch/drag)
-  const pan = card1Pos;
-  const rotate = pan.x.interpolate({
+  // Rotation during button swipe transition
+  const rotate = card1Pos.x.interpolate({
     inputRange: [-width * 0.8, 0, width * 0.8],
-    outputRange: ['-15deg', '0deg', '15deg'],
-    extrapolate: 'clamp'
+    outputRange: ['-12deg', '0deg', '12deg'],
+    extrapolate: 'clamp',
   });
 
   const formatApiProfile = (u) => {
@@ -307,50 +231,38 @@ export default function DiscoverScreen() {
       return filtered.length > 0 ? filtered : dbProfiles;
     }
 
-    // No fallback — always use real database profiles
     return [];
   }, [dbProfiles, user]);
 
-  // Get profiles for the 3 cards safely without infinite looping
-  const getProfileAt = (offset) => {
-    if (!activeProfiles || activeProfiles.length === 0) return null;
-    const idx = currentIndex + offset;
-    if (idx >= activeProfiles.length) return null;
-    return activeProfiles[idx];
-  };
+  const currentProfile = activeProfiles.length > 0 ? activeProfiles[0] : null;
 
-  const currentProfile = getProfileAt(0);
-  const nextProfile = getProfileAt(1);
-  const nextNextProfile = getProfileAt(2);
-
-  const detailsOpacity = useRef(new Animated.Value(1)).current;
+  // Clear toast if feed is empty
+  useEffect(() => {
+    if (!currentProfile || activeProfiles.length === 0) {
+      toastOpacity.setValue(0);
+    }
+  }, [currentProfile, activeProfiles.length, toastOpacity]);
 
   const showDetailRef = useRef(false);
   useEffect(() => {
     showDetailRef.current = showDetail;
   }, [showDetail]);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      setPhotoIdx(0);
-    });
-    return unsubscribe;
-  }, [navigation]);
-
-  // Intercept Android hardware back press: close the detail sheet if open
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
         if (showDetailRef.current) {
-          closeDetail();
-          return true; // prevent default back navigation
+          setShowDetail(false);
+          return true;
         }
-        return false; // allow default back navigation
+        return false;
       };
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => subscription.remove();
     }, [])
   );
+
+  const safePhotoIdx = Math.min(photoIdx, (currentProfile?.images?.length || 1) - 1);
 
   const handlePhotoTapLeft = () => {
     if (isAnimating) return;
@@ -360,12 +272,12 @@ export default function DiscoverScreen() {
   const handlePhotoTapRight = () => {
     if (isAnimating) return;
     if (currentProfile?.images?.length) {
-      setPhotoIdx(prev => (prev + 1) % currentProfile.images.length);
+      setPhotoIdx(prev => Math.min(prev + 1, currentProfile.images.length - 1));
     }
   };
 
   const openDetail = () => {
-    if (isAnimating || !currentProfile) return;
+    if (!currentProfile) return;
     setShowDetail(true);
   };
 
@@ -374,27 +286,40 @@ export default function DiscoverScreen() {
   };
 
   const resetCardPositions = () => {
-    // Reset all cards to default positions instantly
     card1Pos.setValue({ x: 0, y: 0 });
-    card2Pos.setValue({ x: 0, y: 0 });
-    card3Pos.setValue({ x: 0, y: 0 });
     card1Scale.setValue(1);
-    card2Scale.setValue(0.97);
-    card3Scale.setValue(0.93);
     card1Opacity.setValue(1);
-    card2Opacity.setValue(0.8);
-    card3Opacity.setValue(0.5);
-    likeOpacity.setValue(0);
-    nopeOpacity.setValue(0);
-    likeFlashOpacity.setValue(0);
-    passFlashOpacity.setValue(0);
+    toastOpacity.setValue(0);
   };
 
+  const handleRewindPassedProfile = () => {
+    if (isAnimating) return;
+    if (passedHistory.length === 0) {
+      setNoRewindModalVisible(true);
+      return;
+    }
 
+    const lastPassed = passedHistory[passedHistory.length - 1];
+    setPassedHistory(prev => prev.slice(0, -1));
 
+    setDbProfiles(prev => [lastPassed, ...prev.filter(p => p.id !== lastPassed.id)]);
+    resetCardPositions();
+  };
+
+  const handleRewindPress = () => {
+    if (!isFreePlan) {
+      handleRewindPassedProfile();
+      return;
+    }
+    if (rewindUsed) {
+      setNoRewindModalVisible(true);
+      return;
+    }
+    setRewindUsed(true);
+    handleRewindPassedProfile();
+  };
 
   const [dailyVerifyPromptVisible, setDailyVerifyPromptVisible] = useState(false);
-
   const isVerifiedUser = user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true';
 
   useEffect(() => {
@@ -426,26 +351,49 @@ export default function DiscoverScreen() {
       return;
     }
 
-    moveToNext('super_like');
+    swipeCard('right', 'super_like');
   };
 
-  const moveToNext = (rawSwipeType = 'like') => {
-    if (isAnimating) return;
+  // Sequential 3-Phase Animation Sequence:
+  // Phase 1: Slide current profile card off-screen (190ms)
+  // Phase 2: Show reaction status toast on screen -> display -> fade out status toast COMPLETELY
+  // Phase 3: AFTER status toast has disappeared, transition the next profile card cleanly into view!
+  const swipeCard = (direction, rawSwipeType = 'like') => {
+    if (isAnimating || !currentProfile) return;
 
-    const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like'].includes(rawSwipeType)) ? rawSwipeType : 'like';
+    const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like', 'pass'].includes(rawSwipeType))
+      ? rawSwipeType
+      : (direction === 'right' ? 'like' : 'pass');
 
     const isUserVerified = user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true';
     if (!isUserVerified && !hasActivePlan && swipedCount >= 5) {
       setFreeLimitModalVisible(true);
+      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
       return;
     }
 
+    const isLastProfile = activeProfiles.length <= 1;
+
+    // Set status message text & icon type
+    if (swipeType === 'super_like') {
+      setToastType('super_like');
+      setToastMsg(SUPERLIKE_MESSAGES[Math.floor(Math.random() * SUPERLIKE_MESSAGES.length)]);
+    } else if (direction === 'right' || swipeType === 'like') {
+      setToastType('like');
+      setToastMsg(LIKE_MESSAGES[Math.floor(Math.random() * LIKE_MESSAGES.length)]);
+    } else {
+      setToastType('pass');
+      setToastMsg(PASS_MESSAGES[Math.floor(Math.random() * PASS_MESSAGES.length)]);
+    }
+
     setIsAnimating(true);
-    setPhotoIdx(0);
     setSwipedCount(prev => prev + 1);
 
     const currentP = currentProfile;
     if (currentP && currentP.id) {
+      if (swipeType === 'pass') {
+        setPassedHistory(prev => [...prev, currentP]);
+      }
       apiSwipeUser(currentP.id, swipeType).then(res => {
         if (res?.is_match) {
           setMatchModalUser(currentP);
@@ -467,189 +415,94 @@ export default function DiscoverScreen() {
       });
     }
 
-    setLikeMsgIdx(Math.floor(Math.random() * LIKE_MESSAGES.length));
-    likeOpacity.setValue(0);
-    likeFlashOpacity.setValue(0);
+    const targetX = direction === 'right' ? width * 1.35 : -width * 1.35;
 
-    // Step 1: Hide background cards & swipe present profile off screen
-    card2Opacity.setValue(0);
-    card3Opacity.setValue(0);
-
+    // Phase 1: Slide current profile card off-screen cleanly
     Animated.parallel([
-      Animated.timing(pan.x, {
-        toValue: width * 1.4,
-        duration: 280,
+      Animated.timing(card1Pos.x, {
+        toValue: targetX,
+        duration: 190,
         useNativeDriver: false,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(card1Scale, {
-        toValue: 0.85,
-        duration: 280,
-        useNativeDriver: false,
+        easing: Easing.out(Easing.quad),
       }),
       Animated.timing(card1Opacity, {
         toValue: 0,
-        duration: 250,
+        duration: 170,
         useNativeDriver: false,
-      }),
+      })
     ]).start(() => {
-      // Step 2: Present profile is completely gone. Show reaction message on clean screen.
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(likeOpacity, { toValue: 1, duration: 180, useNativeDriver: false, easing: Easing.out(Easing.cubic) }),
-          Animated.delay(350),
-          Animated.timing(likeOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
-        ]),
-        Animated.sequence([
-          Animated.timing(likeFlashOpacity, { toValue: 0.6, duration: 180, useNativeDriver: false }),
-          Animated.delay(350),
-          Animated.timing(likeFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
-        ])
-      ]).start(() => {
-        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
-        setPhotoIdx(0);
+      if (!isLastProfile) {
+        // Phase 2: Show reaction status toast on screen -> display -> fade out completely
+        toastOpacity.setValue(0);
+        toastScale.setValue(0.85);
 
-        requestAnimationFrame(() => {
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(toastOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: false,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.spring(toastScale, {
+              toValue: 1,
+              friction: 6,
+              tension: 40,
+              useNativeDriver: false,
+            }),
+          ]),
+          Animated.delay(400),
+          Animated.timing(toastOpacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: false,
+          }),
+        ]).start(() => {
+          // Phase 3: AFTER reaction toast has completely disappeared, transition next profile onto clean screen
+          setPhotoIdx(0);
+          setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+
           card1Pos.setValue({ x: 0, y: 0 });
-          card1Scale.setValue(0.92);
+          card1Scale.setValue(0.95);
           card1Opacity.setValue(0);
-          card2Scale.setValue(0.97);
-          card2Opacity.setValue(0);
-          card3Scale.setValue(0.93);
-          card3Opacity.setValue(0);
 
           Animated.parallel([
             Animated.timing(card1Opacity, {
               toValue: 1,
-              duration: 320,
+              duration: 200,
               useNativeDriver: false,
               easing: Easing.out(Easing.quad),
             }),
             Animated.spring(card1Scale, {
               toValue: 1,
-              friction: 7,
-              tension: 40,
-              useNativeDriver: false,
-            }),
-            Animated.timing(card2Opacity, {
-              toValue: 0.8,
-              duration: 320,
-              useNativeDriver: false,
-            }),
-            Animated.timing(card3Opacity, {
-              toValue: 0.5,
-              duration: 320,
+              friction: 8,
+              tension: 45,
               useNativeDriver: false,
             }),
           ]).start(() => {
             setIsAnimating(false);
           });
         });
-      });
+      } else {
+        // Final profile swiped: remove from state immediately and show clean empty feed popup
+        toastOpacity.setValue(0);
+        setPhotoIdx(0);
+        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+        card1Pos.setValue({ x: 0, y: 0 });
+        card1Scale.setValue(1);
+        card1Opacity.setValue(1);
+        setIsAnimating(false);
+      }
     });
+  };
+
+  const moveToNext = (swipeType = 'like') => {
+    swipeCard('right', swipeType);
   };
 
   const moveToPrevious = () => {
-    if (isAnimating) return;
-    if (!hasActivePlan && swipedCount >= 5) {
-      setFreeLimitModalVisible(true);
-      return;
-    }
-
-    setIsAnimating(true);
-    setPhotoIdx(0);
-    setSwipedCount(prev => prev + 1);
-
-    const currentP = currentProfile;
-    if (currentP && currentP.id) {
-      setPassedHistory(prev => [...prev, currentP]);
-      apiSwipeUser(currentP.id, 'pass').catch(() => { });
-    }
-
-    setPassMsgIdx(Math.floor(Math.random() * PASS_MESSAGES.length));
-    nopeOpacity.setValue(0);
-    passFlashOpacity.setValue(0);
-
-    // Step 1: Hide background cards & swipe present profile off screen to left
-    card2Opacity.setValue(0);
-    card3Opacity.setValue(0);
-
-    Animated.parallel([
-      Animated.timing(pan.x, {
-        toValue: -width * 1.4,
-        duration: 280,
-        useNativeDriver: false,
-        easing: Easing.out(Easing.cubic),
-      }),
-      Animated.timing(card1Scale, {
-        toValue: 0.85,
-        duration: 280,
-        useNativeDriver: false,
-      }),
-      Animated.timing(card1Opacity, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: false,
-      }),
-    ]).start(() => {
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(nopeOpacity, { toValue: 1, duration: 180, useNativeDriver: false, easing: Easing.out(Easing.cubic) }),
-          Animated.delay(350),
-          Animated.timing(nopeOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
-        ]),
-        Animated.sequence([
-          Animated.timing(passFlashOpacity, { toValue: 0.6, duration: 180, useNativeDriver: false }),
-          Animated.delay(350),
-          Animated.timing(passFlashOpacity, { toValue: 0, duration: 180, useNativeDriver: false }),
-        ])
-      ]).start(() => {
-        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
-        setPhotoIdx(0);
-
-        requestAnimationFrame(() => {
-          card1Pos.setValue({ x: 0, y: 0 });
-          card1Scale.setValue(0.92);
-          card1Opacity.setValue(0);
-          card2Scale.setValue(0.97);
-          card2Opacity.setValue(0);
-          card3Scale.setValue(0.93);
-          card3Opacity.setValue(0);
-
-          Animated.parallel([
-            Animated.timing(card1Opacity, {
-              toValue: 1,
-              duration: 320,
-              useNativeDriver: false,
-              easing: Easing.out(Easing.quad),
-            }),
-            Animated.spring(card1Scale, {
-              toValue: 1,
-              friction: 7,
-              tension: 40,
-              useNativeDriver: false,
-            }),
-            Animated.timing(card2Opacity, {
-              toValue: 0.8,
-              duration: 320,
-              useNativeDriver: false,
-            }),
-            Animated.timing(card3Opacity, {
-              toValue: 0.5,
-              duration: 320,
-              useNativeDriver: false,
-            }),
-          ]).start(() => {
-            setIsAnimating(false);
-          });
-        });
-      });
-    });
+    swipeCard('left', 'pass');
   };
-
-  // Tap zones on the active card: left third = previous photo, right third = next photo,
-  // center = open detail sheet. No drag/swipe gesture handling — the card never
-  // follows the finger, only the action buttons below trigger like/pass.
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
@@ -666,10 +519,6 @@ export default function DiscoverScreen() {
           </View>
 
           <View style={styles.headerRightGroup}>
-            {/* <TouchableOpacity style={styles.headerRightBtn} onPress={handleRewindPress} activeOpacity={0.7}>
-              <Ionicons name="reload-outline" size={18} color="#F59E0B" />
-            </TouchableOpacity> */}
-
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
               <Ionicons name="notifications" size={19} color={theme.textPrimary} />
               {requestCount > 0 && (
@@ -687,20 +536,40 @@ export default function DiscoverScreen() {
         <View style={styles.glowBlobCyan} pointerEvents="none" />
         <View style={styles.glowBlobPurple} pointerEvents="none" />
 
-        {/* Reaction color flash, triggered by the buttons */}
-        <Animated.View style={[styles.swipeBgBase, { opacity: likeFlashOpacity }]} pointerEvents="none">
-          {/* <View style={styles.swipeBgContent}>
-            <Ionicons name="heart" size={100} color="#30D158" />
-          </View> */}
-        </Animated.View>
+        {/* Reaction Toast Overlay (Shown on clean screen, disappears completely before next profile arrives) */}
+        {currentProfile && activeProfiles.length > 0 && (
+          <Animated.View
+            style={[
+              styles.reactionToast,
+              {
+                opacity: toastOpacity,
+                transform: [{ scale: toastScale }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <View
+              style={[
+                styles.reactionIconCircle,
+                toastType === 'super_like'
+                  ? styles.reactionIconCircleSuperlike
+                  : toastType === 'like'
+                    ? styles.reactionIconCircleLike
+                    : styles.reactionIconCirclePass,
+              ]}
+            >
+              <Ionicons
+                name={toastType === 'super_like' ? 'flash' : toastType === 'like' ? 'heart' : 'close'}
+                size={toastType === 'pass' ? 36 : 30}
+                color="#FFF"
+              />
+            </View>
+            <Text style={styles.reactionTitle}>{toastMsg.title}</Text>
+            <Text style={styles.reactionSubtitle}>{toastMsg.subtitle}</Text>
+          </Animated.View>
+        )}
 
-        <Animated.View style={[styles.swipeBgBase, { opacity: passFlashOpacity }]} pointerEvents="none">
-          {/* <View style={styles.swipeBgContent}>
-            <Ionicons name="close-outline" size={110} color="#FF375F" />
-          </View> */}
-        </Animated.View>
-
-        {/* Card Stack */}
+        {/* Card Container (Only Current Profile Card Rendered) */}
         <View
           style={styles.cardStackContainer}
           onLayout={(e) => {
@@ -769,182 +638,92 @@ export default function DiscoverScreen() {
               </View>
             )
           ) : (
-            <>
-              {/* Card 3 (Back-most) - Hidden during transition */}
-              {showBackgroundCards && nextNextProfile && (
-                <Animated.View style={[
-                  styles.card,
-                  styles.cardBack2,
-                  {
-                    opacity: card3Opacity,
-                    transform: [
-                      { translateY: card3Pos.y },
-                      { scale: card3Scale }
-                    ]
-                  }
-                ]}>
-                  <Image source={{ uri: formatImageUrl(nextNextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
-                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-                  <View style={styles.cardTextOverlayBottomLeft}>
-                    <Text style={styles.cardProfileName}>{nextNextProfile.name}{nextNextProfile.showAge !== false ? `, ${nextNextProfile.age}` : ''}</Text>
-                    <Text style={styles.cardProfileJob}>{nextNextProfile.job}</Text>
-                  </View>
-                </Animated.View>
+            /* Single focused Card - Action Buttons for profile swiping */
+            <Animated.View
+              style={[
+                styles.card,
+                styles.cardActive,
+                {
+                  opacity: card1Opacity,
+                  transform: [
+                    { translateX: card1Pos.x },
+                    { translateY: card1Pos.y },
+                    { rotate: rotate },
+                    { scale: card1Scale }
+                  ]
+                }
+              ]}
+            >
+              <Image
+                key={`${currentProfile?.id}_${safePhotoIdx}`}
+                source={{ uri: formatImageUrl(currentProfile?.images?.[safePhotoIdx] || currentProfile?.images?.[0]) }}
+                style={styles.cardPhoto}
+                resizeMode="cover"
+              />
+
+              <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+
+              {/* Top-Right Match Percentage Badge */}
+              <View style={styles.cardMatchBadge} pointerEvents="none">
+                <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
+                <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
+              </View>
+
+              {/* Photo progress dots */}
+              {currentProfile.images.length > 1 && (
+                <View style={styles.photoDotsRow} pointerEvents="none">
+                  {currentProfile.images.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[styles.photoDot, i === safePhotoIdx && styles.photoDotActive]}
+                    />
+                  ))}
+                </View>
               )}
 
-              {/* Card 2 (Middle) - Hidden during transition */}
-              {showBackgroundCards && nextProfile && (
-                <Animated.View style={[
-                  styles.card,
-                  styles.cardBack1,
-                  {
-                    opacity: card2Opacity,
-                    transform: [
-                      { translateY: card2Pos.y },
-                      { scale: card2Scale }
-                    ]
-                  }
-                ]}>
-                  <Image source={{ uri: formatImageUrl(nextProfile.images?.[0]) }} style={styles.cardPhoto} resizeMode="cover" />
-                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-                  <View style={styles.cardTextOverlayBottomLeft}>
-                    <Text style={styles.cardProfileName}>{nextProfile.name}{nextProfile.showAge !== false ? `, ${nextProfile.age}` : ''}</Text>
-                    <Text style={styles.cardProfileJob}>{nextProfile.job}</Text>
+              {/* Tap zones: left = prev photo, right = next photo, center = detail */}
+              <View style={styles.tapZoneRow} pointerEvents="box-none">
+                <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
+                  <View style={styles.tapZoneSide} />
+                </Pressable>
+                <Pressable onPress={openDetail} style={{ flex: 2 }}>
+                  <View style={styles.tapZoneCenter} />
+                </Pressable>
+                <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
+                  <View style={styles.tapZoneSide} />
+                </Pressable>
+              </View>
+
+              <View style={{ width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
+                <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.cardProfileName}>{currentProfile.display_name || currentProfile.displayName || currentProfile.name}{currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}</Text>
+                    {(currentProfile.subscription_plan?.toLowerCase().includes('premium') || currentProfile.isGoldenTick) ? (
+                      <Ionicons name="checkmark-circle" size={19} color="#F59E0B" style={{ marginLeft: 6, alignSelf: 'center' }} />
+                    ) : (currentProfile.isVerified || currentProfile.user?.is_verified) ? (
+                      <Ionicons name="checkmark-circle" size={19} color="#3897F0" style={{ marginLeft: 6, alignSelf: 'center' }} />
+                    ) : null}
                   </View>
-                  <View style={styles.cardMatchBadge} pointerEvents="none">
-                    <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
-                    <Text style={styles.cardMatchBadgeTxt}>{nextProfile.compatibility}% MATCH</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
+                    <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
+                    {currentProfile.distance ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.cardProfileJob}> · </Text>
+                        <Ionicons name="location-sharp" size={13} color="#ffffffff" style={{ marginRight: 2 }} />
+                        <Text style={styles.cardProfileJob}>{currentProfile.distance}</Text>
+                      </View>
+                    ) : null}
                   </View>
-                </Animated.View>
-              )}
-
-              {/* Card 1 (Active) - No drag/swipe handlers, only taps + buttons */}
-              <Animated.View
-                style={[
-                  styles.card,
-                  styles.cardActive,
-                  {
-                    opacity: card1Opacity,
-                    transform: [
-                      { translateX: pan.x },
-                      { translateY: pan.y },
-                      { rotate: rotate }
-                    ]
-                  }
-                ]}
-              >
-                <Image
-                  key={currentProfile?.id || currentIndex}
-                  source={{ uri: formatImageUrl(currentProfile?.images?.[Math.min(photoIdx, (currentProfile?.images?.length || 1) - 1)] || currentProfile?.images?.[0]) }}
-                  style={styles.cardPhoto}
-                  resizeMode="cover"
-                />
-
-                <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-
-                {/* Top-Right Match Percentage Badge */}
-                <View style={styles.cardMatchBadge} pointerEvents="none">
-                  <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
-                  <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
-                </View>
-
-                {/* Photo progress dots */}
-                {currentProfile.images.length > 1 && (
-                  <View style={styles.photoDotsRow} pointerEvents="none">
-                    {currentProfile.images.map((_, i) => (
-                      <View
-                        key={i}
-                        style={[styles.photoDot, i === photoIdx && styles.photoDotActive]}
-                      />
-                    ))}
-                  </View>
-                )}
-
-                {/* Tap zones: left = prev photo, right = next photo. No drag. */}
-                <View style={styles.tapZoneRow} pointerEvents="box-none">
-                  <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
-                    <View style={styles.tapZoneSide} />
-                  </Pressable>
-                  <Pressable onPress={openDetail} style={{ flex: 2 }}>
-                    <View style={styles.tapZoneCenter} />
-                  </Pressable>
-                  <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
-                    <View style={styles.tapZoneSide} />
-                  </Pressable>
-                </View>
-
-                <Animated.View style={{ opacity: detailsOpacity, width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
-                  <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={styles.cardProfileName}>{currentProfile.display_name || currentProfile.displayName || currentProfile.name}{currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}</Text>
-                      {(currentProfile.subscription_plan?.toLowerCase().includes('premium') || currentProfile.isGoldenTick) ? (
-                        <Ionicons name="checkmark-circle" size={19} color="#F59E0B" style={{ marginLeft: 6, alignSelf: 'center' }} />
-                      ) : (currentProfile.isVerified || currentProfile.user?.is_verified) ? (
-                        <Ionicons name="checkmark-circle" size={19} color="#3897F0" style={{ marginLeft: 6, alignSelf: 'center' }} />
-                      ) : null}
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
-                      <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
-                      {currentProfile.distance ? (
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={styles.cardProfileJob}> · </Text>
-                          <Ionicons name="location-sharp" size={13} color="#ffffffff" style={{ marginRight: 2 }} />
-                          <Text style={styles.cardProfileJob}>{currentProfile.distance}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
-
-              </Animated.View>
-
-              {/* Reaction message — shown only when a button is pressed, icon-led, no emoji */}
-              <Animated.View
-                style={[
-                  styles.reactionToast,
-                  {
-                    opacity: likeOpacity,
-                    transform: [{
-                      scale: likeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
-                    }],
-                  },
-                ]}
-                pointerEvents="none"
-              >
-                <View style={[styles.reactionIconCircle, styles.reactionIconCircleLike]}>
-                  <Ionicons name="heart" size={30} color="#fff" />
-                </View>
-                <Text style={styles.reactionTitle}>{LIKE_MESSAGES[likeMsgIdx].title}</Text>
-                <Text style={styles.reactionSubtitle}>{LIKE_MESSAGES[likeMsgIdx].subtitle}</Text>
-              </Animated.View>
-
-              <Animated.View
-                style={[
-                  styles.reactionToast,
-                  {
-                    opacity: nopeOpacity,
-                    transform: [{
-                      scale: nopeOpacity.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] })
-                    }],
-                  },
-                ]}
-                pointerEvents="none"
-              >
-                <View style={[styles.reactionIconCircle, styles.reactionIconCirclePass]}>
-                  <Ionicons name="close" size={30} color="#fff" />
-                </View>
-                <Text style={styles.reactionTitle}>{PASS_MESSAGES[passMsgIdx].title}</Text>
-                <Text style={styles.reactionSubtitle}>{PASS_MESSAGES[passMsgIdx].subtitle}</Text>
-              </Animated.View>
-            </>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
           )}
         </View>
 
-        {/* Actions Row (Only visible when active profiles exist) */}
+        {/* Actions Row */}
         {currentProfile && activeProfiles.length > 0 && (
           <View style={styles.actionsRowWrapper}>
-            {/* Rewind button — only rendered when there are passed profiles to rewind */}
             {passedHistory.length > 0 && (
               <TouchableOpacity
                 onPress={handleRewindPress}
@@ -956,7 +735,6 @@ export default function DiscoverScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Original 3-button row — centered across full width */}
             <View style={styles.actionsRowContainer}>
               <TouchableOpacity
                 onPress={moveToPrevious}
@@ -995,7 +773,7 @@ export default function DiscoverScreen() {
         )}
       </View>
 
-      {/* Unified Profile Detail Modal across Discover, Matches & Chat */}
+      {/* Unified Profile Detail Modal */}
       {showDetail && currentProfile && (
         <ProfileDetail
           visible={showDetail}
@@ -1034,7 +812,6 @@ export default function DiscoverScreen() {
         initialStep="alert"
       />
 
-      {/* Superlike Plan Upgrade Custom Modal */}
       <CustomAlertModal
         visible={superlikeUpgradeModalVisible}
         title="Superlikes Locked"
@@ -1050,7 +827,6 @@ export default function DiscoverScreen() {
         onCancel={() => setSuperlikeUpgradeModalVisible(false)}
       />
 
-      {/* Once-Daily Verification Prompt Modal */}
       <CustomAlertModal
         visible={dailyVerifyPromptVisible}
         title="Verify Your Profile Identity"
@@ -1204,6 +980,62 @@ const getStyles = (theme) => StyleSheet.create({
     zIndex: 0,
   },
 
+  reactionToast: {
+    position: 'absolute',
+    top: '35%',
+    left: 28,
+    right: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 50,
+  },
+  reactionIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  reactionIconCircleLike: {
+    backgroundColor: '#FF007F',
+    shadowColor: '#FF007F',
+  },
+  reactionIconCirclePass: {
+    backgroundColor: '#4A89FF',
+    shadowColor: '#4A89FF',
+  },
+  reactionIconCircleSuperlike: {
+    backgroundColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+  },
+  reactionTitle: {
+    fontFamily: 'BricolageGrotesque_800Bold',
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    textAlign: 'center',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  reactionSubtitle: {
+    fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.90)',
+    textAlign: 'center',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
+
   cardStackContainer: {
     flex: 1,
     marginTop: 12,
@@ -1278,22 +1110,6 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
-  emptySecondaryBtn: {
-    marginTop: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 0, 127, 0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 0, 127, 0.2)',
-  },
-  emptySecondaryTxt: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#FF007F',
-  },
   card: {
     position: 'absolute',
     width: '100%',
@@ -1305,12 +1121,6 @@ const getStyles = (theme) => StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
-  },
-  cardBack2: {
-    zIndex: 1,
-  },
-  cardBack1: {
-    zIndex: 2,
   },
   cardActive: {
     zIndex: 3,
@@ -1337,7 +1147,6 @@ const getStyles = (theme) => StyleSheet.create({
     height: '40%',
   },
 
-  // Left/center/right tap regions on the active card (no drag, taps only)
   tapZoneRow: {
     position: 'absolute',
     top: 0,
@@ -1497,458 +1306,5 @@ const getStyles = (theme) => StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 3,
-  },
-
-  // Reaction message — transparent (no background card), icon-led, big bold text
-  reactionToast: {
-    position: 'absolute',
-    top: '32%',
-    left: 32,
-    right: 32,
-    alignItems: 'center',
-    zIndex: 40,
-  },
-  reactionIconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.9,
-    shadowRadius: 18,
-    elevation: 10,
-  },
-  reactionIconCircleLike: {
-    backgroundColor: '#FF007F',
-    shadowColor: '#FF007F',
-  },
-  reactionIconCirclePass: {
-    backgroundColor: '#4A89FF',
-    shadowColor: '#4A89FF',
-  },
-  reactionTitle: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 40,
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 6,
-    textShadowColor: 'rgba(0,0,0,0.55)',
-    textShadowOffset: { width: 0, height: 3 },
-    textShadowRadius: 10,
-  },
-  reactionSubtitle: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-  },
-
-  swipeBgBase: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-    zIndex: 5,
-    pointerEvents: 'none',
-  },
-  swipeBgContent: {
-    alignItems: 'center',
-    gap: 14,
-    zIndex: 10,
-  },
-
-  detailSheet: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    // No overflow:hidden — it clips Android scroll gesture recognition
-    zIndex: 100,
-  },
-  detailSheetBgClip: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    overflow: 'hidden',
-  },
-  sheetHandleWrap: {
-    // Inside ScrollView — not absolutely positioned, so no touch interception
-    paddingTop: 14,
-    paddingBottom: 10,
-    alignItems: 'center',
-  },
-  sheetHandle: {
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.40)',
-  },
-
-  sheetPhotoWrap: {
-    height: height * 0.56,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  sheetPhoto: {
-    width,
-    height: height * 0.56,
-    resizeMode: 'cover',
-  },
-  sheetPhotoGrad: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 90,
-  },
-  sheetPhotoDots: {
-    position: 'absolute',
-    bottom: 14,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 10,
-  },
-  sheetDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.20)',
-  },
-  sheetDotActive: {
-    width: 18,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#1F2026',
-  },
-
-  sheetBody: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
-  sheetNameRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 18,
-  },
-  sheetName: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: theme.textPrimary,
-    letterSpacing: -0.6,
-  },
-  sheetJob: {
-    fontSize: 14,
-    color: theme.textSec,
-    marginTop: 4,
-  },
-  sheetCompatBadge: {
-    backgroundColor: 'rgba(255,55,95,0.12)',
-    borderRadius: 18,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,55,95,0.25)',
-  },
-  sheetCompatNum: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FF375F',
-  },
-  sheetCompatLbl: {
-    fontSize: 11,
-    color: theme.textSec,
-    fontWeight: '600',
-  },
-
-  sheetCard: {
-    backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: theme.isDark ? 0.2 : 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  sheetCardLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: theme.textFaint,
-    letterSpacing: 1.5,
-    marginBottom: 10,
-  },
-  sheetBio: {
-    fontSize: 15,
-    color: theme.textSec,
-    lineHeight: 23,
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: theme.isDark ? '#2B1E4D' : '#F2EBFF',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  tagText: {
-    color: theme.textPrimary,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  mutualDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mutualDetailAv: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 2,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
-  mutualDetailTxt: {
-    fontSize: 13,
-    color: theme.textSec,
-    flex: 1,
-  },
-
-  sheetActions: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 6,
-  },
-  sheetBtnPass: {
-    flex: 1,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.04)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,55,95,0.35)',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sheetBtnPassTxt: {
-    color: '#FF375F',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  sheetBtnLike: {
-    flex: 2,
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-  },
-  sheetBtnLikeGrad: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sheetBtnLikeTxt: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-
-  sheetCloseBtn: {
-    position: 'absolute',
-    top: 24,
-    right: 18,
-    zIndex: 20,
-  },
-  sheetCloseBtnInner: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  // Hero overlay helpers (positioned inside sheetPhotoWrap)
-  sheetHeroWrap: {
-    height: height * 0.52,
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  sheetHeroPhoto: {
-    width: '100%',
-    height: '100%',
-  },
-  sheetHeroGrad: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '65%',
-  },
-  sheetHeroTag: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  sheetTagDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#30D158',
-  },
-  sheetTagTxt: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  sheetHeroCompat: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    backgroundColor: 'rgba(255,55,95,0.85)',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    alignItems: 'center',
-  },
-  sheetHeroCompatNum: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-    lineHeight: 18,
-  },
-  sheetHeroCompatLbl: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  sheetHeroNameWrap: {
-    position: 'absolute',
-    bottom: 18,
-    left: 18,
-    right: 18,
-  },
-  sheetHeroName: {
-    color: '#fff',
-    fontSize: 28,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
-  sheetHeroSub: {
-    color: 'rgba(255,255,255,0.80)',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-
-  // Quick facts
-  quickFactsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
-  },
-  quickFact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: theme.isDark ? '#1C1236' : '#F2EBFF',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  quickFactTxt: {
-    color: theme.textPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  // Lifestyle grid
-  lifestyleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  lifestyleItem: {
-    width: '46%',
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-    borderRadius: 14,
-    padding: 12,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: theme.border,
-  },
-  lifestyleIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  lifestyleLbl: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.textFaint,
-    letterSpacing: 0.5,
-  },
-  lifestyleVal: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.textPrimary,
   },
 });

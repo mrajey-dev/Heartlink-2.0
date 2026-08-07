@@ -18,6 +18,9 @@ const { width, height } = Dimensions.get('window');
 const CARD_WIDTH = width * 0.92;
 const CARD_SPACING = (width - CARD_WIDTH) / 2;
 
+// Helper to check if device is small
+const isSmallDevice = height < 700;
+
 export default function PlansScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -187,7 +190,12 @@ export default function PlansScreen() {
             style={StyleSheet.absoluteFill}
           />
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.cardInnerScroll}>
+          {/* Use ScrollView inside card for vertical scrolling */}
+          <ScrollView 
+            showsVerticalScrollIndicator={false} 
+            contentContainerStyle={styles.cardInnerScroll}
+            style={styles.cardScrollView}
+          >
             {/* Top Pill Badge */}
             <View style={styles.badgeRow}>
               <View style={styles.badgeCapsule}>
@@ -202,11 +210,11 @@ export default function PlansScreen() {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={styles.iconGrad}
                 >
-                  <Ionicons name={card.iconName} size={28} color="#FFFFFF" />
+                  <Ionicons name={card.iconName} size={isSmallDevice ? 24 : 28} color="#FFFFFF" />
                 </LinearGradient>
               </View>
-              <Text style={styles.cardTitle}>{card.name}</Text>
-              <Text style={styles.cardTagline}>{card.tagline}</Text>
+              <Text style={[styles.cardTitle, isSmallDevice && styles.smallCardTitle]}>{card.name}</Text>
+              <Text style={[styles.cardTagline, isSmallDevice && styles.smallCardTagline]}>{card.tagline}</Text>
             </View>
 
             {/* Duration Selector Tabs inside Card */}
@@ -221,6 +229,7 @@ export default function PlansScreen() {
                       style={[
                         styles.durTab,
                         isSelected && styles.durTabSelected,
+                        isSmallDevice && styles.smallDurTab,
                       ]}
                       onPress={() => handleSelectDuration(card.id, dur.id)}
                       activeOpacity={0.8}
@@ -233,7 +242,7 @@ export default function PlansScreen() {
                         />
                       )}
 
-                      <View style={styles.durTabContent}>
+                      <View style={[styles.durTabContent, isSmallDevice && styles.smallDurTabContent]}>
                         {dur.save ? (
                           <View style={[styles.savePill, isSelected && styles.savePillActive]}>
                             <Text style={[styles.saveTxt, isSelected && styles.whiteTxt]}>
@@ -242,13 +251,13 @@ export default function PlansScreen() {
                           </View>
                         ) : null}
 
-                        <Text style={[styles.durLabelText, isSelected && styles.whiteTxt]}>
+                        <Text style={[styles.durLabelText, isSelected && styles.whiteTxt, isSmallDevice && styles.smallDurLabelText]}>
                           {dur.label}
                         </Text>
-                        <Text style={[styles.durPriceText, isSelected && styles.whiteTxt]}>
+                        <Text style={[styles.durPriceText, isSelected && styles.whiteTxt, isSmallDevice && styles.smallDurPriceText]}>
                           {dur.price}<Text style={styles.durUnitText}>{dur.unit}</Text>
                         </Text>
-                        <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt]}>
+                        <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
                           {isWelcomeDiscount ? `${calculateDiscountedPrice(dur.total, 20)} (20% OFF)` : dur.total}
                         </Text>
                       </View>
@@ -263,19 +272,22 @@ export default function PlansScreen() {
               <Text style={styles.sectionLabel}>INCLUDED PERKS</Text>
               <View style={styles.featuresList}>
                 {card.features.map((feat, fIdx) => (
-                  <View key={fIdx} style={styles.featureRow}>
+                  <View key={fIdx} style={[styles.featureRow, isSmallDevice && styles.smallFeatureRow]}>
                     <View style={[styles.featureIconBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
-                      <Ionicons name={feat.icon} size={15} color={card.accentColor} />
+                      <Ionicons name={feat.icon} size={isSmallDevice ? 13 : 15} color={card.accentColor} />
                     </View>
-                    <Text style={styles.featureTitle}>{feat.title}</Text>
+                    <Text style={[styles.featureTitle, isSmallDevice && styles.smallFeatureTitle]}>{feat.title}</Text>
                   </View>
                 ))}
               </View>
             </View>
+
+            {/* Add extra bottom padding for CTA */}
+            <View style={styles.bottomSpacer} />
           </ScrollView>
 
           {/* Sticky CTA Button at Bottom of Card */}
-          <View style={styles.cardCtaWrap}>
+          <View style={[styles.cardCtaWrap, isSmallDevice && styles.smallCardCtaWrap]}>
             <TouchableOpacity
               onPress={() => handleSubscribe(card)}
               activeOpacity={0.88}
@@ -286,8 +298,8 @@ export default function PlansScreen() {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.cardCtaGrad}
               >
-                <Ionicons name="sparkles" size={17} color="#FFFFFF" />
-                <Text style={styles.cardCtaText}>
+                <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" />
+                <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
                   Get {card.name} ({selectedDurObj.price}{selectedDurObj.unit})
                 </Text>
               </LinearGradient>
@@ -308,7 +320,7 @@ export default function PlansScreen() {
 
       <SafeAreaView style={styles.flex}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, isSmallDevice && styles.smallHeader]}>
           <TouchableOpacity
             style={styles.closeBtn}
             onPress={() => navigation.goBack()}
@@ -318,8 +330,8 @@ export default function PlansScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.headerTitle}>HeartLink Membership</Text>
-            <Text style={styles.headerSubtitle}>Swipe to choose your plan</Text>
+            <Text style={[styles.headerTitle, isSmallDevice && styles.smallHeaderTitle]}>HeartLink Membership</Text>
+            <Text style={[styles.headerSubtitle, isSmallDevice && styles.smallHeaderSubtitle]}>Swipe to choose your plan</Text>
           </View>
 
           <View style={{ width: 38 }} />
@@ -327,17 +339,17 @@ export default function PlansScreen() {
 
         {/* Top 20% Welcome Offer Banner with Countdown Timer for 48-Hour New Users */}
         {isOfferEligible && (
-          <View style={styles.topOfferBannerWrap}>
+          <View style={[styles.topOfferBannerWrap, isSmallDevice && styles.smallTopOfferBannerWrap]}>
             <LinearGradient
               colors={['#FF007F', '#E0006C', '#8A2BE2']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.topOfferBannerGrad}
             >
-              <Text style={styles.topOfferBannerTitle}>
+              <Text style={[styles.topOfferBannerTitle, isSmallDevice && styles.smallTopOfferBannerTitle]}>
                 <Text style={styles.boldOfferTxt}>20% OFF </Text>WELCOME OFFER ACTIVE
               </Text>
-              <Text style={styles.topOfferBannerSub}>Expires in {formatTimeLeft(timeLeftMs)}</Text>
+              <Text style={[styles.topOfferBannerSub, isSmallDevice && styles.smallTopOfferBannerSub]}>Expires in {formatTimeLeft(timeLeftMs)}</Text>
             </LinearGradient>
           </View>
         )}
@@ -374,7 +386,7 @@ export default function PlansScreen() {
             </View>
 
             {/* Page Dots Indicator */}
-            <View style={styles.paginationRow}>
+            <View style={[styles.paginationRow, isSmallDevice && styles.smallPaginationRow]}>
               {plans.map((card, i) => {
                 const inputRange = [
                   (i - 1) * CARD_WIDTH,
@@ -400,6 +412,7 @@ export default function PlansScreen() {
                     style={[
                       styles.dot,
                       { width: dotWidth, opacity, backgroundColor: card.accentColor },
+                      isSmallDevice && styles.smallDot,
                     ]}
                   />
                 );
@@ -408,15 +421,15 @@ export default function PlansScreen() {
           </>
         )}
 
-        <View style={styles.disclaimerWrap}>
+        <View style={[styles.disclaimerWrap, isSmallDevice && styles.smallDisclaimerWrap]}>
           <View style={styles.policyLinksRow}>
-            <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/terms').catch(() => {})}>
-              <Text style={styles.policyLinkTxt}>Terms of Service</Text>
-            </TouchableOpacity>
+            {/* <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/terms').catch(() => {})}>
+              <Text style={[styles.policyLinkTxt, isSmallDevice && styles.smallPolicyLinkTxt]}>Terms of Service</Text>
+            </TouchableOpacity> */}
             <Text style={styles.policyDot}>•</Text>
-            <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/privacy').catch(() => {})}>
-              <Text style={styles.policyLinkTxt}>Privacy Policy</Text>
-            </TouchableOpacity>
+            {/* <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/privacy').catch(() => {})}>
+              <Text style={[styles.policyLinkTxt, isSmallDevice && styles.smallPolicyLinkTxt]}>Privacy Policy</Text>
+            </TouchableOpacity> */}
           </View>
         </View>
       </SafeAreaView>
@@ -491,6 +504,10 @@ const getStyles = (theme) => StyleSheet.create({
     marginBottom: 8,
     zIndex: 10,
   },
+  smallTopOfferBannerWrap: {
+    marginBottom: 4,
+    paddingHorizontal: 12,
+  },
   topOfferBannerGrad: {
     flexDirection: 'column',
     alignItems: 'center',
@@ -516,12 +533,18 @@ const getStyles = (theme) => StyleSheet.create({
     letterSpacing: 0.5,
     textAlign: 'center',
   },
+  smallTopOfferBannerTitle: {
+    fontSize: 10,
+  },
   topOfferBannerSub: {
     color: 'rgba(255, 255, 255, 0.95)',
     fontSize: 11,
     fontWeight: '500',
     marginTop: 2,
     textAlign: 'center',
+  },
+  smallTopOfferBannerSub: {
+    fontSize: 9.5,
   },
 
   // Header
@@ -533,6 +556,11 @@ const getStyles = (theme) => StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10,
     paddingBottom: 8,
     zIndex: 10,
+  },
+  smallHeader: {
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 6,
+    paddingBottom: 4,
+    paddingHorizontal: 16,
   },
   closeBtn: {
     width: 38,
@@ -553,10 +581,16 @@ const getStyles = (theme) => StyleSheet.create({
     color: theme.textPrimary,
     letterSpacing: -0.3,
   },
+  smallHeaderTitle: {
+    fontSize: 15,
+  },
   headerSubtitle: {
     fontSize: 11,
     color: theme.textFaint,
     marginTop: 2,
+  },
+  smallHeaderSubtitle: {
+    fontSize: 9.5,
   },
 
   // Carousel
@@ -573,7 +607,7 @@ const getStyles = (theme) => StyleSheet.create({
   // Card Outer & Inner
   cardWrapper: {
     width: CARD_WIDTH,
-    height: height * 0.81,
+    height: isSmallDevice ? height * 0.78 : height * 0.81,
     paddingHorizontal: 4,
     paddingVertical: 4,
     shadowColor: '#000',
@@ -590,15 +624,21 @@ const getStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
     overflow: 'hidden',
   },
+  cardScrollView: {
+    flex: 1,
+  },
   cardInnerScroll: {
     padding: 18,
-    paddingBottom: 80,
+    paddingBottom: isSmallDevice ? 70 : 80,
+  },
+  bottomSpacer: {
+    height: isSmallDevice ? 10 : 20,
   },
 
   // Badge Tag
   badgeRow: {
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: isSmallDevice ? 10 : 14,
   },
   badgeCapsule: {
     flexDirection: 'row',
@@ -618,14 +658,14 @@ const getStyles = (theme) => StyleSheet.create({
   // Header Icon & Title
   cardHeader: {
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: isSmallDevice ? 12 : 18,
   },
   iconCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: isSmallDevice ? 50 : 60,
+    height: isSmallDevice ? 50 : 60,
+    borderRadius: isSmallDevice ? 25 : 30,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: isSmallDevice ? 6 : 10,
   },
   iconGrad: {
     flex: 1,
@@ -638,6 +678,9 @@ const getStyles = (theme) => StyleSheet.create({
     color: theme.textPrimary,
     letterSpacing: -0.3,
   },
+  smallCardTitle: {
+    fontSize: 18,
+  },
   cardTagline: {
     fontSize: 12,
     color: theme.textSec,
@@ -646,10 +689,15 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 10,
     lineHeight: 17,
   },
+  smallCardTagline: {
+    fontSize: 10.5,
+    lineHeight: 14,
+    marginTop: 2,
+  },
 
   // Duration Grid
   durationSection: {
-    marginBottom: 20,
+    marginBottom: isSmallDevice ? 12 : 20,
   },
   sectionLabel: {
     fontSize: 10,
@@ -670,12 +718,18 @@ const getStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.03)',
     overflow: 'hidden',
   },
+  smallDurTab: {
+    borderRadius: 14,
+  },
   durTabSelected: {
     borderColor: 'transparent',
   },
   durTabContent: {
     padding: 10,
     alignItems: 'center',
+  },
+  smallDurTabContent: {
+    padding: 6,
   },
   savePill: {
     backgroundColor: 'rgba(48, 209, 88, 0.15)',
@@ -697,11 +751,17 @@ const getStyles = (theme) => StyleSheet.create({
     fontWeight: '800',
     color: theme.textPrimary,
   },
+  smallDurLabelText: {
+    fontSize: 10,
+  },
   durPriceText: {
     fontSize: 16,
     fontWeight: '800',
     color: theme.textPrimary,
     marginTop: 2,
+  },
+  smallDurPriceText: {
+    fontSize: 14,
   },
   durUnitText: {
     fontSize: 10,
@@ -713,6 +773,9 @@ const getStyles = (theme) => StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+  smallDurTotalText: {
+    fontSize: 8.5,
+  },
   whiteTxt: {
     color: '#FFFFFF',
   },
@@ -722,15 +785,18 @@ const getStyles = (theme) => StyleSheet.create({
 
   // Features Section
   featuresSection: {
-    marginBottom: 10,
+    marginBottom: isSmallDevice ? 6 : 10,
   },
   featuresList: {
-    gap: 10,
+    gap: isSmallDevice ? 6 : 10,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  smallFeatureRow: {
+    gap: 8,
   },
   featureIconBadge: {
     width: 28,
@@ -748,6 +814,10 @@ const getStyles = (theme) => StyleSheet.create({
     flex: 1,
     lineHeight: 18,
   },
+  smallFeatureTitle: {
+    fontSize: 11.5,
+    lineHeight: 15,
+  },
 
   // Sticky Card CTA
   cardCtaWrap: {
@@ -760,6 +830,9 @@ const getStyles = (theme) => StyleSheet.create({
     borderTopColor: theme.border,
     backgroundColor: theme.isDark ? '#1C1433' : '#FFFFFF',
     overflow: 'hidden',
+  },
+  smallCardCtaWrap: {
+    padding: 10,
   },
   cardCtaBtn: {
     height: 48,
@@ -778,6 +851,9 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  smallCardCtaText: {
+    fontSize: 11.5,
+  },
 
   // Pagination Dots
   paginationRow: {
@@ -787,15 +863,27 @@ const getStyles = (theme) => StyleSheet.create({
     gap: 6,
     paddingVertical: 8,
   },
+  smallPaginationRow: {
+    paddingVertical: 4,
+    gap: 4,
+  },
   dot: {
     height: 7,
     borderRadius: 3.5,
+  },
+  smallDot: {
+    height: 5,
+    borderRadius: 2.5,
   },
 
   disclaimerWrap: {
     alignItems: 'center',
     paddingBottom: 10,
     paddingHorizontal: 20,
+  },
+  smallDisclaimerWrap: {
+    paddingBottom: 6,
+    paddingHorizontal: 16,
   },
   disclaimerText: {
     fontSize: 10,
@@ -814,6 +902,9 @@ const getStyles = (theme) => StyleSheet.create({
     fontWeight: '700',
     color: theme.accent || '#FF007F',
     textDecorationLine: 'underline',
+  },
+  smallPolicyLinkTxt: {
+    fontSize: 9,
   },
   policyDot: {
     fontSize: 10,

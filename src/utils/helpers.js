@@ -32,15 +32,26 @@ export const formatImageUrl = (url, fallback = 'https://images.unsplash.com/phot
 
   const cleanUrl = url.trim();
 
-  // If it's an uploaded image path (e.g. /uploads/... or http://.../uploads/...)
+  // Already a full absolute URL with /uploads/ → return as-is (no stripping/rebuilding)
+  if ((cleanUrl.startsWith('https://') || cleanUrl.startsWith('http://')) && cleanUrl.includes('/uploads/')) {
+    return cleanUrl;
+  }
+
+  // Relative path /uploads/user_xxx/photo.jpg → prepend server base URL
+  if (cleanUrl.startsWith('/uploads/')) {
+    const baseUrl = getActiveServerBaseUrl();
+    return `${baseUrl}${cleanUrl}`;
+  }
+
+  // Any other string containing /uploads/ (edge case: domain-stripped) → reconstruct
   if (cleanUrl.includes('/uploads/')) {
     const relativePath = cleanUrl.substring(cleanUrl.indexOf('/uploads/'));
     const baseUrl = getActiveServerBaseUrl();
     return `${baseUrl}${relativePath}`;
   }
 
-  // If it's an un-uploaded local file:// URL stored before upload feature was added
-  if (cleanUrl.startsWith('file://')) {
+  // Local device files → can't display, use fallback
+  if (cleanUrl.startsWith('file://') || cleanUrl.startsWith('content://')) {
     return fallback;
   }
 
@@ -54,13 +65,13 @@ export const formatDistance = (km) => {
 
 export const formatTime = (date) => {
   const now = new Date();
-  const d   = new Date(date);
+  const d = new Date(date);
   const diffMs = now - d;
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1)  return 'Just now';
+  if (diffMin < 1) return 'Just now';
   if (diffMin < 60) return `${diffMin}m`;
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24)   return `${diffH}h`;
+  if (diffH < 24) return `${diffH}h`;
   const diffD = Math.floor(diffH / 24);
   return `${diffD}d`;
 };
@@ -81,7 +92,7 @@ export const ensureArray = (val, fallback = []) => {
       try {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {}
+      } catch (e) { }
     }
     if (trimmed.includes(',')) {
       const split = trimmed.split(',').map(s => s.trim()).filter(Boolean);
@@ -93,7 +104,7 @@ export const ensureArray = (val, fallback = []) => {
     try {
       const vals = Object.values(val).filter(v => typeof v === 'string' && v.trim().length > 0);
       if (vals.length > 0) return vals;
-    } catch (e) {}
+    } catch (e) { }
   }
   return fallback;
 };

@@ -230,7 +230,7 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
       }
     }
 
-    if (!base64Data) return imageUri;
+    if (!base64Data) return null;
 
     const bodyPayload = { image: base64Data, ...extraParams };
 
@@ -244,13 +244,14 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
       return res.url;
     }
 
-    return imageUri;
+    console.warn('[Upload Image]: Server response missing image url');
+    return null;
   } catch (err) {
     if (err?.message?.includes('Inappropriate') || err?.message?.includes('NSFW')) {
       throw err;
     }
     console.warn('[Upload Image Warning]:', err?.message);
-    return imageUri;
+    return null;
   }
 };
 
@@ -357,11 +358,39 @@ export const apiSubscribePlan = (planData) => apiFetch('/subscriptions/subscribe
   method: 'POST',
   body: planData,
 });
-export const apiCreateRazorpayOrder = (data) => apiFetch('/payment/create-order', {
-  method: 'POST',
-  body: data,
-});
-export const apiVerifyRazorpayPayment = (data) => apiFetch('/payment/verify-payment', {
-  method: 'POST',
-  body: data,
-});
+// src/services/api.js - Update the payment-related functions
+
+export const apiCreateRazorpayOrder = async (data) => {
+  try {
+    console.log('[Razorpay] Creating order with data:', data);
+
+    const response = await apiFetch('/payment/create-order', {
+      method: 'POST',
+      body: data,
+    });
+
+    console.log('[Razorpay] Order response:', response);
+    return response;
+  } catch (error) {
+    console.error('[Razorpay] Create order error:', error);
+    console.error('[Razorpay] Error details:', error.message);
+    throw error;
+  }
+};
+
+export const apiVerifyRazorpayPayment = async (data) => {
+  try {
+    console.log('[Razorpay] Verifying payment with data:', data);
+
+    const response = await apiFetch('/payment/verify-payment', {
+      method: 'POST',
+      body: data,
+    });
+
+    console.log('[Razorpay] Verification response:', response);
+    return response;
+  } catch (error) {
+    console.error('[Razorpay] Verify payment error:', error);
+    throw error;
+  }
+};

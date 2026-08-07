@@ -13,7 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import * as ImagePicker from 'expo-image-picker';
 import { updateUserProfile } from '../services/userService';
 import { apiUploadImage, apiDeleteImage } from '../services/api';
-import { ensureArray, renderVerifiedBadge } from '../utils/helpers';
+import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 import { ALL_VIBE_NODES, getVibeByName } from '../utils/vibeData';
 
 import CustomAlertModal from '../components/CustomAlertModal';
@@ -123,25 +123,38 @@ export default function ProfileScreen() {
   const allPhotos = useMemo(() => {
     if (!user) return FALLBACK_PHOTOS;
 
-    let photos = [];
+    // DEBUG: trace what photo data exists in user state
+    console.log('[ProfileScreen] allPhotos user.photos:', JSON.stringify(user.photos));
+    console.log('[ProfileScreen] allPhotos user.images:', JSON.stringify(user.images));
+    console.log('[ProfileScreen] allPhotos user.avatar:', user.avatar);
+
+    let rawPhotos = [];
     const uPhotos = ensureArray(user.photos);
     const uImages = ensureArray(user.images);
 
     if (uPhotos.length > 0) {
-      photos = uPhotos.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean);
+      rawPhotos = uPhotos.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean);
     } else if (uImages.length > 0) {
-      photos = uImages.filter(Boolean);
+      rawPhotos = uImages.filter(Boolean);
     }
 
-    if (user.avatar && !photos.includes(user.avatar)) {
-      photos.unshift(user.avatar);
+    if (user.avatar && !rawPhotos.includes(user.avatar)) {
+      rawPhotos.unshift(user.avatar);
     }
 
-    if (user.coverImage && !photos.includes(user.coverImage)) {
-      photos.unshift(user.coverImage);
+    if (user.coverImage && !rawPhotos.includes(user.coverImage)) {
+      rawPhotos.unshift(user.coverImage);
     }
 
-    return photos.length > 0 ? photos : FALLBACK_PHOTOS;
+    const formattedPhotos = rawPhotos
+      .map(p => formatImageUrl(p))
+      .filter(p => p && typeof p === 'string' && !p.startsWith('file://') && !p.startsWith('content://'));
+
+    // Remove duplicates while preserving order
+    const uniquePhotos = Array.from(new Set(formattedPhotos));
+
+    console.log('[ProfileScreen] allPhotos result:', uniquePhotos);
+    return uniquePhotos.length > 0 ? uniquePhotos : FALLBACK_PHOTOS;
   }, [user]);
 
   // Registered user data
@@ -1516,7 +1529,7 @@ const getStyles = (theme) => StyleSheet.create({
   nameContainer: {
     flex: 1,
     paddingRight: 10,
-    marginTop:20,
+    marginTop: 20,
   },
   profileName: {
     fontSize: 22,

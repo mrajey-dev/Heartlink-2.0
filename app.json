@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#080010"
-    },
     "ios": {
       "supportsTablet": true
     },
@@ -18,8 +13,9 @@
       "package": "com.prathameshainwale.heartlink",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "backgroundColor": "#080010",
-        "foregroundImage": "./assets/android-icon-foreground.png"
+        "foregroundImage": "./assets/icon.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png",
+        "backgroundColor": "#FFFFFF"
       }
     },
     "web": {
@@ -27,7 +23,8 @@
     },
     "plugins": [
       "expo-font",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-status-bar"
     ],
     "extra": {
       "eas": {

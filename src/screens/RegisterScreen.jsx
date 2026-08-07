@@ -35,28 +35,28 @@ const THEME = LIGHT_THEME;
 // ─── Data ───────────────────────────────────────────────────────────────────
 const HOBBIES = [
   { name: 'Photography', icon: 'camera-outline' },
-  { name: 'Travel',      icon: 'airplane-outline' },
-  { name: 'Music',       icon: 'musical-notes-outline' },
-  { name: 'Cooking',     icon: 'restaurant-outline' },
-  { name: 'Gaming',      icon: 'game-controller-outline' },
-  { name: 'Fitness',     icon: 'fitness-outline' },
-  { name: 'Reading',     icon: 'book-outline' },
-  { name: 'Art',         icon: 'color-palette-outline' },
-  { name: 'Dancing',     icon: 'body-outline' },
-  { name: 'Yoga',        icon: 'heart-circle-outline' },
-  { name: 'Hiking',      icon: 'compass-outline' },
-  { name: 'Movies',      icon: 'film-outline' },
-  { name: 'Fashion',     icon: 'shirt-outline' },
-  { name: 'Technology',  icon: 'hardware-chip-outline' },
-  { name: 'Sports',      icon: 'football-outline' },
-  { name: 'Coffee',      icon: 'cafe-outline' },
+  { name: 'Travel', icon: 'airplane-outline' },
+  { name: 'Music', icon: 'musical-notes-outline' },
+  { name: 'Cooking', icon: 'restaurant-outline' },
+  { name: 'Gaming', icon: 'game-controller-outline' },
+  { name: 'Fitness', icon: 'fitness-outline' },
+  { name: 'Reading', icon: 'book-outline' },
+  { name: 'Art', icon: 'color-palette-outline' },
+  { name: 'Dancing', icon: 'body-outline' },
+  { name: 'Yoga', icon: 'heart-circle-outline' },
+  { name: 'Hiking', icon: 'compass-outline' },
+  { name: 'Movies', icon: 'film-outline' },
+  { name: 'Fashion', icon: 'shirt-outline' },
+  { name: 'Technology', icon: 'hardware-chip-outline' },
+  { name: 'Sports', icon: 'football-outline' },
+  { name: 'Coffee', icon: 'cafe-outline' },
 ];
 
 const RELATIONSHIP_TYPES = [
   { label: 'Long-term Relationship', icon: 'heart-outline', desc: 'Looking for something serious' },
-  { label: 'Casual Dating',          icon: 'cafe-outline', desc: 'Going with the flow' },
-  { label: 'Friendship',             icon: 'people-outline', desc: 'Making new friends' },
-  { label: 'Marriage-minded',        icon: 'ribbon-outline', desc: 'Ready to settle down' },
+  { label: 'Casual Dating', icon: 'cafe-outline', desc: 'Going with the flow' },
+  { label: 'Friendship', icon: 'people-outline', desc: 'Making new friends' },
+  { label: 'Marriage-minded', icon: 'ribbon-outline', desc: 'Ready to settle down' },
 ];
 
 const GENDERS = ['Man', 'Woman'];
@@ -100,11 +100,11 @@ function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureT
 }
 
 const inputStyles = StyleSheet.create({
-  wrap:        { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
+  wrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
   wrapFocused: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.04)' },
-  icon:        { marginRight: 10 },
-  field:       { flex: 1, color: THEME.textPrimary, fontSize: 14.5, height: '100%' },
-  eye:         { padding: 6 },
+  icon: { marginRight: 10 },
+  field: { flex: 1, color: THEME.textPrimary, fontSize: 14.5, height: '100%' },
+  eye: { padding: 6 },
 });
 
 // ─── Step 0: Basic Credentials & Display Name ──────────────────────────────
@@ -125,18 +125,18 @@ function StepCredentials({ data, onChange, onFocusScroll }) {
     }
   };
 
-  const formattedDOB = data.dob 
+  const formattedDOB = data.dob
     ? new Date(data.dob).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
     : '';
 
   return (
     <View>
-      <StepHeader icon="person-outline" title="Basic Credentials" sub="Set your name and account info" />
+      <StepHeader icon="person-outline" title="Basic Details" sub="Set your name and account info" />
       <FloatingInput label="Full Name" icon="person-outline" value={data.name} onChangeText={v => onChange('name', v)} maxLength={25} onFocusScroll={() => onFocusScroll(0)} />
       <FloatingInput label="Display Name / Nickname" icon="sparkles-outline" value={data.displayName} onChangeText={v => onChange('displayName', v)} maxLength={25} onFocusScroll={() => onFocusScroll(60)} />
       <FloatingInput label="Email Address" icon="mail-outline" value={data.email} onChangeText={v => onChange('email', v)} keyboardType="email-address" onFocusScroll={() => onFocusScroll(120)} />
       <FloatingInput label="Password" icon="lock-closed-outline" value={data.password} onChangeText={v => onChange('password', v)} secureTextEntry onFocusScroll={() => onFocusScroll(180)} />
-      
+
       <TouchableOpacity
         style={sty.dobTrigger}
         onPress={() => setShowPicker(true)}
@@ -177,14 +177,10 @@ function StepCredentials({ data, onChange, onFocusScroll }) {
   );
 }
 
-// ─── Step 1: Phone & Country Code API Dropdown ──────────────────────────────
+// ─── Step 1: Phone & Country Code (No OTP) ──────────────────────────────
 function StepOTP({ data, onChange, onFocusScroll }) {
-  const [otpSent, setOtpSent] = useState(false);
-  const [countdown, setCountdown] = useState(0);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [countryCodes, setCountryCodes] = useState([]);
   const [loadingCodes, setLoadingCodes] = useState(false);
-  const refs = Array(6).fill(null).map(() => useRef(null));
 
   useEffect(() => {
     setLoadingCodes(true);
@@ -196,29 +192,9 @@ function StepOTP({ data, onChange, onFocusScroll }) {
 
   const currentCountryCode = data.countryCode || '+91';
 
-  const sendOTP = () => {
-    if (!data.phone || data.phone.length < 10) return;
-    setOtpSent(true);
-    setCountdown(30);
-    let t = 30;
-    const interval = setInterval(() => {
-      t--;
-      setCountdown(t);
-      if (t === 0) clearInterval(interval);
-    }, 1000);
-  };
-
-  const handleOtpChange = (text, idx) => {
-    const newOtp = [...otp];
-    newOtp[idx] = text.slice(-1);
-    setOtp(newOtp);
-    onChange('otp', newOtp.join(''));
-    if (text && idx < 5) refs[idx + 1].current?.focus();
-  };
-
   return (
     <View>
-      <StepHeader icon="call-outline" title="Verify Your Phone" sub="Select country code and verify number" />
+      <StepHeader icon="call-outline" title="Your Phone Number" sub="Select country code and enter your number" />
 
       <SearchableDropdownModal
         label="Country Code"
@@ -242,40 +218,12 @@ function StepOTP({ data, onChange, onFocusScroll }) {
         onFocusScroll={() => onFocusScroll(100)}
       />
 
-      <TouchableOpacity
-        style={[sty.sendOtpBtn, (!data.phone || data.phone.length < 10) && sty.btnDisabled]}
-        onPress={sendOTP}
-        disabled={!data.phone || data.phone.length < 10 || countdown > 0}
-      >
-        <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sty.sendOtpGrad}>
-          <Text style={sty.sendOtpText}>
-            {countdown > 0 ? `Resend in ${countdown}s` : otpSent ? 'Resend OTP' : 'Send OTP'}
-          </Text>
-        </LinearGradient>
-      </TouchableOpacity>
-
-      {otpSent && (
-        <View>
-          <Text style={[sty.label, { marginTop: 20 }]}>Enter 6-digit OTP sent to {currentCountryCode} {data.phone}</Text>
-          <View style={sty.otpRow}>
-            {otp.map((digit, i) => (
-              <TextInput
-                key={i}
-                ref={refs[i]}
-                style={[sty.otpBox, digit && sty.otpBoxFilled]}
-                value={digit}
-                onChangeText={t => handleOtpChange(t, i)}
-                keyboardType="numeric"
-                maxLength={1}
-              />
-            ))}
-          </View>
-          <View style={sty.otpHintRow}>
-            <Ionicons name="information-circle-outline" size={14} color={THEME.textFaint} />
-            <Text style={sty.otpHint}>Use 1 2 3 4 5 6 for demo</Text>
-          </View>
-        </View>
-      )}
+      <View style={sty.phoneNoteCard}>
+        <Ionicons name="information-circle-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+        <Text style={sty.phoneNoteText}>
+          Your phone number will be used for account recovery and profile verification
+        </Text>
+      </View>
     </View>
   );
 }
@@ -353,7 +301,7 @@ function StepLocation({ data, onChange, onFocusScroll }) {
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
-  
+
   const [loadingCountries, setLoadingCountries] = useState(false);
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
@@ -393,7 +341,7 @@ function StepLocation({ data, onChange, onFocusScroll }) {
   return (
     <View>
       <StepHeader icon="location-outline" title="Where are you located?" sub="Search & select Country, State, City via API" />
-      
+
       {/* Country Dropdown */}
       <SearchableDropdownModal
         label="Country"
@@ -465,7 +413,7 @@ function StepIdentity({ data, onChange, onFocusScroll }) {
   return (
     <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.58 }}>
       <StepHeader icon="school-outline" title="Personal & Lifestyle" sub="Mother tongue, religion, education & diet" />
-      
+
       {/* Mother Tongue Dropdown */}
       <SearchableDropdownModal
         label="Mother Tongue"
@@ -540,7 +488,7 @@ function StepLifestyleHabits({ data, onChange }) {
   return (
     <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.58 }}>
       <StepHeader icon="wine-outline" title="Lifestyle & Dating Habits" sub="How you are to date (Smoking, Drinking, Clubbing & Diet)" />
-      
+
       {/* Smoking Dropdown */}
       <SearchableDropdownModal
         label="Smoking Habit"
@@ -640,7 +588,7 @@ function StepVideoIntro({ data, onChange }) {
   return (
     <View>
       <StepHeader icon="videocam-outline" title="Video Introduction (Optional)" sub="Boost your reach with a 15-second intro video" />
-      
+
       <View style={sty.videoCard}>
         {data.videoIntroUrl ? (
           <View style={sty.videoSuccessWrap}>
@@ -671,7 +619,7 @@ function StepVideoIntro({ data, onChange }) {
   );
 }
 
-// ─── Step 7: Photos ─────────────────────────────────────────────────────────
+// ─── Step 8: Photos ─────────────────────────────────────────────────────────
 function StepPhotos({ data, onChange }) {
   const images = data.images || [];
 
@@ -681,13 +629,19 @@ function StepPhotos({ data, onChange }) {
       allowsEditing: true,
       aspect: [4, 5],
       quality: 0.5,
-      base64: true,
+      base64: true, // Enable Base64 generation for reliable upload
     });
-    if (!res.canceled && res.assets[0]) {
+
+    if (!res.canceled && res.assets[0]?.uri) {
       const asset = res.assets[0];
-      const payload = asset.base64 ? `data:${asset.mimeType || 'image/jpeg'};base64,${asset.base64}` : asset.uri;
+      let photoVal = asset.uri;
+      if (asset.base64) {
+        const mime = asset.mimeType || 'image/jpeg';
+        photoVal = `data:${mime};base64,${asset.base64}`;
+      }
+
       const next = [...images];
-      next[idx] = payload;
+      next[idx] = photoVal;
       onChange('images', next);
     }
   };
@@ -726,8 +680,6 @@ function StepPhotos({ data, onChange }) {
   );
 }
 
-
-
 // ─── Sub-header helper ─────────────────────────────────────────────────────
 function StepHeader({ icon, title, sub }) {
   return (
@@ -743,9 +695,10 @@ function StepHeader({ icon, title, sub }) {
 
 // ─── Main wizard ─────────────────────────────────────────────────────────────
 export default function RegisterScreen() {
+
   const { login } = useAuth();
   const navigation = useNavigation();
-  
+
   const [step, setStep] = useState(0);
   const [data, setData] = useState({
     name: '', displayName: '', email: '', password: '', dob: '', age: '', gender: 'Man',
@@ -758,7 +711,7 @@ export default function RegisterScreen() {
     images: [],
   });
 
-  const slideAnim    = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(1 / TOTAL_STEPS)).current;
   const scrollViewRef = useRef(null);
 
@@ -780,7 +733,7 @@ export default function RegisterScreen() {
       const passValid = !!(d.password && d.password.trim().length >= 6);
       return !!(d.name && d.displayName && emailValid && passValid && d.dob && d.age && d.gender);
     }
-    if (s === 1) return !!(d.countryCode && d.phone && d.phone.length >= 10 && d.otp === '123456');
+    if (s === 1) return !!(d.countryCode && d.phone && d.phone.length >= 10);
     if (s === 2) return !!(d.hobbies && d.hobbies.length >= 3);
     if (s === 3) return !!(d.relationshipType && d.maritalStatus);
     if (s === 4) return !!(d.country && d.state && d.city && d.pincode);
@@ -797,7 +750,7 @@ export default function RegisterScreen() {
   const getValidationMessage = (s) => {
     switch (s) {
       case 0: return 'Please fill in all fields correctly: Full Name, Display Name, a valid Email address, Password (min 6 characters), Date of Birth, and Gender.';
-      case 1: return 'Please select Country Code, enter a valid 10-digit mobile number, and enter demo OTP (123456).';
+      case 1: return 'Please select Country Code and enter a valid 10-digit mobile number.';
       case 2: return 'Please select at least 3 hobbies or interests.';
       case 3: return 'Please select your Relationship Goal and Marital Status.';
       case 4: return 'Please select your Country, State, City, and enter your Zipcode / Pincode.';
@@ -815,7 +768,7 @@ export default function RegisterScreen() {
       setValidationAlertVisible(true);
       return;
     }
-    
+
     if (step < TOTAL_STEPS - 1) {
       Animated.timing(slideAnim, {
         toValue: -width,
@@ -837,8 +790,8 @@ export default function RegisterScreen() {
       let dobString = '2000-01-01';
       if (data.dob) {
         try {
-          dobString = typeof data.dob === 'string' 
-            ? data.dob.split('T')[0] 
+          dobString = typeof data.dob === 'string'
+            ? data.dob.split('T')[0]
             : new Date(data.dob).toISOString().split('T')[0];
         } catch (e) {
           dobString = '2000-01-01';
@@ -887,7 +840,26 @@ export default function RegisterScreen() {
           };
 
           return registerUser(registrationPayload).then((res) => {
-            login(res.user || registrationPayload, res.access_token || null);
+            const serverUser = res.user || {};
+
+            // Extract photos from backend response if it returned them
+            const backendPhotos = Array.isArray(serverUser.photos)
+              ? serverUser.photos
+                  .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                  .filter(Boolean)
+              : [];
+
+            // Always preserve our uploaded URLs — backend /auth/register may NOT return photos[]
+            const mergedUser = {
+              ...registrationPayload,  // base: full local payload including photos
+              ...serverUser,           // override with server fields (id, name, token info etc.)
+              photos: backendPhotos.length > 0 ? backendPhotos : validPhotos,
+              images: validPhotos,     // always keep raw uploaded URL strings
+              avatar: serverUser.avatar || avatarUrl,
+            };
+
+            console.log('[Register] user stored with photos count:', mergedUser.photos?.length, mergedUser.photos);
+            login(mergedUser, res.access_token || null);
           });
         })
         .catch((err) => {
@@ -1042,7 +1014,7 @@ const sty = StyleSheet.create({
   stepTitle: { fontSize: 18, fontWeight: '800', color: THEME.textPrimary },
   stepSub: { fontSize: 12.5, color: THEME.textSec, marginTop: 2 },
   label: { fontSize: 12.5, fontWeight: '700', color: THEME.textSec, marginBottom: 8 },
-  
+
   dobTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
   dobIcon: { marginRight: 10 },
   dobTextContainer: { flex: 1 },
@@ -1119,4 +1091,59 @@ const sty = StyleSheet.create({
   nextBtn: { borderRadius: 16, overflow: 'hidden' },
   nextBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
   nextBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+
+  // New styles for phone step
+  phoneNoteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,0,127,0.04)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.1)',
+  },
+  phoneNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: THEME.textSec,
+    lineHeight: 18
+  },
+
+  // Lifestyle note card
+  lifestyleNoteCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,0,127,0.04)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.1)',
+  },
+  lifestyleNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: THEME.textSec,
+    lineHeight: 18,
+  },
+
+  // Boost note card
+  boostNoteCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,215,0,0.08)',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.2)',
+  },
+  boostNoteText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: THEME.textSec,
+    lineHeight: 18,
+  },
 });
