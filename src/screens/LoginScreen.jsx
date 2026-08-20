@@ -12,7 +12,9 @@ import { useTheme } from '../theme/ThemeContext';
 import { loginUser } from '../services/authService';
 import CustomAlertModal from '../components/CustomAlertModal';
 
-const { width, height } = Dimensions.get('window');
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
+
+const { width, height } = SCREEN;
 
 export default function LoginScreen({ navigation }) {
   const { login } = useAuth();
@@ -226,7 +228,11 @@ export default function LoginScreen({ navigation }) {
             </View>
 
             {/* Forgot Password */}
-            <TouchableOpacity style={styles.forgotBtn}>
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              onPress={() => navigation.navigate('ForgotPassword', { email })}
+              activeOpacity={0.7}
+            >
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
 
@@ -292,71 +298,71 @@ const getStyles = (theme) => StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 22,
-    paddingTop: 40,
-    paddingBottom: 30,
+    paddingHorizontal: scale(20),
+    paddingTop: verticalScale(30),
+    paddingBottom: verticalScale(24),
   },
-  backBtn: { position: 'absolute', top: 16, left: 16, zIndex: 10, padding: 8, borderRadius: 20, backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' },
+  backBtn: { position: 'absolute', top: verticalScale(16), left: scale(16), zIndex: 10, padding: scale(8), borderRadius: scale(20), backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' },
 
   // Orbs
   orbsClip: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
   orb: { position: 'absolute', borderRadius: 999 },
-  orb1: { width: 280, height: 280, top: -60, left: -80, opacity: 0.8 },
-  orb2: { width: 240, height: 240, bottom: 80, right: -60, opacity: 0.7 },
-  orb3: { width: 180, height: 180, top: height * 0.4, left: -50, opacity: 0.6 },
+  orb1: { width: scale(260), height: scale(260), top: -verticalScale(50), left: -scale(70), opacity: 0.8 },
+  orb2: { width: scale(220), height: scale(220), bottom: verticalScale(70), right: -scale(50), opacity: 0.7 },
+  orb3: { width: scale(160), height: scale(160), top: height * 0.4, left: -scale(40), opacity: 0.6 },
 
   // Logo
-  logoSection: { alignItems: 'center', marginBottom: 24 },
+  logoSection: { alignItems: 'center', marginBottom: verticalScale(20) },
   heartGrad: {
-    width: 72, height: 72, borderRadius: 36,
+    width: scale(66), height: scale(66), borderRadius: scale(33),
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#FF007F', shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.6, shadowRadius: 20, elevation: 12,
   },
-  heartEmoji: { fontSize: 34 },
-  logoTitle: { fontSize: 30, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.5, marginTop: 8 },
-  logoSub: { fontSize: 14, color: theme.textSec, marginTop: 3, textAlign: 'center' },
+  heartEmoji: { fontSize: fs(30) },
+  logoTitle: { fontSize: fs(26), fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.5, marginTop: verticalScale(6) },
+  logoSub: { fontSize: fs(13), color: theme.textSec, marginTop: verticalScale(3), textAlign: 'center' },
 
   // Card
   card: {
-    borderRadius: 28,
-    padding: 22,
+    borderRadius: scale(24),
+    padding: scale(20),
     borderWidth: 1,
     borderColor: theme.border,
-    marginBottom: 20,
+    marginBottom: verticalScale(18),
     overflow: 'hidden',
   },
-  cardTitle: { fontSize: 22, fontWeight: '800', color: theme.textPrimary, marginBottom: 5 },
-  cardSub: { fontSize: 13, color: theme.textSec, marginBottom: 22 },
+  cardTitle: { fontSize: fs(20), fontWeight: '800', color: theme.textPrimary, marginBottom: verticalScale(4) },
+  cardSub: { fontSize: fs(12.5), color: theme.textSec, marginBottom: verticalScale(18) },
 
   // Inputs
   inputWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: theme.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)',
-    borderRadius: 14, borderWidth: 1.5, borderColor: theme.border,
-    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 12,
+    borderRadius: scale(14), borderWidth: 1.5, borderColor: theme.border,
+    paddingHorizontal: scale(14), paddingVertical: verticalScale(10), marginBottom: verticalScale(10),
   },
   inputWrapFocused: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.06)' },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, color: theme.textPrimary, fontSize: 15, padding: 0 },
-  eyeBtn: { padding: 4 },
+  inputIcon: { marginRight: scale(10) },
+  input: { flex: 1, color: theme.textPrimary, fontSize: fs(14.5), padding: 0 },
+  eyeBtn: { padding: scale(4) },
 
   // Forgot
-  forgotBtn: { alignSelf: 'flex-end', marginBottom: 18 },
-  forgotText: { color: '#FF4D94', fontSize: 13, fontWeight: '600' },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: verticalScale(16) },
+  forgotText: { color: '#FF4D94', fontSize: fs(12.5), fontWeight: '600' },
 
   // Sign In
-  loginBtnWrap: { borderRadius: 16, overflow: 'hidden' },
-  loginBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingVertical: 15 },
-  loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '800' },
+  loginBtnWrap: { borderRadius: scale(16), overflow: 'hidden' },
+  loginBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: scale(8), paddingVertical: verticalScale(13) },
+  loginBtnText: { color: '#fff', fontSize: fs(15.5), fontWeight: '800' },
 
   // Divider
-  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: verticalScale(14) },
   dividerLine: { flex: 1, height: 1, backgroundColor: theme.border },
-  dividerText: { color: theme.textFaint, fontSize: 13, paddingHorizontal: 12 },
+  dividerText: { color: theme.textFaint, fontSize: fs(12), paddingHorizontal: scale(10) },
 
   // Register
   registerBtn: { alignItems: 'center' },
-  registerText: { color: theme.textSec, fontSize: 14 },
+  registerText: { color: theme.textSec, fontSize: fs(13.5) },
   registerLink: { color: '#FF007F', fontWeight: '700' },
 });

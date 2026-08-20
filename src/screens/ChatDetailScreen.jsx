@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Keyboard,
   AppState,
+  PanResponder,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +39,8 @@ import {
 } from '../services/api';
 import { ensureArray, formatImageUrl } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width, height } = Dimensions.get('window');
 
@@ -101,31 +104,37 @@ const EMOJI_CATEGORIES = [
   },
 ];
 
-// Sample messages array set to empty — keep chat thread blank when empty
+
+
 const SAMPLE_MESSAGES = [];
 
 // How close to the bottom (in px) counts as "already at the bottom"
 const NEAR_BOTTOM_THRESHOLD = 120;
 
-// Lightweight equality check — avoids JSON.stringify allocations on every
-// 2.5s poll tick, which was previously re-serializing the whole array just
-// to detect read-receipt changes.
+// Lightweight equality check — compares text, reactions, read status & replies
 const messagesAreEqual = (a, b) => {
   if (a === b) return true;
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     const x = a[i];
     const y = b[i];
-    if (x.id !== y.id || x.isRead !== y.isRead || x.text !== y.text) {
+    if (
+      x.id !== y.id ||
+      x.isRead !== y.isRead ||
+      x.text !== y.text ||
+      x.reaction !== y.reaction ||
+      x.replyToText !== y.replyToText ||
+      x.replyToSender !== y.replyToSender
+    ) {
       return false;
     }
   }
   return true;
 };
 
-const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
+const REACTION_EMOJIS = ['❤️'];
 
-// Memoized message bubble with Double-Tap, Long-Press reaction bar & Delete option
+// Memoized message bubble with PanResponder Swipe-to-Reply, Double-Tap & Long-Press reaction bar
 const MessageBubble = React.memo(function MessageBubble({
   item,
   theme,
@@ -137,14 +146,78 @@ const MessageBubble = React.memo(function MessageBubble({
   activeReactionMsgId,
   onOpenReactionMenu,
   onCloseReactionMenu,
+  onReplyMessage,
+  onScrollToReplyOriginal,
+  isHighlighted,
 }) {
   const isMe = item.sender === 'me';
   const fade = useRef(new Animated.Value(0)).current;
   const rise = useRef(new Animated.Value(10)).current;
   const heartPop = useRef(new Animated.Value(0)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
   const lastTapRef = useRef(0);
 
   const isMenuOpen = activeReactionMsgId === item.id;
+  const highlightAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isHighlighted) {
+      Animated.sequence([
+        Animated.timing(highlightAnim, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: false,
+        }),
+        Animated.delay(1200),
+        Animated.timing(highlightAnim, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    } else {
+      highlightAnim.setValue(0);
+    }
+  }, [isHighlighted, highlightAnim]);
+
+  const highlightBgColor = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [
+      'rgba(0, 0, 0, 0)',
+      theme.isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 0, 127, 0.16)',
+    ],
+  });
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 12 && Math.abs(gestureState.dy) < 12;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx > 0) {
+          translateX.setValue(Math.min(gestureState.dx, 75));
+        } else {
+          translateX.setValue(Math.max(gestureState.dx, -75));
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (Math.abs(gestureState.dx) > 35 && onReplyMessage) {
+          onReplyMessage(item);
+        }
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 7,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -184,26 +257,37 @@ const MessageBubble = React.memo(function MessageBubble({
   };
 
   return (
-    <View style={[styles.msgContainer, isMe && styles.msgContainerMe, isMenuOpen && { zIndex: 10000, elevation: 10000 }]}>
-      {/* WhatsApp style floating Reaction Quick Bar directly on the message */}
+    <Animated.View
+      style={[
+        styles.msgContainer,
+        isMe && styles.msgContainerMe,
+        isMenuOpen && { zIndex: 10000, elevation: 10000 },
+        { backgroundColor: highlightBgColor, borderRadius: 18, paddingHorizontal: 6, paddingVertical: 2 },
+      ]}
+    >
+      {/* Like button — long press shows ❤️ like + delete only */}
       {isMenuOpen && (
         <View style={[styles.reactionBarPill, isMe ? styles.reactionBarMe : styles.reactionBarOther]}>
-          {REACTION_EMOJIS.map((emoji) => (
-            <TouchableOpacity
-              key={emoji}
-              style={[
-                styles.reactionEmojiBtn,
-                item.reaction === emoji && styles.reactionEmojiBtnSelected,
-              ]}
-              onPress={() => {
-                onReact(item.id, emoji);
-                onCloseReactionMenu();
-              }}
-              activeOpacity={0.6}
-            >
-              <Text style={styles.reactionEmojiText}>{emoji}</Text>
-            </TouchableOpacity>
-          ))}
+          {/* Single heart like button */}
+          <TouchableOpacity
+            style={[
+              styles.reactionEmojiBtn,
+              item.reaction === '❤️' && styles.reactionEmojiBtnSelected,
+              { paddingHorizontal: 14, paddingVertical: 6 },
+            ]}
+            onPress={() => {
+              onReact(item.id, '❤️');
+              onCloseReactionMenu();
+            }}
+            activeOpacity={0.6}
+          >
+            <Text style={[styles.reactionEmojiText, { fontSize: 26 }]}>❤️</Text>
+            {item.reaction === '❤️' && (
+              <Text style={styles.likedLabel}>Liked</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Delete button */}
           <TouchableOpacity
             style={styles.reactionTrashBtn}
             onPress={() => {
@@ -232,10 +316,11 @@ const MessageBubble = React.memo(function MessageBubble({
       </Animated.View>
 
       <Animated.View
+        {...panResponder.panHandlers}
         style={[
           styles.msgRow,
           isMe && styles.msgRowMe,
-          { opacity: fade, transform: [{ translateY: rise }] },
+          { opacity: fade, transform: [{ translateY: rise }, { translateX }] },
         ]}
       >
         {!isMe && (
@@ -256,6 +341,28 @@ const MessageBubble = React.memo(function MessageBubble({
                 colors={theme.gradientAccent}
                 style={[styles.bubble, styles.bubbleMe]}
               >
+                {!!(item.replyToText || item.reply_to_text) && (
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={(e) => {
+                      if (e && e.stopPropagation) e.stopPropagation();
+                      if (onScrollToReplyOriginal) {
+                        onScrollToReplyOriginal(item.replyToId || item.reply_to_id, item.replyToText || item.reply_to_text);
+                      }
+                    }}
+                    style={[styles.replyQuoteBox, styles.replyQuoteBoxMe]}
+                  >
+                    <View style={styles.replyQuoteBar} />
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                      <Text style={[styles.replyQuoteSender, styles.replyQuoteSenderMe]} numberOfLines={1}>
+                        {item.replyToSender || item.reply_to_sender || 'Replying'}
+                      </Text>
+                      <Text style={[styles.replyQuoteText, styles.replyQuoteTextMe]} numberOfLines={2}>
+                        {item.replyToText || item.reply_to_text}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <Text style={styles.bubbleTextMe}>{item.text}</Text>
                 <View style={styles.timeRowMe}>
                   <Text style={styles.bubbleTimeMe}>{item.time}</Text>
@@ -269,6 +376,28 @@ const MessageBubble = React.memo(function MessageBubble({
               </LinearGradient>
             ) : (
               <View style={[styles.bubble, styles.bubbleOther]}>
+                {!!(item.replyToText || item.reply_to_text) && (
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={(e) => {
+                      if (e && e.stopPropagation) e.stopPropagation();
+                      if (onScrollToReplyOriginal) {
+                        onScrollToReplyOriginal(item.replyToId || item.reply_to_id, item.replyToText || item.reply_to_text);
+                      }
+                    }}
+                    style={[styles.replyQuoteBox, styles.replyQuoteBoxOther]}
+                  >
+                    <View style={styles.replyQuoteBar} />
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                      <Text style={[styles.replyQuoteSender, styles.replyQuoteSenderOther]} numberOfLines={1}>
+                        {item.replyToSender || item.reply_to_sender || 'Replying'}
+                      </Text>
+                      <Text style={[styles.replyQuoteText, styles.replyQuoteTextOther]} numberOfLines={2}>
+                        {item.replyToText || item.reply_to_text}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
                 <Text style={styles.bubbleTextOther}>{item.text}</Text>
                 <Text style={styles.bubbleTimeOther}>{item.time}</Text>
               </View>
@@ -287,7 +416,7 @@ const MessageBubble = React.memo(function MessageBubble({
           )}
         </View>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 });
 
@@ -309,10 +438,17 @@ export default function ChatDetailScreen() {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [activeEmojiCategory, setActiveEmojiCategory] = useState(0);
 
+  // Reply message state
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [highlightedMsgId, setHighlightedMsgId] = useState(null);
+
   // Male free message limit state
   const [freeMessagesLeft, setFreeMessagesLeft] = useState(null);
   const [isMaleUser, setIsMaleUser] = useState(false);
   const [isPremiumUser, setIsPremiumUser] = useState(false);
+
+
+
 
   const handleAddEmoji = (emoji) => {
     if (input.length >= 50) return;
@@ -331,6 +467,7 @@ export default function ChatDetailScreen() {
 
   // --- Scroll tracking -----------------------------------------------
   const isNearBottomRef = useRef(true);
+  const currentScrollYRef = useRef(0);
   const listContentHeightRef = useRef(0);
   const listLayoutHeightRef = useRef(0);
   const prevMessageCountRef = useRef(0);
@@ -344,6 +481,7 @@ export default function ChatDetailScreen() {
 
   const handleScroll = useCallback((e) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    currentScrollYRef.current = contentOffset.y;
     listContentHeightRef.current = contentSize.height;
     listLayoutHeightRef.current = layoutMeasurement.height;
     const distanceFromBottom =
@@ -535,6 +673,17 @@ export default function ChatDetailScreen() {
               lastDateHeader = dateHeader;
             }
 
+            let reactionVal = m.reaction || null;
+            if (!reactionVal) {
+              if (m.sender_reaction && m.receiver_reaction) {
+                reactionVal = `${m.sender_reaction} ${m.receiver_reaction}`;
+              } else if (m.sender_reaction) {
+                reactionVal = m.sender_reaction;
+              } else if (m.receiver_reaction) {
+                reactionVal = m.receiver_reaction;
+              }
+            }
+
             return {
               id: m.id?.toString() || Date.now().toString(),
               text: m.message || m.text || m.content || '',
@@ -548,7 +697,10 @@ export default function ChatDetailScreen() {
               dateHeader: showDateHeader ? dateHeader : null,
               isRead: Boolean(m.is_read),
               created_at: m.created_at,
-              reaction: m.reaction || null,
+              reaction: reactionVal,
+              replyToText: m.reply_to_text || m.replyToText || null,
+              replyToSender: m.reply_to_sender || m.replyToSender || null,
+              replyToId: m.reply_to_id || m.replyToId || null,
             };
           });
 
@@ -594,9 +746,14 @@ export default function ChatDetailScreen() {
     [targetId, scrollToBottom]
   );
 
-  // Connect Echo WebSockets on mount
+  // Connect Echo WebSockets & 2-Second Fast Polling on mount
   useEffect(() => {
     fetchHistory(true);
+
+    // Fast 2-second background poll so all new messages & reactions appear instantly without page reload
+    const pollTimer = setInterval(() => {
+      fetchHistory(false);
+    }, 2000);
 
     let echoSub = null;
     const currentUserId = activeUser?.id || activeUser?.user?.id;
@@ -621,6 +778,7 @@ export default function ChatDetailScreen() {
     const unsubChat = eventEmitter.on(EVENTS.CHAT_UPDATED, () => fetchHistory(false));
 
     return () => {
+      clearInterval(pollTimer);
       unsubChat();
       if (echoSub) {
         try { echoSub.stopListening('.message.sent'); } catch (err) { }
@@ -697,6 +855,8 @@ export default function ChatDetailScreen() {
     ]).start(() => setToastVisible(false));
   };
 
+
+
   const send = async () => {
     if (isBlocked) return;
     const textToSend = input.trim();
@@ -729,6 +889,14 @@ export default function ChatDetailScreen() {
       showDateHeader = true;
     }
 
+    const extraData = replyingTo
+      ? {
+        reply_to_id: replyingTo.id,
+        reply_to_text: replyingTo.text,
+        reply_to_sender: replyingTo.senderName,
+      }
+      : {};
+
     const newMessage = {
       id: tempId,
       text: textToSend,
@@ -741,8 +909,11 @@ export default function ChatDetailScreen() {
       isRead: false,
       pending: true,
       created_at: now.toISOString(),
+      replyToText: replyingTo?.text,
+      replyToSender: replyingTo?.senderName,
     };
 
+    setReplyingTo(null);
     setMessages((p) => {
       const next = [...p, newMessage];
       prevMessageCountRef.current = next.length;
@@ -762,7 +933,7 @@ export default function ChatDetailScreen() {
     if (targetId) {
       try {
         // Send via API
-        const res = await apiSendMessage(targetId, textToSend);
+        const res = await apiSendMessage(targetId, textToSend, extraData);
         if (res?.free_messages_left !== undefined) {
           setFreeMessagesLeft(res.free_messages_left);
         }
@@ -900,7 +1071,7 @@ export default function ChatDetailScreen() {
       const targetMsg = prev.find((m) => m.id === msgId);
       const newReaction = targetMsg?.reaction === emoji ? null : emoji;
 
-      if (newReaction && targetId) {
+      if (targetId) {
         apiReactMessage(targetId, newReaction, msgId).catch((err) => {
           console.warn('React message error:', err?.message);
         });
@@ -913,6 +1084,51 @@ export default function ChatDetailScreen() {
       );
     });
   }, [targetId]);
+
+  const handleScrollToReplyOriginal = useCallback(
+    (replyToId, replyToText) => {
+      if (!messages || messages.length === 0) return;
+      const index = messages.findIndex(
+        (m) =>
+          (replyToId && (m.id === replyToId || m.id?.toString() === replyToId?.toString())) ||
+          (replyToText && m.text && m.text.trim() === replyToText.trim())
+      );
+      if (index !== -1) {
+        const targetId = messages[index].id;
+        const currentScrollY = currentScrollYRef.current;
+        const visibleHeight = listLayoutHeightRef.current || 500;
+        const itemY = index * 76;
+
+        // Check if the original message is ALREADY visible in current viewport
+        const isVisible =
+          itemY >= (currentScrollY - 20) &&
+          (itemY + 50) <= (currentScrollY + visibleHeight + 20);
+
+        // Only scroll if it's NOT already visible on screen!
+        if (!isVisible && listRef.current) {
+          try {
+            listRef.current.scrollToIndex({
+              index,
+              animated: true,
+              viewPosition: 0.5,
+            });
+          } catch (e) {
+            listRef.current.scrollToOffset({
+              offset: Math.max(0, index * 76),
+              animated: true,
+            });
+          }
+        }
+
+        // Always highlight the background color
+        setHighlightedMsgId(targetId);
+        setTimeout(() => {
+          setHighlightedMsgId((prev) => (prev === targetId ? null : prev));
+        }, 2000);
+      }
+    },
+    [messages]
+  );
 
   const renderMsg = useCallback(
     ({ item }) => (
@@ -935,10 +1151,20 @@ export default function ChatDetailScreen() {
           activeReactionMsgId={activeReactionMsgId}
           onOpenReactionMenu={(id) => setActiveReactionMsgId(id)}
           onCloseReactionMenu={() => setActiveReactionMsgId(null)}
+          onScrollToReplyOriginal={handleScrollToReplyOriginal}
+          isHighlighted={highlightedMsgId === item.id}
+          onReplyMessage={(msg) =>
+            setReplyingTo({
+              id: msg.id,
+              text: msg.text,
+              sender: msg.sender,
+              senderName: msg.sender === 'me' ? 'yourself' : (activeUser.display_name || activeUser.name || 'User'),
+            })
+          }
         />
       </View>
     ),
-    [theme, styles, activeUser.image, openProfile, handleToggleReaction, handleDeleteSingleMessage, activeReactionMsgId]
+    [theme, styles, activeUser.image, activeUser.display_name, activeUser.name, openProfile, handleToggleReaction, handleDeleteSingleMessage, activeReactionMsgId, handleScrollToReplyOriginal, highlightedMsgId]
   );
 
   const activeMsg = useMemo(
@@ -1039,8 +1265,8 @@ export default function ChatDetailScreen() {
                   setShowClearChatModal(true);
                 }}
               >
-                <Ionicons name="trash-bin-outline" size={18} color="#000000ff" />
-                <Text style={[styles.dropdownOptionText, { color: '#000000ff' }]}>Clear Chat</Text>
+                <Ionicons name="trash-bin-outline" size={18} color="#FF375F" />
+                <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>Clear Chat</Text>
               </TouchableOpacity>
 
               <View style={styles.dropdownDivider} />
@@ -1052,7 +1278,7 @@ export default function ChatDetailScreen() {
                   setShowReportModal(true);
                 }}
               >
-                <Ionicons name="flag-outline" size={18} color="#000000ff" />
+                <Ionicons name="flag-outline" size={18} color={theme.textPrimary} />
                 <Text style={styles.dropdownOptionText}>Report User</Text>
               </TouchableOpacity>
 
@@ -1095,13 +1321,14 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {/* Messages log */}
+        {/* Messages log — with optional wallpaper background */}
         <View
-          style={styles.messagesArea}
+          style={[styles.messagesArea]}
           onTouchStart={() => {
             if (activeReactionMsgId !== null) setActiveReactionMsgId(null);
           }}
         >
+
           <FlatList
             ref={listRef}
             data={messages}
@@ -1116,11 +1343,17 @@ export default function ChatDetailScreen() {
             onScroll={handleScroll}
             scrollEventThrottle={16}
             onContentSizeChange={handleContentSizeChange}
-            initialNumToRender={16}
-            maxToRenderPerBatch={12}
-            windowSize={11}
+            onScrollToIndexFailed={(info) => {
+              listRef.current?.scrollToOffset({
+                offset: Math.max(0, info.index * 76),
+                animated: true,
+              });
+            }}
+            initialNumToRender={20}
+            maxToRenderPerBatch={15}
+            windowSize={15}
             updateCellsBatchingPeriod={50}
-            removeClippedSubviews={Platform.OS === 'android'}
+            removeClippedSubviews={false}
             ListFooterComponent={
               isOtherTyping ? (
                 <View style={[styles.msgRow, { marginBottom: 6 }]}>
@@ -1216,45 +1449,68 @@ export default function ChatDetailScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.inputRow}>
-                <View style={styles.inputWrap}>
-                  <TextInput
-                    ref={inputRef}
-                    style={styles.input}
-                    placeholder="Type a message…"
-                    placeholderTextColor={theme.textFaint}
-                    value={input}
-                    onChangeText={handleInputChange}
-                    maxLength={50}
-                    multiline
-                  />
-                </View>
-
-                <TouchableOpacity
-                  onPress={send}
-                  onPressIn={onSendPressIn}
-                  onPressOut={onSendPressOut}
-                  activeOpacity={0.9}
-                  style={styles.sendBtn}
-                  disabled={isSending || !input.trim() || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)}
-                >
-                  <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
-                    <LinearGradient
-                      colors={theme.gradientAccent}
-                      style={[
-                        styles.sendGrad,
-                        (!input.trim() || isSending || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)) && styles.sendGradDisabled,
-                      ]}
+              <>
+                {/* Reply Preview Bar */}
+                {!!replyingTo && (
+                  <View style={styles.replyPreviewContainer}>
+                    <View style={styles.replyPreviewBar} />
+                    <View style={styles.replyPreviewContent}>
+                      <Text style={styles.replyPreviewTitle} numberOfLines={1}>
+                        Replying to {replyingTo.senderName}
+                      </Text>
+                      <Text style={styles.replyPreviewText} numberOfLines={1}>
+                        {replyingTo.text}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setReplyingTo(null)}
+                      style={styles.replyPreviewCloseBtn}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                      {isSending ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Ionicons name="send" size={15} color="#fff" />
-                      )}
-                    </LinearGradient>
-                  </Animated.View>
-                </TouchableOpacity>
-              </View>
+                      <Ionicons name="close-circle" size={20} color={theme.textSec || '#8E8E93'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <View style={styles.inputRow}>
+                  <View style={styles.inputWrap}>
+                    <TextInput
+                      ref={inputRef}
+                      style={styles.input}
+                      placeholder="Type a message…"
+                      placeholderTextColor={theme.textFaint}
+                      value={input}
+                      onChangeText={handleInputChange}
+                      maxLength={50}
+                      multiline
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={send}
+                    onPressIn={onSendPressIn}
+                    onPressOut={onSendPressOut}
+                    activeOpacity={0.9}
+                    style={styles.sendBtn}
+                    disabled={isSending || !input.trim() || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)}
+                  >
+                    <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
+                      <LinearGradient
+                        colors={theme.gradientAccent}
+                        style={[
+                          styles.sendGrad,
+                          (!input.trim() || isSending || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)) && styles.sendGradDisabled,
+                        ]}
+                      >
+                        {isSending ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Ionicons name="send" size={15} color="#fff" />
+                        )}
+                      </LinearGradient>
+                    </Animated.View>
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </SafeAreaView>
         </View>
@@ -1422,6 +1678,8 @@ export default function ChatDetailScreen() {
           </View>
         </View>
       </Modal>
+
+
 
       {/* Custom Tailored Notification Toast */}
       {toastVisible && (
@@ -2175,4 +2433,93 @@ const getStyles = (theme) =>
     charCountTxtMax: {
       color: '#FF375F',
     },
+
+    // Quoted Reply inside Message Bubble (WhatsApp layout)
+    replyQuoteBox: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      marginBottom: 6,
+      minWidth: 170,
+      width: '100%',
+    },
+    replyQuoteBoxMe: {
+      backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    },
+    replyQuoteBoxOther: {
+      backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.07)',
+    },
+    replyQuoteBar: {
+      width: 3.5,
+      alignSelf: 'stretch',
+      borderRadius: 2,
+      backgroundColor: '#FF007F',
+      marginRight: 8,
+    },
+    replyQuoteSender: {
+      fontSize: 12,
+      fontWeight: '800',
+      marginBottom: 2,
+    },
+    replyQuoteSenderMe: {
+      color: '#00E5FF',
+    },
+    replyQuoteSenderOther: {
+      color: '#FF007F',
+    },
+    replyQuoteText: {
+      fontSize: 12.5,
+      fontWeight: '400',
+      lineHeight: 16,
+    },
+    replyQuoteTextMe: {
+      color: 'rgba(255, 255, 255, 0.9)',
+    },
+    replyQuoteTextOther: {
+      color: theme.textPrimary,
+    },
+
+    // Reply Preview bar above input deck
+    replyPreviewContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.04)',
+      borderTopLeftRadius: 14,
+      borderTopRightRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      marginBottom: 6,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+    },
+    replyPreviewBar: {
+      width: 3.5,
+      height: '100%',
+      minHeight: 24,
+      borderRadius: 2,
+      backgroundColor: '#FF007F',
+      marginRight: 10,
+    },
+    replyPreviewContent: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    replyPreviewTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#FF007F',
+      marginBottom: 2,
+    },
+    replyPreviewText: {
+      fontSize: 12.5,
+      color: theme.textSec || '#8E8E93',
+    },
+    replyPreviewCloseBtn: {
+      padding: 4,
+      marginLeft: 8,
+    },
+
+
   });

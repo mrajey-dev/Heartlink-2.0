@@ -5,7 +5,18 @@ import { apiGetConversations, apiGetRequests, apiGetNotifications, apiMarkNotifi
 import { formatImageUrl } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 import MatchModal from '../components/MatchModal';
-import { navigate } from '../navigation/navigationRef';
+import { navigationRef } from '../navigation/navigationRef';
+
+const getActiveChatUserId = () => {
+  if (navigationRef.isReady()) {
+    const currentRoute = navigationRef.getCurrentRoute();
+    if (currentRoute && currentRoute.name === 'ChatDetail') {
+      return currentRoute.params?.userId || currentRoute.params?.user?.id || currentRoute.params?.match?.id || currentRoute.params?.match?.user_id;
+    }
+  }
+  return null;
+};
+import { registerForPushNotificationsAsync, isExpoGo, Notifications } from '../services/pushNotificationService';
 
 const NotificationContext = createContext({
   bannerVisible: false,
@@ -52,6 +63,8 @@ export const NotificationProvider = ({ children }) => {
         apiGetNotifications().catch(() => null),
       ]);
 
+      const activeChatUserId = getActiveChatUserId();
+
       // 1. Check for INCOMING Chat Messages
       if (chatRes?.conversations && Array.isArray(chatRes.conversations)) {
         let hasNewChat = false;
@@ -63,7 +76,8 @@ export const NotificationProvider = ({ children }) => {
 
           if (currentUnread > 0 && !seenChatMsgRef.current[msgKey]) {
             hasNewChat = true;
-            if (!isInitialFetchRef.current) {
+            const isCurrentlyChatting = activeChatUserId && String(conv.id) === String(activeChatUserId);
+            if (!isInitialFetchRef.current && !isCurrentlyChatting) {
               const displayName = conv.display_name || conv.user?.display_name || conv.name || conv.user?.name || 'New Message';
               triggerNotification({
                 type: 'chat',
@@ -126,6 +140,8 @@ export const NotificationProvider = ({ children }) => {
               const notifType = notif.type || 'notification';
               const fromUser = notif.from_user || notif.fromUser;
               const displayName = fromUser?.display_name || fromUser?.name || 'Your crush';
+              const fromUserId = fromUser?.id || notif.from_user_id;
+              const isFromActiveChatUser = activeChatUserId && fromUserId && String(fromUserId) === String(activeChatUserId);
 
               if (notifType === 'request_accepted' || notifType === 'new_match') {
                 if (fromUser) {
@@ -140,34 +156,39 @@ export const NotificationProvider = ({ children }) => {
                   apiMarkNotificationsRead().catch(() => { });
                 }
 
-                triggerNotification({
-                  type: 'request_accepted',
-                  title: "It's a Match!",
-                  message: `${displayName} accepted your request`,
-                  avatar: fromUser?.avatar ? formatImageUrl(fromUser.avatar) : null,
-                  userId: fromUser?.id,
-                  user: fromUser,
-                });
+                if (!isFromActiveChatUser) {
+                  triggerNotification({
+                    type: 'request_accepted',
+                    title: "It's a Match!",
+                    message: `${displayName} accepted your request`,
+                    avatar: fromUser?.avatar ? formatImageUrl(fromUser.avatar) : null,
+                    userId: fromUser?.id,
+                    user: fromUser,
+                  });
+                }
               } else {
                 let title = 'HeartLink Alert';
                 if (notifType === 'request_declined') title = 'Request Update';
                 else if (notifType === 'message_reaction') title = 'New Reaction';
                 else if (notifType === 'date_proposal') title = 'New Date Proposal';
                 else if (notifType.includes('date')) title = 'Date Update';
+                else if (notifType === 'message' || notifType === 'chat') title = displayName || 'New Message';
 
                 let notifMessage = notif.message || 'You have a new update';
                 if (fromUser?.name && fromUser?.display_name && fromUser.name !== fromUser.display_name) {
                   notifMessage = notifMessage.replace(fromUser.name, fromUser.display_name);
                 }
 
-                triggerNotification({
-                  type: notifType,
-                  title,
-                  message: notifMessage,
-                  avatar: fromUser?.avatar ? formatImageUrl(fromUser.avatar) : null,
-                  userId: fromUser?.id,
-                  user: fromUser,
-                });
+                if (!isFromActiveChatUser) {
+                  triggerNotification({
+                    type: notifType,
+                    title,
+                    message: notifMessage,
+                    avatar: fromUser?.avatar ? formatImageUrl(fromUser.avatar) : null,
+                    userId: fromUser?.id,
+                    user: fromUser,
+                  });
+                }
               }
             }
           }
@@ -184,23 +205,59 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [isAuthenticated, user, triggerNotification]);
 
-  // Real-time active polling interval (every 3.5 seconds)
+  // Real-time active polling interval & Remote Push Notifications registration
   useEffect(() => {
     if (!isAuthenticated) return;
 
+    // Register physical device for Remote Push Notifications (Expo Push API + Hostinger Laravel)
+    registerForPushNotificationsAsync();
+
+    // Check notifications immediately on mount
     checkNotifications();
     const pollInterval = setInterval(checkNotifications, 3500);
 
-    // Event listeners for incoming updates only (Self-sent actions will NOT trigger banners for self)
+    // Event listeners for incoming updates
     const unsubNotif = eventEmitter.on(EVENTS.NOTIFICATION_RECEIVED, checkNotifications);
     const unsubChat = eventEmitter.on(EVENTS.CHAT_UPDATED, checkNotifications);
     const unsubReq = eventEmitter.on(EVENTS.REQUEST_UPDATED, checkNotifications);
+
+    // Expo Push Notification listeners (Only when running in Development / Standalone Build, not Expo Go)
+    let foregroundSub = null;
+    let responseSub = null;
+
+    if (!isExpoGo && Notifications) {
+      try {
+        foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
+          console.log('[NotificationContext] Foreground push notification received:', notification);
+          checkNotifications();
+        });
+
+        responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+          console.log('[NotificationContext] Push notification tapped by user:', response);
+          const data = response?.notification?.request?.content?.data;
+          if (data?.screen) {
+            if (data.screen === 'ChatDetail' && data.params?.userId) {
+              navigate('ChatDetail', {
+                userId: data.params.userId,
+                user: data.params.user || { id: data.params.userId, name: 'User' },
+              });
+            } else {
+              navigate(data.screen, data.params || {});
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('[NotificationContext] Error adding push notification listeners:', err?.message || err);
+      }
+    }
 
     return () => {
       clearInterval(pollInterval);
       unsubNotif();
       unsubChat();
       unsubReq();
+      if (foregroundSub?.remove) foregroundSub.remove();
+      if (responseSub?.remove) responseSub.remove();
     };
   }, [isAuthenticated, checkNotifications, triggerNotification]);
 

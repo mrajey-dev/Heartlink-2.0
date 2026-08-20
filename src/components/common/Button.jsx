@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTheme } from '../../theme/ThemeContext';
 
 export default function Button({
   title,
@@ -9,6 +10,8 @@ export default function Button({
   disabled = false,
   style,
 }) {
+  const { theme, isDark } = useTheme();
+
   if (variant === 'primary') {
     return (
       <TouchableOpacity
@@ -31,12 +34,21 @@ export default function Button({
 
   return (
     <TouchableOpacity
-      style={[styles.base, styles.outline, disabled && styles.disabled, style]}
+      style={[
+        styles.base,
+        styles.outline,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.glass,
+        },
+        disabled && styles.disabled,
+        style
+      ]}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
     >
-      <Text style={styles.outlineText}>{title}</Text>
+      <Text style={[styles.outlineText, { color: theme.textPrimary }]}>{title}</Text>
     </TouchableOpacity>
   );
 }
@@ -55,11 +67,9 @@ const styles = StyleSheet.create({
   primaryText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   outline: {
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  outlineText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  outlineText: { fontWeight: '700', fontSize: 16 },
   disabled: { opacity: 0.4 },
 });

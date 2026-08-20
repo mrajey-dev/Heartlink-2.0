@@ -1,6 +1,6 @@
-// src/hooks/useAuth.js — Persistent Authentication Session Hook
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ScreenCapture from 'expo-screen-capture';
 import { setAuthToken, apiGetProfile } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -11,6 +11,28 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Screen capture permission based on user ID:
+  // User ID 16 -> can take screenshots of app (allowScreenCaptureAsync)
+  // Different user ID -> screenshot shows blank image (preventScreenCaptureAsync)
+  useEffect(() => {
+    const configureScreenCapture = async () => {
+      try {
+        const isAllowed = user && (String(user.id) === '16' || user.id === 16 || user.is_screenshot_allowed === true || user.allow_screenshot === true);
+        if (isAllowed) {
+          await ScreenCapture.allowScreenCaptureAsync();
+          console.log('[ScreenCapture] Screenshots ALLOWED for user ID:', user?.id);
+        } else {
+          await ScreenCapture.preventScreenCaptureAsync();
+          console.log('[ScreenCapture] Screenshots PREVENTED (blank image) for user ID:', user?.id);
+        }
+      } catch (err) {
+        console.warn('[ScreenCapture] Warning setting capture mode:', err?.message);
+      }
+    };
+
+    configureScreenCapture();
+  }, [user?.id, user?.is_screenshot_allowed, user?.allow_screenshot]);
 
   // Restore saved authentication session on app startup and sync backend DB user record
   useEffect(() => {

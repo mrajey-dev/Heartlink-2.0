@@ -8,10 +8,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 
 export default function InAppNotificationBanner({ visible, data, onDismiss }) {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -27,7 +29,7 @@ export default function InAppNotificationBanner({ visible, data, onDismiss }) {
 
       Animated.parallel([
         Animated.spring(translateY, {
-          toValue: Platform.OS === 'ios' ? 44 : 32,
+          toValue: Math.max(insets.top + 8, Platform.OS === 'ios' ? 44 : 32),
           tension: 65,
           friction: 9,
           useNativeDriver: true,

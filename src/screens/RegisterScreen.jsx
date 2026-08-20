@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Animated, Dimensions, KeyboardAvoidingView, Platform,
-  ScrollView, StatusBar, Image, Alert, Easing, Modal, SafeAreaView,
+  ScrollView, StatusBar, Image, Alert, Easing, Modal,
   BackHandler
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -15,7 +15,7 @@ import { registerUser } from "../services/authService";
 import { createUserProfile } from "../services/userService";
 import { apiUploadImage } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
-import { LIGHT_THEME } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import CustomAlertModal from '../components/CustomAlertModal';
 import SearchableDropdownModal from '../components/common/SearchableDropdownModal';
 import {
@@ -28,9 +28,10 @@ import {
 } from '../utils/locationData';
 import { ALL_VIBE_NODES } from '../utils/vibeData';
 
-const { width, height } = Dimensions.get('window');
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
+
+const { width, height } = SCREEN;
 const TOTAL_STEPS = 9;
-const THEME = LIGHT_THEME;
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 const HOBBIES = [
@@ -63,6 +64,7 @@ const GENDERS = ['Man', 'Woman'];
 
 // ─── Floating Input Component ───────────────────────────────────────────────
 function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureTextEntry, multiline, maxLength, style, onFocusScroll }) {
+  const { theme, isDark } = useTheme();
   const [focused, setFocused] = useState(false);
   const [showSec, setShowSec] = useState(false);
 
@@ -74,12 +76,20 @@ function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureT
   };
 
   return (
-    <View style={[inputStyles.wrap, focused && inputStyles.wrapFocused, style]}>
-      <Ionicons name={icon} size={16} color={focused ? '#FF007F' : THEME.textFaint} style={inputStyles.icon} />
+    <View style={[
+      inputStyles.wrap,
+      {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)',
+      },
+      focused && inputStyles.wrapFocused,
+      style
+    ]}>
+      <Ionicons name={icon} size={16} color={focused ? '#FF007F' : theme.textFaint} style={inputStyles.icon} />
       <TextInput
-        style={[inputStyles.field, multiline && { height: 60, textAlignVertical: 'top' }]}
+        style={[inputStyles.field, { color: theme.textPrimary }, multiline && { height: 60, textAlignVertical: 'top' }]}
         placeholder={label}
-        placeholderTextColor={THEME.textFaint}
+        placeholderTextColor={theme.textFaint}
         value={value}
         onChangeText={onChangeText}
         keyboardType={keyboardType || 'default'}
@@ -92,7 +102,7 @@ function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureT
       />
       {secureTextEntry && (
         <TouchableOpacity onPress={() => setShowSec(v => !v)} style={inputStyles.eye}>
-          <Ionicons name={showSec ? 'eye-outline' : 'eye-off-outline'} size={16} color={THEME.textFaint} />
+          <Ionicons name={showSec ? 'eye-outline' : 'eye-off-outline'} size={16} color={theme.textFaint} />
         </TouchableOpacity>
       )}
     </View>
@@ -100,15 +110,17 @@ function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureT
 }
 
 const inputStyles = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
-  wrapFocused: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.04)' },
+  wrap: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 14, height: 52, marginBottom: 12 },
+  wrapFocused: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.08)' },
   icon: { marginRight: 10 },
-  field: { flex: 1, color: THEME.textPrimary, fontSize: 14.5, height: '100%' },
+  field: { flex: 1, fontSize: 14.5, height: '100%' },
   eye: { padding: 6 },
 });
 
 // ─── Step 0: Basic Credentials & Display Name ──────────────────────────────
 function StepCredentials({ data, onChange, onFocusScroll }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [showPicker, setShowPicker] = useState(false);
   const [tempDate, setTempDate] = useState(data.dob ? new Date(data.dob) : new Date(2000, 0, 1));
 
@@ -142,9 +154,9 @@ function StepCredentials({ data, onChange, onFocusScroll }) {
         onPress={() => setShowPicker(true)}
         activeOpacity={0.8}
       >
-        <Ionicons name="calendar-outline" size={16} color={data.dob ? '#FF007F' : THEME.textFaint} style={sty.dobIcon} />
+        <Ionicons name="calendar-outline" size={16} color={data.dob ? '#FF007F' : theme.textFaint} style={sty.dobIcon} />
         <View style={sty.dobTextContainer}>
-          <Text style={[sty.dobValue, !data.dob && { color: THEME.textFaint }]}>
+          <Text style={[sty.dobValue, !data.dob && { color: theme.textFaint }]}>
             {data.dob ? `${formattedDOB} (${data.age} yrs)` : 'Date of Birth'}
           </Text>
         </View>
@@ -168,7 +180,7 @@ function StepCredentials({ data, onChange, onFocusScroll }) {
             style={[sty.chip, data.gender === g && sty.chipActive]}
             onPress={() => onChange('gender', g)}
           >
-            <Ionicons name={g === 'Man' ? 'male-outline' : 'female-outline'} size={15} color={data.gender === g ? '#FF007F' : THEME.textSec} style={{ marginRight: 6 }} />
+            <Ionicons name={g === 'Man' ? 'male-outline' : 'female-outline'} size={15} color={data.gender === g ? '#FF007F' : theme.textSec} style={{ marginRight: 6 }} />
             <Text style={[sty.chipText, data.gender === g && sty.chipTextActive]}>{g}</Text>
           </TouchableOpacity>
         ))}
@@ -179,6 +191,8 @@ function StepCredentials({ data, onChange, onFocusScroll }) {
 
 // ─── Step 1: Phone & Country Code (No OTP) ──────────────────────────────
 function StepOTP({ data, onChange, onFocusScroll }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [countryCodes, setCountryCodes] = useState([]);
   const [loadingCodes, setLoadingCodes] = useState(false);
 
@@ -230,6 +244,8 @@ function StepOTP({ data, onChange, onFocusScroll }) {
 
 // ─── Step 2: Hobbies & Interests ────────────────────────────────────────────
 function StepHobbies({ data, onChange }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const toggle = (h) => {
     const curr = data.hobbies || [];
     const next = curr.includes(h) ? curr.filter(x => x !== h) : [...curr, h];
@@ -248,7 +264,7 @@ function StepHobbies({ data, onChange }) {
               style={[sty.hobbyChip, active && sty.hobbyChipActive]}
               onPress={() => toggle(h.name)}
             >
-              <Ionicons name={h.icon} size={14} color={active ? '#FF007F' : THEME.textSec} style={{ marginRight: 6 }} />
+              <Ionicons name={h.icon} size={14} color={active ? '#FF007F' : theme.textSec} style={{ marginRight: 6 }} />
               <Text style={[sty.hobbyText, active && sty.hobbyTextActive]}>{h.name}</Text>
             </TouchableOpacity>
           );
@@ -260,6 +276,8 @@ function StepHobbies({ data, onChange }) {
 
 // ─── Step 3: Relationship & Marital Status ──────────────────────────────────
 function StepPreferences({ data, onChange }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   return (
     <View>
       <StepHeader icon="heart-outline" title="Relationship Goals" sub="Select what fits your current preferences" />
@@ -273,7 +291,7 @@ function StepPreferences({ data, onChange }) {
             onPress={() => onChange('relationshipType', rt.label)}
           >
             <View style={sty.prefIconBox}>
-              <Ionicons name={rt.icon} size={18} color={active ? "#FF007F" : THEME.textSec} />
+              <Ionicons name={rt.icon} size={18} color={active ? "#FF007F" : theme.textSec} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[sty.prefLabel, active && sty.prefLabelActive]}>{rt.label}</Text>
@@ -298,6 +316,8 @@ function StepPreferences({ data, onChange }) {
 
 // ─── Step 4: Cascading Location API with Dropdowns ─────────────────────────
 function StepLocation({ data, onChange, onFocusScroll }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
@@ -404,6 +424,8 @@ function StepLocation({ data, onChange, onFocusScroll }) {
 
 // ─── Step 5: Identity, Mother Tongue & Lifestyle Dropdowns ────────────────
 function StepIdentity({ data, onChange, onFocusScroll }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const toggleLanguage = (lang) => {
     const curr = data.languagesSpoken || [];
     const next = curr.includes(lang) ? curr.filter(x => x !== lang) : [...curr, lang];
@@ -485,6 +507,8 @@ function StepIdentity({ data, onChange, onFocusScroll }) {
 
 // ─── Step 6: Dedicated Lifestyle & Dating Habits ────────────────────────────
 function StepLifestyleHabits({ data, onChange }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   return (
     <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.58 }}>
       <StepHeader icon="wine-outline" title="Lifestyle & Dating Habits" sub="How you are to date (Smoking, Drinking, Clubbing & Diet)" />
@@ -542,8 +566,8 @@ function StepLifestyleHabits({ data, onChange }) {
                 padding: 10,
                 borderRadius: 14,
                 borderWidth: 1.5,
-                borderColor: isSelected ? '#FF007F' : THEME.border,
-                backgroundColor: isSelected ? 'rgba(255, 0, 127, 0.08)' : '#FFFFFF',
+                borderColor: isSelected ? '#FF007F' : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'),
+                backgroundColor: isSelected ? 'rgba(255, 0, 127, 0.08)' : (isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF'),
               }}
               onPress={() => onChange('vibe', v.name)}
               activeOpacity={0.8}
@@ -553,8 +577,8 @@ function StepLifestyleHabits({ data, onChange }) {
                   <Ionicons name={v.icon} size={14} color="#FFF" />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11.5, fontWeight: '800', color: THEME.textPrimary }} numberOfLines={1}>{v.name}</Text>
-                  <Text style={{ fontSize: 9.5, color: THEME.textFaint }} numberOfLines={1}>{v.tagline}</Text>
+                  <Text style={{ fontSize: 11.5, fontWeight: '800', color: theme.textPrimary }} numberOfLines={1}>{v.name}</Text>
+                  <Text style={{ fontSize: 9.5, color: theme.textFaint }} numberOfLines={1}>{v.tagline}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -574,6 +598,8 @@ function StepLifestyleHabits({ data, onChange }) {
 
 // ─── Step 7: Video Introduction (SKIPPABLE) ────────────────────────────────
 function StepVideoIntro({ data, onChange }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const pickVideo = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['videos'],
@@ -621,6 +647,8 @@ function StepVideoIntro({ data, onChange }) {
 
 // ─── Step 8: Photos ─────────────────────────────────────────────────────────
 function StepPhotos({ data, onChange }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const images = data.images || [];
 
   const pickImage = async (idx) => {
@@ -682,6 +710,8 @@ function StepPhotos({ data, onChange }) {
 
 // ─── Sub-header helper ─────────────────────────────────────────────────────
 function StepHeader({ icon, title, sub }) {
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   return (
     <View style={sty.stepHeader}>
       <View style={sty.stepIconWrap}>
@@ -801,7 +831,7 @@ export default function RegisterScreen() {
       const rawImages = (data.images || []).filter(x => !!x);
       Promise.all(rawImages.map(img => apiUploadImage(img, { email: data.email, user_id: data.email ? data.email.split('@')[0] : null })))
         .then((uploadedPhotos) => {
-          const validPhotos = uploadedPhotos.filter(Boolean);
+          const validPhotos = uploadedPhotos.filter(img => typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://')));
           const avatarUrl = validPhotos[0] || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
 
           const registrationPayload = {
@@ -913,9 +943,12 @@ export default function RegisterScreen() {
     }, 120);
   };
 
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   return (
-    <LinearGradient colors={['#FFF0F5', '#FFF6FA', '#FFFFFF']} style={sty.root}>
-      <StatusBar barStyle="dark-content" />
+    <LinearGradient colors={theme.bgGrad} style={sty.root}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       <CustomAlertModal
         visible={validationAlertVisible}
@@ -930,7 +963,7 @@ export default function RegisterScreen() {
         {/* Top Header */}
         <View style={sty.topBar}>
           <TouchableOpacity onPress={goBack} style={sty.backBtn}>
-            <Ionicons name="chevron-back" size={20} color={THEME.textPrimary} />
+            <Ionicons name="chevron-back" size={20} color={theme.textPrimary} />
           </TouchableOpacity>
 
           <View style={sty.progressTrack}>
@@ -991,7 +1024,7 @@ export default function RegisterScreen() {
   );
 }
 
-const sty = StyleSheet.create({
+const getStyles = (theme, isDark) => StyleSheet.create({
   root: { flex: 1 },
   flex: { flex: 1 },
   topBar: {
@@ -999,32 +1032,32 @@ const sty = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 12,
+    paddingTop: 4,
     paddingBottom: 10,
   },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center' },
-  progressTrack: { flex: 1, height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 3, marginHorizontal: 12, overflow: 'hidden' },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center' },
+  progressTrack: { flex: 1, height: 6, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', borderRadius: 3, marginHorizontal: 12, overflow: 'hidden' },
   progressBar: { height: '100%', backgroundColor: '#FF007F', borderRadius: 3 },
-  stepCounter: { fontSize: 12, fontWeight: '700', color: THEME.textSec },
+  stepCounter: { fontSize: 12, fontWeight: '700', color: theme.textSec },
   scrollContent: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: 'rgba(0,0,0,0.05)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
+  card: { backgroundColor: isDark ? '#1C1433' : '#FFFFFF', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
 
   stepHeader: { marginBottom: 14 },
   stepIconWrap: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,0,127,0.08)', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  stepTitle: { fontSize: 18, fontWeight: '800', color: THEME.textPrimary },
-  stepSub: { fontSize: 12.5, color: THEME.textSec, marginTop: 2 },
-  label: { fontSize: 12.5, fontWeight: '700', color: THEME.textSec, marginBottom: 8 },
+  stepTitle: { fontSize: 18, fontWeight: '800', color: theme.textPrimary },
+  stepSub: { fontSize: 12.5, color: theme.textSec, marginTop: 2 },
+  label: { fontSize: 12.5, fontWeight: '700', color: theme.textSec, marginBottom: 8 },
 
-  dobTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
+  dobTrigger: { flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderRadius: 14, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', paddingHorizontal: 14, height: 52, marginBottom: 12 },
   dobIcon: { marginRight: 10 },
   dobTextContainer: { flex: 1 },
-  dobValue: { fontSize: 14.5, color: THEME.textPrimary },
+  dobValue: { fontSize: 14.5, color: theme.textPrimary },
 
   chipRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   chipRowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' },
+  chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' },
   chipActive: { backgroundColor: 'rgba(255,0,127,0.08)', borderColor: '#FF007F' },
-  chipText: { fontSize: 12.5, color: THEME.textSec },
+  chipText: { fontSize: 12.5, color: theme.textSec },
   chipTextActive: { color: '#FF007F', fontWeight: '700' },
 
   sendOtpBtn: { borderRadius: 12, overflow: 'hidden', marginTop: 4 },
@@ -1032,27 +1065,27 @@ const sty = StyleSheet.create({
   sendOtpText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   btnDisabled: { opacity: 0.5 },
   otpRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
-  otpBox: { width: 42, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.1)', textAlign: 'center', fontSize: 18, fontWeight: '700', color: THEME.textPrimary, backgroundColor: '#FAFAFA' },
+  otpBox: { width: 42, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)', textAlign: 'center', fontSize: 18, fontWeight: '700', color: theme.textPrimary, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#FAFAFA' },
   otpBoxFilled: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.04)' },
   otpHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  otpHint: { fontSize: 11.5, color: THEME.textFaint },
+  otpHint: { fontSize: 11.5, color: theme.textFaint },
 
   selectedCount: { fontSize: 12, fontWeight: '700', color: '#FF007F', marginBottom: 8 },
   chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  hobbyChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.07)' },
+  hobbyChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' },
   hobbyChipActive: { backgroundColor: 'rgba(255,0,127,0.08)', borderColor: '#FF007F' },
-  hobbyText: { fontSize: 12, color: THEME.textSec },
+  hobbyText: { fontSize: 12, color: theme.textSec },
   hobbyTextActive: { color: '#FF007F', fontWeight: '700' },
 
-  prefCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.07)', marginBottom: 8, overflow: 'hidden' },
+  prefCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', marginBottom: 8, overflow: 'hidden' },
   prefCardActive: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.04)' },
-  prefIconBox: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  prefLabel: { fontSize: 13.5, fontWeight: '700', color: THEME.textPrimary },
+  prefIconBox: { width: 34, height: 34, borderRadius: 17, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  prefLabel: { fontSize: 13.5, fontWeight: '700', color: theme.textPrimary },
   prefLabelActive: { color: '#FF007F' },
-  prefDesc: { fontSize: 11, color: THEME.textFaint, marginTop: 1 },
+  prefDesc: { fontSize: 11, color: theme.textFaint, marginTop: 1 },
 
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  photoSlot: { width: (width - 72) / 3, height: ((width - 72) / 3) * 1.25, borderRadius: 12, overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)' },
+  photoSlot: { width: (width - 72) / 3, height: ((width - 72) / 3) * 1.25, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' },
   photoImg: { width: '100%', height: '100%' },
   photoRemove: { position: 'absolute', top: 4, right: 4 },
   photoEmpty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -1061,7 +1094,7 @@ const sty = StyleSheet.create({
   videoCard: { marginVertical: 10 },
   videoUploadBox: { height: 160, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#FF007F', justifyContent: 'center', alignItems: 'center', padding: 16, overflow: 'hidden' },
   videoUploadTitle: { fontSize: 15, fontWeight: '800', color: '#FF007F', marginTop: 8 },
-  videoUploadSub: { fontSize: 11.5, color: THEME.textSec, textAlign: 'center', marginTop: 4 },
+  videoUploadSub: { fontSize: 11.5, color: theme.textSec, textAlign: 'center', marginTop: 4 },
   videoSuccessWrap: { height: 160, borderRadius: 16, backgroundColor: 'rgba(48,209,88,0.08)', borderWidth: 1.5, borderColor: '#30D158', justifyContent: 'center', alignItems: 'center', padding: 16 },
   videoSuccessTitle: { fontSize: 15, fontWeight: '800', color: '#30D158', marginTop: 6 },
   videoReplaceBtn: { marginTop: 10, paddingHorizontal: 14, paddingVertical: 6, borderRadius: 14, backgroundColor: '#30D158' },
@@ -1071,43 +1104,43 @@ const sty = StyleSheet.create({
   faceDot: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
   faceDotDone: { backgroundColor: '#30D158' },
   faceDotActive: { backgroundColor: '#FF007F' },
-  faceDotInactive: { backgroundColor: 'rgba(0,0,0,0.15)' },
+  faceDotInactive: { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' },
   faceCapture: { alignItems: 'center', marginVertical: 10 },
-  faceFrame: { width: 140, height: 140, borderRadius: 70, overflow: 'hidden', borderWidth: 3, borderColor: '#FF007F', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' },
-  faceDirectionLabel: { fontSize: 16, fontWeight: '800', color: THEME.textPrimary, marginTop: 10 },
-  faceDirectionHint: { fontSize: 12, color: THEME.textSec, marginTop: 2 },
+  faceFrame: { width: 140, height: 140, borderRadius: 70, overflow: 'hidden', borderWidth: 3, borderColor: '#FF007F', justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#261C44' : '#FAFAFA' },
+  faceDirectionLabel: { fontSize: 16, fontWeight: '800', color: theme.textPrimary, marginTop: 10 },
+  faceDirectionHint: { fontSize: 12, color: theme.textSec, marginTop: 2 },
   captureBtn: { marginTop: 12, borderRadius: 20, overflow: 'hidden' },
   captureBtnGrad: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 10 },
   captureBtnText: { color: '#fff', fontSize: 13, fontWeight: '700', marginLeft: 6 },
   faceSuccess: { alignItems: 'center', paddingVertical: 20 },
   faceSuccessTitle: { fontSize: 18, fontWeight: '800', color: '#30D158', marginTop: 10 },
-  faceSuccessSub: { fontSize: 12, color: THEME.textSec, textAlign: 'center', marginTop: 4 },
+  faceSuccessSub: { fontSize: 12, color: theme.textSec, textAlign: 'center', marginTop: 4 },
 
   bottomBar: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(8),
+    paddingBottom: Platform.OS === 'ios' ? verticalScale(24) : verticalScale(16),
   },
-  nextBtn: { borderRadius: 16, overflow: 'hidden' },
-  nextBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
-  nextBtnText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  nextBtn: { borderRadius: scale(14), overflow: 'hidden' },
+  nextBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12) },
+  nextBtnText: { color: '#fff', fontSize: fs(14.5), fontWeight: '800' },
 
   // New styles for phone step
   phoneNoteCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255,0,127,0.04)',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 16,
+    borderRadius: scale(12),
+    padding: scale(12),
+    marginTop: verticalScale(14),
     borderWidth: 1,
     borderColor: 'rgba(255,0,127,0.1)',
   },
   phoneNoteText: {
     flex: 1,
-    fontSize: 12,
-    color: THEME.textSec,
-    lineHeight: 18
+    fontSize: fs(11.5),
+    color: theme.textSec,
+    lineHeight: verticalScale(17)
   },
 
   // Lifestyle note card
@@ -1115,18 +1148,18 @@ const sty = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: 'rgba(255,0,127,0.04)',
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 8,
-    marginBottom: 4,
+    borderRadius: scale(12),
+    padding: scale(12),
+    marginTop: verticalScale(8),
+    marginBottom: verticalScale(4),
     borderWidth: 1,
     borderColor: 'rgba(255,0,127,0.1)',
   },
   lifestyleNoteText: {
     flex: 1,
-    fontSize: 12,
-    color: THEME.textSec,
-    lineHeight: 18,
+    fontSize: fs(11.5),
+    color: theme.textSec,
+    lineHeight: verticalScale(17),
   },
 
   // Boost note card
@@ -1134,16 +1167,16 @@ const sty = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: 'rgba(255,215,0,0.08)',
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 12,
+    borderRadius: scale(12),
+    padding: scale(14),
+    marginTop: verticalScale(10),
     borderWidth: 1,
     borderColor: 'rgba(255,215,0,0.2)',
   },
   boostNoteText: {
     flex: 1,
-    fontSize: 12.5,
-    color: THEME.textSec,
-    lineHeight: 18,
+    fontSize: fs(12),
+    color: theme.textSec,
+    lineHeight: verticalScale(17),
   },
 });

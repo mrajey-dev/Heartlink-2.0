@@ -4,10 +4,10 @@ import {
   TextInput, FlatList, ActivityIndicator, Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LIGHT_THEME } from '../../theme/colors';
+import { useTheme } from '../../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height } = Dimensions.get('window');
-const THEME = LIGHT_THEME;
 
 export default function SearchableDropdownModal({
   label,
@@ -19,6 +19,10 @@ export default function SearchableDropdownModal({
   icon = 'location-outline',
   disabled = false,
 }) {
+  const insets = useSafeAreaInsets();
+  const { theme, isDark } = useTheme();
+  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
   const [modalVisible, setModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -55,20 +59,20 @@ export default function SearchableDropdownModal({
         activeOpacity={0.8}
         disabled={disabled}
       >
-        <Ionicons name={icon} size={18} color={value ? '#FF007F' : THEME.textFaint} style={{ marginRight: 10 }} />
+        <Ionicons name={icon} size={18} color={value ? '#FF007F' : theme.textFaint} style={{ marginRight: 10 }} />
         <Text style={[sty.triggerText, !value && sty.placeholderText]} numberOfLines={1}>
           {displayValue}
         </Text>
         {loading ? (
           <ActivityIndicator size="small" color="#FF007F" />
         ) : (
-          <Ionicons name="chevron-down" size={16} color={THEME.textFaint} />
+          <Ionicons name="chevron-down" size={16} color={theme.textFaint} />
         )}
       </TouchableOpacity>
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <TouchableOpacity style={sty.overlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
-          <View style={sty.modalCard} onStartShouldSetResponder={() => true}>
+          <View style={[sty.modalCard, { paddingBottom: Math.max(insets.bottom + 20, 32) }]} onStartShouldSetResponder={() => true}>
             
             {/* Header */}
             <View style={sty.modalHeader}>
@@ -77,24 +81,24 @@ export default function SearchableDropdownModal({
                 <Text style={sty.modalTitle}>Select {label || 'Option'}</Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)} style={sty.closeBtn}>
-                <Ionicons name="close" size={20} color={THEME.textPrimary} />
+                <Ionicons name="close" size={20} color={theme.textPrimary} />
               </TouchableOpacity>
             </View>
 
             {/* Search Bar */}
             <View style={sty.searchBox}>
-              <Ionicons name="search-outline" size={16} color={THEME.textFaint} style={{ marginRight: 8 }} />
+              <Ionicons name="search-outline" size={16} color={theme.textFaint} style={{ marginRight: 8 }} />
               <TextInput
                 style={sty.searchInput}
                 placeholder={`Search ${label || ''}...`}
-                placeholderTextColor={THEME.textFaint}
+                placeholderTextColor={theme.textFaint}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoCapitalize="none"
               />
               {!!searchQuery && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={16} color={THEME.textFaint} />
+                  <Ionicons name="close-circle" size={16} color={theme.textFaint} />
                 </TouchableOpacity>
               )}
             </View>
@@ -107,7 +111,7 @@ export default function SearchableDropdownModal({
               </View>
             ) : filteredItems.length === 0 ? (
               <View style={sty.emptyWrap}>
-                <Ionicons name="alert-circle-outline" size={32} color={THEME.textFaint} />
+                <Ionicons name="alert-circle-outline" size={32} color={theme.textFaint} />
                 <Text style={sty.emptyText}>No results found</Text>
               </View>
             ) : (
@@ -143,53 +147,55 @@ export default function SearchableDropdownModal({
   );
 }
 
-const sty = StyleSheet.create({
+const getStyles = (theme, isDark) => StyleSheet.create({
   wrapper: { marginBottom: 12 },
-  label: { fontSize: 12.5, fontWeight: '700', color: THEME.textSec, marginBottom: 6 },
+  label: { fontSize: 12.5, fontWeight: '700', color: theme.textSec, marginBottom: 6 },
   triggerBtn: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
     borderRadius: 14, borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.08)',
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
     paddingHorizontal: 14, paddingVertical: 12,
   },
   triggerSelected: {
     borderColor: 'rgba(255,0,127,0.4)',
-    backgroundColor: 'rgba(255,0,127,0.03)',
+    backgroundColor: 'rgba(255,0,127,0.08)',
   },
-  triggerDisabled: { opacity: 0.5, backgroundColor: 'rgba(0,0,0,0.02)' },
-  triggerText: { flex: 1, fontSize: 13.5, fontWeight: '600', color: THEME.textPrimary },
-  placeholderText: { color: THEME.textFaint, fontWeight: '400' },
+  triggerDisabled: { opacity: 0.5, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' },
+  triggerText: { flex: 1, fontSize: 13.5, fontWeight: '600', color: theme.textPrimary },
+  placeholderText: { color: theme.textFaint, fontWeight: '400' },
   
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: isDark ? '#1C1433' : '#FFFFFF',
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     padding: 20, paddingBottom: 30, maxHeight: height * 0.75,
+    borderWidth: isDark ? 1 : 0,
+    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'transparent',
   },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: THEME.textPrimary },
-  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
+  modalTitle: { fontSize: 16, fontWeight: '800', color: theme.textPrimary },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', justifyContent: 'center', alignItems: 'center' },
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 12,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 12,
     paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12,
-    borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)',
   },
-  searchInput: { flex: 1, fontSize: 13.5, color: THEME.textPrimary },
+  searchInput: { flex: 1, fontSize: 13.5, color: theme.textPrimary },
 
   itemRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingVertical: 12, paddingHorizontal: 10,
-    borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
   },
-  itemRowSelected: { backgroundColor: 'rgba(255,0,127,0.06)', borderRadius: 10 },
-  itemText: { fontSize: 14, color: THEME.textPrimary, fontWeight: '500' },
+  itemRowSelected: { backgroundColor: 'rgba(255,0,127,0.12)', borderRadius: 10 },
+  itemText: { fontSize: 14, color: theme.textPrimary, fontWeight: '500' },
   itemTextSelected: { color: '#FF007F', fontWeight: '800' },
 
   loadingWrap: { paddingVertical: 30, alignItems: 'center' },
-  loadingText: { fontSize: 13, color: THEME.textFaint, marginTop: 8 },
+  loadingText: { fontSize: 13, color: theme.textFaint, marginTop: 8 },
   emptyWrap: { paddingVertical: 30, alignItems: 'center' },
-  emptyText: { fontSize: 13, color: THEME.textFaint, marginTop: 6 },
+  emptyText: { fontSize: 13, color: theme.textFaint, marginTop: 6 },
 });

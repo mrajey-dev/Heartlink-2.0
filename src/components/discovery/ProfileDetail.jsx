@@ -9,12 +9,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAuth } from '../../hooks/useAuth';
 import { ensureArray, formatImageUrl, calculateMatchPercentage, renderVerifiedBadge } from '../../utils/helpers';
-import { BlurView } from 'expo-blur';
-import { getVibeByName } from '../../utils/vibeData';
+import BlurView from '../SafeBlurView';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
-export default function ProfileDetail({ visible, profile, onClose, onLike, onPass, isMatch = false }) {
+export default function ProfileDetail({ visible, profile, onClose, onLike, onSuperLike, onPass, isMatch = false }) {
+  const insets = useSafeAreaInsets();
   const [sheetPhotoIdx, setSheetPhotoIdx] = useState(0);
   const { isDark, theme } = useTheme();
   const { user: currentUser } = useAuth();
@@ -26,6 +27,23 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
   }, [currentUser, profile]);
 
   const translateY = useRef(new Animated.Value(height)).current;
+  const photoListRef = useRef(null);
+
+  const handlePrevPhoto = () => {
+    if (sheetPhotoIdx > 0) {
+      const newIdx = sheetPhotoIdx - 1;
+      setSheetPhotoIdx(newIdx);
+      photoListRef.current?.scrollToIndex({ index: newIdx, animated: true });
+    }
+  };
+
+  const handleNextPhoto = (totalPhotos) => {
+    if (sheetPhotoIdx < totalPhotos - 1) {
+      const newIdx = sheetPhotoIdx + 1;
+      setSheetPhotoIdx(newIdx);
+      photoListRef.current?.scrollToIndex({ index: newIdx, animated: true });
+    }
+  };
 
   useEffect(() => {
     if (visible) {
@@ -97,15 +115,15 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
       try {
         const parsed = JSON.parse(val);
         if (Array.isArray(parsed)) return parsed.length > 0 ? parsed.join(', ') : null;
-      } catch (e) {}
+      } catch (e) { }
       return val.trim() || null;
     }
     return null;
   };
 
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={handleClose}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+    <Modal transparent visible={visible} statusBarTranslucent={true} animationType="fade" onRequestClose={handleClose}>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
       <View style={styles.modalOverlay}>
         <Pressable style={styles.backdrop} onPress={handleClose} />
 
@@ -113,13 +131,17 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
           style={[styles.detailSheet, { transform: [{ translateY }] }]}
           {...panResponder.panHandlers}
         >
-          {/* Background gradient clipped to sheet border radius */}
           <View style={styles.detailSheetBgClip} pointerEvents="none">
             <LinearGradient
               colors={isDark ? ['#140E2D', '#0A051C'] : ['#F2EBFF', '#FFFFFF']}
               style={StyleSheet.absoluteFill}
             />
           </View>
+
+          {/* Small Fixed Chevron-Down Close Button */}
+          <TouchableOpacity style={styles.floatingCloseBtn} onPress={handleClose} activeOpacity={0.75}>
+            <Ionicons name="chevron-down" size={20} color="#FFF" />
+          </TouchableOpacity>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -128,14 +150,9 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
             scrollEventThrottle={16}
             contentContainerStyle={{ paddingBottom: 0 }}
           >
-            {/* Sliding photo carousel (Starts right at top y=0, NO white space!) */}
             <View style={styles.sheetPhotoWrap}>
-              {/* Floating top close X / chevron button */}
-              <TouchableOpacity style={styles.floatingCloseBtn} onPress={handleClose} activeOpacity={0.7}>
-                <Ionicons name="chevron-down" size={24} color="#FFF" />
-              </TouchableOpacity>
-
               <FlatList
+                ref={photoListRef}
                 data={photos}
                 keyExtractor={(_, i) => i.toString()}
                 horizontal
@@ -150,23 +167,45 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                   <Image source={{ uri: formatImageUrl(item) }} style={styles.sheetPhoto} resizeMode="cover" />
                 )}
               />
+
+              {/* Left/Right Photo Navigation Buttons (Shown if photos > 1) */}
+              {photos.length > 1 && (
+                <>
+                  {sheetPhotoIdx > 0 && (
+                    <TouchableOpacity
+                      style={[styles.photoNavBtn, styles.photoNavBtnLeft]}
+                      onPress={handlePrevPhoto}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="chevron-back" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                  )}
+                  {sheetPhotoIdx < photos.length - 1 && (
+                    <TouchableOpacity
+                      style={[styles.photoNavBtn, styles.photoNavBtnRight]}
+                      onPress={() => handleNextPhoto(photos.length)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="chevron-forward" size={20} color="#FFF" />
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.25)', 'rgba(0,0,0,0.85)']}
                 style={styles.sheetHeroGrad}
               />
-              {/* Hero Compat badge (Representation 1) */}
               <View style={styles.sheetHeroCompat}>
                 <Text style={styles.sheetHeroCompatNum}>{compatPercentage}%</Text>
                 <Text style={styles.sheetHeroCompatLbl}>match</Text>
               </View>
-              {/* Top Gradient for Close Btn and Dots contrast */}
               <LinearGradient
                 colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.1)', 'transparent']}
                 style={styles.sheetTopGrad}
                 pointerEvents="none"
               />
 
-              {/* Pagination dots at top */}
               {photos.length > 1 && (
                 <View style={styles.sheetPhotoDots} pointerEvents="none">
                   {photos.map((_, i) => (
@@ -174,7 +213,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                   ))}
                 </View>
               )}
-              {/* Name overlay */}
               <View style={styles.sheetHeroNameWrap}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                   <Text style={styles.sheetHeroName}>{profile.display_name || profile.displayName || profile.name || profile.user?.display_name || profile.user?.name}{profile.showAge !== false ? `, ${profile.age || profile.user?.age || ''}` : ''}</Text>
@@ -184,8 +222,12 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
               </View>
             </View>
 
+            {/* YouTube/iOS Style Centered Drag Handle Line (Slide down to close) */}
+            <View style={styles.dragHandleContainer} {...panResponder.panHandlers}>
+              <View style={styles.dragHandleBar} />
+            </View>
+
             <View style={styles.sheetBody}>
-              {/* Quick-fact chips */}
               <View style={styles.quickFactsRow}>
                 <View style={styles.quickFact}>
                   <Ionicons name="location-outline" size={14} color="#FF007F" />
@@ -197,7 +239,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* Full Name Section (Top Card) */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -212,7 +253,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* About Me Section */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -222,7 +262,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 <Text style={styles.bioText}>{(profile.bio || profile.user?.bio) ? `"${profile.bio || profile.user?.bio}"` : 'No bio provided.'}</Text>
               </View>
 
-              {/* Personal & Identity Section */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -298,7 +337,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* Lifestyle & Dating Habits Box */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -334,7 +372,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* Relationship Goals Section */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -346,7 +383,6 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* Interests & Hobbies Section */}
               <View style={styles.sectionBox}>
                 <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <View style={styles.sectionHeaderRow}>
@@ -368,8 +404,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               </View>
 
-              {/* Actions */}
-              {(onPass || onLike) ? (
+              {(onPass || onLike || onSuperLike) ? (
                 <View style={styles.sheetActions}>
                   {onPass ? (
                     <TouchableOpacity
@@ -380,7 +415,19 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                       <Text style={styles.sheetBtnPassTxt}>{isMatch ? "Unmatch" : "Pass"}</Text>
                     </TouchableOpacity>
                   ) : null}
-                  
+
+                  {onSuperLike && !isMatch ? (
+                    <TouchableOpacity
+                      style={styles.sheetBtnSuperLike}
+                      onPress={() => { handleClose(); onSuperLike(profile.id); }}
+                    >
+                      <LinearGradient colors={['#7B2CBF', '#9D4EDD']} style={styles.sheetBtnSuperLikeGrad}>
+                        <Ionicons name="flash" size={18} color="#fff" />
+                        <Text style={styles.sheetBtnSuperLikeTxt}>Spark</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  ) : null}
+
                   {onLike ? (
                     <TouchableOpacity
                       style={styles.sheetBtnLike}
@@ -395,7 +442,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
                 </View>
               ) : null}
 
-              <View style={{ height: 110 }} />
+              <View style={{ height: Math.max(insets.bottom + 80, 110) }} />
             </View>
           </ScrollView>
         </Animated.View>
@@ -404,17 +451,19 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onPas
   );
 }
 
+const FIXED_TOP = 48;
+
 const getStyles = (theme) => StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
   },
 
   detailSheet: {
-    height: height,
+    flex: 1,
     width: width,
     backgroundColor: theme.isDark ? '#140E2D' : '#FFFFFF',
     overflow: 'hidden',
@@ -426,31 +475,64 @@ const getStyles = (theme) => StyleSheet.create({
 
   floatingCloseBtn: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 20,
+    top: 80,
     left: 16,
     zIndex: 100,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
   },
 
+  dragHandleContainer: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    zIndex: 10,
+  },
+  dragHandleBar: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.28)',
+  },
+
+  photoNavBtn: {
+    position: 'absolute',
+    top: '44%',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
+  },
+  photoNavBtnLeft: {
+    left: 14,
+  },
+  photoNavBtnRight: {
+    right: 14,
+  },
+
   sheetPhotoWrap: {
-    height: height * 0.54,
+    height: height * 0.52 + FIXED_TOP,
+    paddingTop: FIXED_TOP,
     width: width,
     overflow: 'hidden',
     position: 'relative',
   },
   sheetPhoto: {
     width: width,
-    height: height * 0.54,
+    height: height * 0.52,
     resizeMode: 'cover',
   },
   sheetTopGrad: {
     position: 'absolute',
-    top: 0,
+    top: FIXED_TOP,
     left: 0,
     right: 0,
     height: 80,
@@ -488,7 +570,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   sheetPhotoDots: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 16 : 22,
+    top: FIXED_TOP + 4,
     left: 65,
     right: 65,
     flexDirection: 'row',
@@ -553,18 +635,15 @@ const getStyles = (theme) => StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 14,
     backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-    borderWidth: 1,
-    borderColor: theme.border || 'rgba(0,0,0,0.06)',
   },
   quickFactTxt: {
     fontSize: 12.5,
     fontWeight: '700',
     color: theme.textPrimary,
-  },  sectionBox: {
+  },
+  sectionBox: {
     borderRadius: 22,
     padding: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
     backgroundColor: theme.glass,
     overflow: 'hidden',
     marginBottom: 14,
@@ -596,8 +675,6 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
   },
   attributeText: {
     fontSize: 13,
@@ -610,8 +687,6 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 0, 127, 0.3)',
     marginTop: 4,
   },
   goalChipText: {
@@ -630,8 +705,6 @@ const getStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 7,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
   },
   interestTagText: {
     fontSize: 12.5,
@@ -649,8 +722,6 @@ const getStyles = (theme) => StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: theme.isDark ? 'rgba(255,255,255,0.80)' : 'rgba(0,0,0,0.04)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,55,95,0.35)',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -675,6 +746,24 @@ const getStyles = (theme) => StyleSheet.create({
     gap: 8,
   },
   sheetBtnLikeTxt: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  sheetBtnSuperLike: {
+    flex: 1.5,
+    height: 52,
+    borderRadius: 26,
+    overflow: 'hidden',
+  },
+  sheetBtnSuperLikeGrad: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sheetBtnSuperLikeTxt: {
     color: '#fff',
     fontWeight: '800',
     fontSize: 15,

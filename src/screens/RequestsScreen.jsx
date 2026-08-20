@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable,
-  Image, SafeAreaView, StatusBar, Alert, Dimensions, FlatList, Platform, ActivityIndicator, PanResponder, Animated, Easing,
+  Image, StatusBar, Alert, Dimensions, FlatList, Platform, ActivityIndicator, PanResponder, Animated, Easing,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -664,7 +665,7 @@ export default function RequestsScreen() {
         {showHandledHeader && (
           <View style={[styles.sectionHeaderRow, { marginTop: 16 }]}>
             <Ionicons name="checkmark-done-circle-outline" size={16} color="#30D158" style={{ marginRight: 6 }} />
-            <Text style={styles.listSectionTitle}>Accepted({requests.length - pendingCount})</Text>
+            <Text style={styles.listSectionTitle}>All</Text>
           </View>
         )}
         {cardElement}
@@ -798,7 +799,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
+    paddingTop: 6,
     paddingBottom: 16,
     zIndex: 10,
   },
@@ -1019,7 +1020,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: isDark ? 'rgba(48, 209, 88, 0.15)' : 'rgba(48, 209, 88, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(48, 209, 88, 0.3)',
   },
@@ -1034,7 +1035,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: isDark ? 'rgba(142, 142, 147, 0.15)' : 'rgba(142, 142, 147, 0.08)',
     borderWidth: 1,
     borderColor: 'rgba(142, 142, 147, 0.3)',
   },

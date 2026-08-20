@@ -45,6 +45,9 @@ export const DARK_THEME = {
   // Extra helper properties
   surface:      'rgba(255,255,255,0.08)',
   glassBorder:  'rgba(255,255,255,0.14)',
+  cardBg:       '#1A1233',
+  modalBg:      '#1C1433',
+  inputBg:      'rgba(255,255,255,0.07)',
 };
 
 export const LIGHT_THEME = {
@@ -92,7 +95,11 @@ export const LIGHT_THEME = {
   // Extra helper properties
   surface:      'rgba(0,0,0,0.04)',
   glassBorder:  'rgba(0,0,0,0.08)',
+  cardBg:       '#FFFFFF',
+  modalBg:      '#FFFFFF',
+  inputBg:      'rgba(0,0,0,0.04)',
 };
 
 export const THEME = DARK_THEME;
+
 

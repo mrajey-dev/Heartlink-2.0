@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  SafeAreaView, StatusBar, Switch, Modal, FlatList, Image, Alert, Platform,
+  StatusBar, Switch, Modal, FlatList, Image, Alert, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -18,7 +19,7 @@ import {
   apiGetUserSettings, apiUpdateUserSettings,
   apiVerifyUserProfile, apiGetProfile,
 } from '../services/api';
-import { formatImageUrl } from '../utils/helpers';
+import { formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
@@ -39,7 +40,6 @@ export default function SettingsScreen() {
   const [showDistance, setShowDistance] = useState(true);
   const [showOccupation, setShowOccupation] = useState(true);
   const [hideEducation, setHideEducation] = useState(false);
-  const [whoCanMessage, setWhoCanMessage] = useState('Everyone'); // Everyone, Matches Only, Verified Only
 
   // ─── 4. Match & Discovery Preference Filters ──────────────────────────────
   const [distanceFilter, setDistanceFilter] = useState('50 km');
@@ -108,7 +108,6 @@ export default function SettingsScreen() {
           if (s.show_distance !== undefined) setShowDistance(!!s.show_distance);
           if (s.show_occupation !== undefined) setShowOccupation(!!s.show_occupation);
           if (s.hide_education !== undefined) setHideEducation(!!s.hide_education);
-          if (s.who_can_message) setWhoCanMessage(s.who_can_message);
           if (s.distance_filter) setDistanceFilter(s.distance_filter);
           if (s.age_range_filter) setAgeRangeFilter(s.age_range_filter);
           if (s.verified_only !== undefined) setVerifiedOnly(!!s.verified_only);
@@ -283,13 +282,15 @@ export default function SettingsScreen() {
 
           {(user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true') ? (
             <View style={styles.verifiedActiveBox}>
-              <Ionicons name="checkmark-circle" size={24} color="#3897F0" style={{ marginRight: 10 }} />
+              {renderVerifiedBadge(user, 26, { marginRight: 10, marginLeft: 0 })}
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Text style={styles.verifiedActiveTitle}>Verified Profile</Text>
-                  <Ionicons name="checkmark-circle" size={16} color="#3897F0" style={{ marginLeft: 4 }} />
+                  {/* {renderVerifiedBadge(user, 17, { marginLeft: 4 })} */}
                 </View>
-                <Text style={styles.verifiedActiveSub}>Your profile identity is verified. Verified checkmark badge is active on your profile cards.</Text>
+                <Text style={styles.verifiedActiveSub}>
+                  Your profile identity is verified! Your Instagram-style checkmark badge ({user?.subscription_plan?.toLowerCase().includes('premium') ? 'Dark Golden' : user?.subscription_plan?.toLowerCase().includes('plus') ? 'Purple' : 'Blue'}) is active on your profile cards.
+                </Text>
               </View>
             </View>
           ) : (
@@ -359,20 +360,6 @@ export default function SettingsScreen() {
               thumbColor="#FFF"
             />
           </View>
-
-          {/* Who Can Message Me Selector */}
-          <Text style={styles.subHeaderLabel}>Who Can Message Me</Text>
-          <View style={styles.pillSelectorRow}>
-            {['Everyone', 'Matches Only', 'Verified Only'].map(m => (
-              <TouchableOpacity
-                key={m}
-                style={[styles.selectorPill, whoCanMessage === m && styles.selectorPillActive]}
-                onPress={() => updateSettingField('who_can_message', m, setWhoCanMessage, 'Messaging permissions')}
-              >
-                <Text style={[styles.selectorPillTxt, whoCanMessage === m && styles.selectorPillTxtActive]}>{m}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         {/* ─── 4. Discovery & Match Filters ──────────────────────────────── */}
@@ -380,20 +367,6 @@ export default function SettingsScreen() {
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="options-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
             <Text style={styles.sectionTitle}>Discovery & Preference Filters</Text>
-          </View>
-
-          {/* Maximum Distance Selector */}
-          <Text style={styles.subHeaderLabel}>Maximum Distance</Text>
-          <View style={styles.pillSelectorRow}>
-            {['10 km', '25 km', '50 km', '100 km', 'Worldwide'].map(d => (
-              <TouchableOpacity
-                key={d}
-                style={[styles.selectorPill, distanceFilter === d && styles.selectorPillActive]}
-                onPress={() => updateSettingField('distance_filter', d, setDistanceFilter, 'Distance filter')}
-              >
-                <Text style={[styles.selectorPillTxt, distanceFilter === d && styles.selectorPillTxtActive]}>{d}</Text>
-              </TouchableOpacity>
-            ))}
           </View>
 
           {/* Age Range Selector */}
@@ -589,25 +562,156 @@ export default function SettingsScreen() {
       <Modal visible={privacyModalVisible} animationType="slide" transparent={false} onRequestClose={() => setPrivacyModalVisible(false)}>
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bgDark }]}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => setPrivacyModalVisible(false)}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => setPrivacyModalVisible(false)} activeOpacity={0.7}>
               <Ionicons name="close" size={22} color={theme.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Privacy Policy</Text>
             <View style={{ width: 38 }} />
           </View>
-          <ScrollView style={{ padding: 20 }}>
-            <Text style={styles.legalHeading}>HeartLink Privacy Policy</Text>
-            <Text style={styles.legalBody}>
-              At HeartLink, your privacy and security are our highest priority. We strictly encrypt and safeguard your personal credentials, chat conversations, location parameters, and media assets.
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.privacyScrollContent}>
+            {/* Branded Hero Header */}
+            <LinearGradient
+              colors={theme.isDark ? ['#2D103D', '#1A1233'] : ['#FFF5F9', '#F5EFFC']}
+              style={styles.privacyHeroCard}
+            >
+              <View style={styles.logoBadgeContainer}>
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={styles.privacyLogoImage}
+                />
+              </View>
+              <Text style={styles.privacyBrandTitle}>HeartLink</Text>
+              <Text style={styles.privacyHeroSubtitle}>Your Privacy & Trust Are Our Top Priority</Text>
+              <View style={styles.privacyTagBadge}>
+                <Ionicons name="shield-checkmark" size={13} color="#FF007F" style={{ marginRight: 4 }} />
+                <Text style={styles.privacyTagTxt}>End-to-End Protection • Version 2.0</Text>
+              </View>
+            </LinearGradient>
+
+            {/* Quick Pillars Row */}
+            <View style={styles.pillarsGrid}>
+              <View style={styles.pillarBox}>
+                <View style={[styles.pillarIconWrap, { backgroundColor: 'rgba(255, 0, 127, 0.12)' }]}>
+                  <Ionicons name="lock-closed" size={18} color="#FF007F" />
+                </View>
+                <Text style={styles.pillarTitle}>AES-256 Encrypted</Text>
+                <Text style={styles.pillarSub}>Private chats & data</Text>
+              </View>
+
+              <View style={styles.pillarBox}>
+                <View style={[styles.pillarIconWrap, { backgroundColor: 'rgba(139, 92, 246, 0.12)' }]}>
+                  <Ionicons name="eye-off" size={18} color="#8B5CF6" />
+                </View>
+                <Text style={styles.pillarTitle}>Zero Data Sale</Text>
+                <Text style={styles.pillarSub}>We never sell info</Text>
+              </View>
+
+              <View style={styles.pillarBox}>
+                <View style={[styles.pillarIconWrap, { backgroundColor: 'rgba(56, 151, 240, 0.12)' }]}>
+                  <Ionicons name="options" size={18} color="#3897F0" />
+                </View>
+                <Text style={styles.pillarTitle}>Full Control</Text>
+                <Text style={styles.pillarSub}>Manage visibility</Text>
+              </View>
+            </View>
+
+            {/* Detailed Policy Sections */}
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(255, 0, 127, 0.1)' }]}>
+                  <Ionicons name="person-outline" size={18} color="#FF007F" />
+                </View>
+                <Text style={styles.policySectionHeading}>1. Information We Collect</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                To provide you with meaningful matches and a safe dating experience, HeartLink collects essential information:
+              </Text>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#FF007F" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Account Profile: Name, age, gender, photos, bio, and dating preferences.</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#FF007F" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Location Services: Approximate distance to recommend nearby profiles.</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#FF007F" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Activity & Likes: Match connections and chat messages.</Text>
+              </View>
+            </View>
+
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(139, 92, 246, 0.1)' }]}>
+                  <Ionicons name="sparkles-outline" size={18} color="#8B5CF6" />
+                </View>
+                <Text style={styles.policySectionHeading}>2. How We Use Your Data</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                Your data is strictly utilized to enhance your matchmaking experience:
+              </Text>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#8B5CF6" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Calculating match compatibility scores and curated recommendations.</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#8B5CF6" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Verifying profile authenticity (Aadhaar & identity checkmarks).</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#8B5CF6" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Preventing spam, fake accounts, and community harassment.</Text>
+              </View>
+            </View>
+
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(56, 151, 240, 0.1)' }]}>
+                  <Ionicons name="shield-checkmark-outline" size={18} color="#3897F0" />
+                </View>
+                <Text style={styles.policySectionHeading}>3. Security & Data Protection</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                We employ industry-standard encryption protocols (TLS/SSL in transit, AES-256 at rest) to safeguard your personal messages and credentials from unauthorized access.
+              </Text>
+            </View>
+
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                  <Ionicons name="key-outline" size={18} color="#10B981" />
+                </View>
+                <Text style={styles.policySectionHeading}>4. Your Rights & Controls</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                You retain complete control over your profile and personal data at all times:
+              </Text>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Hide distance, age, or education level whenever you prefer.</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Block or report any unwanted user instantly.</Text>
+              </View>
+              <View style={styles.bulletRow}>
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" style={styles.bulletIcon} />
+                <Text style={styles.bulletText}>Deactivate or permanently delete your account with 1-click in Settings.</Text>
+              </View>
+            </View>
+
+            {/* Contact Box */}
+            <View style={styles.privacyContactBox}>
+              <Ionicons name="mail" size={24} color="#FF007F" style={{ marginBottom: 6 }} />
+              <Text style={styles.contactTitle}>Questions About Privacy?</Text>
+              <Text style={styles.contactSub}>Reach out to our dedicated Data Protection Officer at privacy@heartlink.app</Text>
+            </View>
+
+            <Text style={styles.privacyFooterNote}>
+              HeartLink Dating App • Designed with ❤️ for secure, meaningful connections.
             </Text>
-            <Text style={styles.legalSubHeading}>1. Data Collection & Use</Text>
-            <Text style={styles.legalBody}>
-              We collect profile information, photos, preferences, and location coordinates solely to calculate match compatibility and present relevant dating feed results.
-            </Text>
-            <Text style={styles.legalSubHeading}>2. Safety & Moderation</Text>
-            <Text style={styles.legalBody}>
-              HeartLink enforces strict zero-tolerance policies for harassment. Blocked users are completely isolated and can never send messages, likes, or request matches.
-            </Text>
+
             <View style={{ height: 40 }} />
           </ScrollView>
         </SafeAreaView>
@@ -617,21 +721,51 @@ export default function SettingsScreen() {
       <Modal visible={disclaimerModalVisible} animationType="slide" transparent={false} onRequestClose={() => setDisclaimerModalVisible(false)}>
         <SafeAreaView style={[styles.container, { backgroundColor: theme.bgDark }]}>
           <View style={styles.header}>
-            <TouchableOpacity style={styles.backBtn} onPress={() => setDisclaimerModalVisible(false)}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => setDisclaimerModalVisible(false)} activeOpacity={0.7}>
               <Ionicons name="close" size={22} color={theme.textPrimary} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Disclaimer & Terms</Text>
             <View style={{ width: 38 }} />
           </View>
-          <ScrollView style={{ padding: 20 }}>
-            <Text style={styles.legalHeading}>Disclaimer & Safety Terms</Text>
-            <Text style={styles.legalBody}>
-              HeartLink provides matchmaking and social discovery services for entertainment and dating purposes. Users must be at least 18 years of age to register.
-            </Text>
-            <Text style={styles.legalSubHeading}>User Responsibility</Text>
-            <Text style={styles.legalBody}>
-              Always exercise caution when sharing personal contact details or meeting matches in person. Meet in public places and notify friends or family of your plans.
-            </Text>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.privacyScrollContent}>
+            <LinearGradient
+              colors={theme.isDark ? ['#2D103D', '#1A1233'] : ['#FFF5F9', '#F5EFFC']}
+              style={styles.privacyHeroCard}
+            >
+              <View style={styles.logoBadgeContainer}>
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={styles.privacyLogoImage}
+                />
+              </View>
+              <Text style={styles.privacyBrandTitle}>HeartLink</Text>
+              <Text style={styles.privacyHeroSubtitle}>Disclaimer & Safety Terms of Service</Text>
+            </LinearGradient>
+
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(255, 0, 127, 0.1)' }]}>
+                  <Ionicons name="information-circle-outline" size={18} color="#FF007F" />
+                </View>
+                <Text style={styles.policySectionHeading}>General Disclaimer</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                HeartLink provides matchmaking and social discovery services for entertainment and personal connections. Users must be at least 18 years of age to create an account and use our platform services.
+              </Text>
+            </View>
+
+            <View style={styles.policyCard}>
+              <View style={styles.policyHeaderRow}>
+                <View style={[styles.policyIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.1)' }]}>
+                  <Ionicons name="warning-outline" size={18} color="#F59E0B" />
+                </View>
+                <Text style={styles.policySectionHeading}>User Safety & Responsibility</Text>
+              </View>
+              <Text style={styles.policyBodyText}>
+                Always exercise caution when sharing personal contact details or meeting matches in person. Meet in public places and notify friends or family of your plans. HeartLink does not conduct background checks on all users.
+              </Text>
+            </View>
+
             <View style={{ height: 40 }} />
           </ScrollView>
         </SafeAreaView>
@@ -677,7 +811,7 @@ export default function SettingsScreen() {
 
 const getStyles = (theme) => StyleSheet.create({
   container: { flex: 1 },
-  safeHeader: { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0 },
+  safeHeader: { paddingTop: 0 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -907,6 +1041,179 @@ const getStyles = (theme) => StyleSheet.create({
   legalHeading: { fontSize: 20, fontWeight: '900', color: theme.textPrimary, marginBottom: 12 },
   legalSubHeading: { fontSize: 15, fontWeight: '800', color: theme.textPrimary, marginTop: 16, marginBottom: 6 },
   legalBody: { fontSize: 13, color: theme.textSec, lineHeight: 20 },
+
+  privacyScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  privacyHeroCard: {
+    borderRadius: 24,
+    padding: 20,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255,0,127,0.25)' : 'rgba(255,0,127,0.12)',
+  },
+  logoBadgeContainer: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    shadowColor: '#FF007F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.2)',
+  },
+  privacyLogoImage: {
+    width: 52,
+    height: 52,
+    resizeMode: 'contain',
+  },
+  privacyBrandTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: 0.5,
+  },
+  privacyHeroSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.textSec,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  privacyTagBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,0,127,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  privacyTagTxt: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FF007F',
+  },
+
+  pillarsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 16,
+  },
+  pillarBox: {
+    flex: 1,
+    backgroundColor: theme.isDark ? '#1A1233' : '#FFFFFF',
+    borderRadius: 16,
+    padding: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.border || 'rgba(0,0,0,0.06)',
+  },
+  pillarIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  pillarTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: theme.textPrimary,
+    textAlign: 'center',
+  },
+  pillarSub: {
+    fontSize: 9.5,
+    color: theme.textSec,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+
+  policyCard: {
+    backgroundColor: theme.isDark ? '#1A1233' : '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: theme.border || 'rgba(0,0,0,0.06)',
+  },
+  policyHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  policyIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  policySectionHeading: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  policyBodyText: {
+    fontSize: 13,
+    color: theme.textSec,
+    lineHeight: 19,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 8,
+  },
+  bulletIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  bulletText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: theme.textPrimary,
+    lineHeight: 18,
+  },
+
+  privacyContactBox: {
+    backgroundColor: theme.isDark ? 'rgba(255,0,127,0.08)' : 'rgba(255,0,127,0.04)',
+    borderRadius: 20,
+    padding: 16,
+    alignItems: 'center',
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.2)',
+  },
+  contactTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  contactSub: {
+    fontSize: 12,
+    color: theme.textSec,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+
+  privacyFooterNote: {
+    fontSize: 11,
+    color: theme.textSec,
+    textAlign: 'center',
+    marginTop: 8,
+  },
 
   verifiedActiveBox: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 // src/services/authService.js
-import { apiRegister, apiLogin, apiLogout, setAuthToken } from './api';
+import { apiRegister, apiLogin, apiLogout, apiForgotPassword, setAuthToken } from './api';
 
 // Register User via Laravel API
 export const registerUser = async (registrationData) => {
@@ -17,6 +17,11 @@ export const loginUser = async (email, password) => {
     setAuthToken(res.access_token);
   }
   return res;
+};
+
+// Request Password Reset via Laravel API
+export const requestPasswordReset = async (email) => {
+  return await apiForgotPassword(email);
 };
 
 // Logout User via Laravel API

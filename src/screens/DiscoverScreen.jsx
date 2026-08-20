@@ -3,8 +3,9 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable,
   Animated, Dimensions, Image, ActivityIndicator,
-  SafeAreaView, StatusBar, Platform, Easing, BackHandler,
+  StatusBar, Platform, Easing, BackHandler,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -16,15 +17,19 @@ import {
   BricolageGrotesque_700Bold,
   BricolageGrotesque_800Bold,
 } from '@expo-google-fonts/bricolage-grotesque';
+const SatisfyFont = require('../../assets/fonts/Satisfy-Regular.ttf');
 import CustomAlertModal from '../components/CustomAlertModal';
 import MatchModal from '../components/MatchModal';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
+import SuperlikeUpgradeModal from '../components/SuperlikeUpgradeModal';
 import { apiSwipeUser, apiGetDiscoveryFeed, apiResetDiscovery } from '../services/api';
-import { ensureArray, formatImageUrl, calculateMatchPercentage } from '../utils/helpers';
+import { ensureArray, formatImageUrl, calculateMatchPercentage, renderVerifiedBadge } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 
-const { width, height } = Dimensions.get('window');
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
+
+const { width, height } = SCREEN;
 
 const LIKE_MESSAGES = [
   { title: 'Liked Profile', subtitle: 'Sending your interest request their way' },
@@ -48,12 +53,13 @@ const SUPERLIKE_MESSAGES = [
 
 export default function DiscoverScreen() {
   const navigation = useNavigation();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
 
   const [fontsLoaded] = useFonts({
     BricolageGrotesque_700Bold,
     BricolageGrotesque_800Bold,
+    Satisfy_400Regular: SatisfyFont,
   });
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -84,14 +90,15 @@ export default function DiscoverScreen() {
   // Active Plan Check
   const hasActivePlan = useMemo(() => {
     if (!user) return false;
-    const planName = (
+    const raw = (
       user.activeSubscription?.plan_name ||
       user.active_subscription?.plan_name ||
       user.subscription_plan ||
       user.plan_name ||
       user.plan ||
       ''
-    ).toLowerCase();
+    );
+    const planName = (typeof raw === 'string' ? raw : (raw?.name || raw?.plan_key || raw?.plan_name || '')).toLowerCase();
 
     return !!(
       (planName && planName !== 'free' && planName !== 'basic_free' && planName !== 'none') ||
@@ -103,7 +110,8 @@ export default function DiscoverScreen() {
   }, [user]);
 
   const isFreePlan = useMemo(() => {
-    const plan = (user?.subscription_plan || '').toLowerCase();
+    const raw = user?.subscription_plan || '';
+    const plan = (typeof raw === 'string' ? raw : (raw?.name || raw?.plan_key || raw?.plan_name || '')).toLowerCase();
     return plan === 'free' || plan === 'basic_free' || plan === '' || plan === 'none';
   }, [user]);
 
@@ -150,7 +158,7 @@ export default function DiscoverScreen() {
     const showDistanceSetting = targetSettings ? !isFalseVal(targetSettings.show_distance) : true;
     const hideEducationSetting = targetSettings ? isTrueVal(targetSettings.hide_education) : false;
 
-    const isVerifiedUser = u.is_verified === true || u.is_verified === 1 || u.is_verified === '1' || u.is_verified === 'true' || u.isVerified === true || !!u.email_verified_at || (u.id === user?.id && !!user?.is_verified);
+    const isVerifiedUser = isTrueVal(u.is_verified) || isTrueVal(u.isVerified) || (u.id === user?.id && isTrueVal(user?.is_verified));
 
     return {
       id: u.id,
@@ -320,50 +328,180 @@ export default function DiscoverScreen() {
   };
 
   const [dailyVerifyPromptVisible, setDailyVerifyPromptVisible] = useState(false);
-  const isVerifiedUser = user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true';
+  const isVerifiedUser =
+    user?.is_verified === true ||
+    user?.is_verified === 1 ||
+    user?.is_verified === '1' ||
+    user?.is_verified === 'true' ||
+    user?.isVerified === true ||
+    user?.isVerified === 1 ||
+    user?.isVerified === '1' ||
+    user?.isVerified === 'true';
 
   useEffect(() => {
-    const checkDailyVerificationPrompt = async () => {
-      if (isVerifiedUser) return;
-      try {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        const lastPromptDate = await AsyncStorage.getItem('@heartlink_last_verification_prompt_date');
-
-        if (lastPromptDate !== todayStr) {
-          setTimeout(() => {
-            setDailyVerifyPromptVisible(true);
-            AsyncStorage.setItem('@heartlink_last_verification_prompt_date', todayStr);
-          }, 1200);
-        }
-      } catch (err) {
-        console.warn('Daily prompt check error:', err);
-      }
-    };
-    checkDailyVerificationPrompt();
+    if (!isVerifiedUser) {
+      const timer = setTimeout(() => {
+        setDailyVerifyPromptVisible(true);
+      }, 700);
+      return () => clearTimeout(timer);
+    } else {
+      setDailyVerifyPromptVisible(false);
+    }
   }, [isVerifiedUser]);
 
   const [superlikeUpgradeModalVisible, setSuperlikeUpgradeModalVisible] = useState(false);
+  const [superlikeModalMessage, setSuperlikeModalMessage] = useState('');
+  const [isSuperlikeLoading, setIsSuperlikeLoading] = useState(false);
 
-  const handleSparkPress = () => {
-    const planName = user?.subscription_plan?.toLowerCase() || '';
-    if (planName.includes('basic') || planName === 'free' || !user?.subscription_plan) {
-      setSuperlikeUpgradeModalVisible(true);
-      return;
+  const handleSparkPress = async () => {
+    if (isAnimating || isSuperlikeLoading || !currentProfile) return;
+
+    const currentP = currentProfile;
+    setIsSuperlikeLoading(true);
+
+    try {
+      const res = await apiSwipeUser(currentP.id, 'super_like');
+      setIsSuperlikeLoading(false);
+      executeSuperlikeSwipe(currentP, res);
+    } catch (err) {
+      setIsSuperlikeLoading(false);
+
+      // Ensure card remains in current position on screen, do not swipe away
+      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
+
+      if (err?.message?.includes('not verified') || err?.requires_verification) {
+        setAadhaarModalVisible(true);
+      } else if (
+        err?.limit_type === 'super_like' ||
+        err?.message?.toLowerCase()?.includes('superlike') ||
+        err?.error === 'UPGRADE_PLAN_REQUIRED'
+      ) {
+        setSuperlikeModalMessage(err?.message || '');
+        setSuperlikeUpgradeModalVisible(true);
+      } else if (err?.message?.includes('limit') || err?.requires_upgrade) {
+        setFreeLimitModalVisible(true);
+      } else {
+        setSuperlikeModalMessage(err?.message || '');
+        setSuperlikeUpgradeModalVisible(true);
+      }
     }
-
-    swipeCard('right', 'super_like');
   };
 
-  // Sequential 3-Phase Animation Sequence:
-  // Phase 1: Slide current profile card off-screen (190ms)
-  // Phase 2: Show reaction status toast on screen -> display -> fade out status toast COMPLETELY
-  // Phase 3: AFTER status toast has disappeared, transition the next profile card cleanly into view!
+  const executeSuperlikeSwipe = (currentP, res) => {
+    if (!currentP) return;
+
+    setToastType('super_like');
+    setToastMsg(SUPERLIKE_MESSAGES[Math.floor(Math.random() * SUPERLIKE_MESSAGES.length)]);
+
+    setIsAnimating(true);
+    setSwipedCount(prev => prev + 1);
+
+    if (res?.is_match) {
+      setMatchModalUser(currentP);
+      setMatchModalVisible(true);
+    } else {
+      eventEmitter.emit(EVENTS.REQUEST_SENT, {
+        title: 'Super Spark Sent',
+        message: `Sent interest request to ${currentP.name || 'Member'}`,
+        avatar: currentP.avatar || currentP.image,
+        userId: currentP.id,
+      });
+    }
+
+    const isLastProfile = activeProfiles.length <= 1;
+    const targetX = width * 1.35;
+
+    // Phase 1: Slide current profile card off-screen cleanly
+    Animated.parallel([
+      Animated.timing(card1Pos.x, {
+        toValue: targetX,
+        duration: 190,
+        useNativeDriver: false,
+        easing: Easing.out(Easing.quad),
+      }),
+      Animated.timing(card1Opacity, {
+        toValue: 0,
+        duration: 170,
+        useNativeDriver: false,
+      })
+    ]).start(() => {
+      if (!isLastProfile) {
+        // Phase 2: Show reaction status toast on screen -> display -> fade out completely
+        toastOpacity.setValue(0);
+        toastScale.setValue(0.85);
+
+        Animated.sequence([
+          Animated.parallel([
+            Animated.timing(toastOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: false,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.spring(toastScale, {
+              toValue: 1,
+              friction: 6,
+              tension: 40,
+              useNativeDriver: false,
+            }),
+          ]),
+          Animated.delay(400),
+          Animated.timing(toastOpacity, {
+            toValue: 0,
+            duration: 180,
+            useNativeDriver: false,
+          }),
+        ]).start(() => {
+          // Phase 3: AFTER reaction toast has completely disappeared, transition next profile onto clean screen
+          setPhotoIdx(0);
+          setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+
+          card1Pos.setValue({ x: 0, y: 0 });
+          card1Scale.setValue(0.95);
+          card1Opacity.setValue(0);
+
+          Animated.parallel([
+            Animated.timing(card1Opacity, {
+              toValue: 1,
+              duration: 200,
+              useNativeDriver: false,
+              easing: Easing.out(Easing.quad),
+            }),
+            Animated.spring(card1Scale, {
+              toValue: 1,
+              friction: 8,
+              tension: 45,
+              useNativeDriver: false,
+            }),
+          ]).start(() => {
+            setIsAnimating(false);
+          });
+        });
+      } else {
+        // Final profile swiped: remove from state immediately and show clean empty feed popup
+        toastOpacity.setValue(0);
+        setPhotoIdx(0);
+        setDbProfiles(prev => prev.filter(p => p.id !== currentP?.id));
+        card1Pos.setValue({ x: 0, y: 0 });
+        card1Scale.setValue(1);
+        card1Opacity.setValue(1);
+        setIsAnimating(false);
+      }
+    });
+  };
+
+  // Sequential 3-Phase Animation Sequence for Like / Pass swipes
   const swipeCard = (direction, rawSwipeType = 'like') => {
-    if (isAnimating || !currentProfile) return;
+    if (isAnimating || isSuperlikeLoading || !currentProfile) return;
 
     const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like', 'pass'].includes(rawSwipeType))
       ? rawSwipeType
       : (direction === 'right' ? 'like' : 'pass');
+
+    if (swipeType === 'super_like') {
+      handleSparkPress();
+      return;
+    }
 
     const isUserVerified = user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true';
     if (!isUserVerified && !hasActivePlan && swipedCount >= 5) {
@@ -375,10 +513,7 @@ export default function DiscoverScreen() {
     const isLastProfile = activeProfiles.length <= 1;
 
     // Set status message text & icon type
-    if (swipeType === 'super_like') {
-      setToastType('super_like');
-      setToastMsg(SUPERLIKE_MESSAGES[Math.floor(Math.random() * SUPERLIKE_MESSAGES.length)]);
-    } else if (direction === 'right' || swipeType === 'like') {
+    if (direction === 'right' || swipeType === 'like') {
       setToastType('like');
       setToastMsg(LIKE_MESSAGES[Math.floor(Math.random() * LIKE_MESSAGES.length)]);
     } else {
@@ -398,9 +533,9 @@ export default function DiscoverScreen() {
         if (res?.is_match) {
           setMatchModalUser(currentP);
           setMatchModalVisible(true);
-        } else if (['like', 'super_like'].includes(swipeType)) {
+        } else if (swipeType === 'like') {
           eventEmitter.emit(EVENTS.REQUEST_SENT, {
-            title: swipeType === 'super_like' ? 'Super Spark Sent' : 'Like Sent',
+            title: 'Like Sent',
             message: `Sent interest request to ${currentP.name || 'Member'}`,
             avatar: currentP.avatar || currentP.image,
             userId: currentP.id,
@@ -506,19 +641,25 @@ export default function DiscoverScreen() {
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       <SafeAreaView style={styles.headerWrap} edges={['top']}>
         <View style={styles.headerPill}>
+          <View style={styles.headerTitleContainer} pointerEvents="none">
+            <View style={styles.brandTitleRow}>
+
+              <Text style={styles.headerCenterTitle}>HeartLink</Text>
+            </View>
+          </View>
+
           <TouchableOpacity style={styles.headerLeftBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
             <Ionicons name="person" size={17} color={theme.textPrimary} />
           </TouchableOpacity>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Text style={styles.headerCenterTitle}>HeartLink</Text>
-          </View>
-
           <View style={styles.headerRightGroup}>
+            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+              <Ionicons name="options-outline" size={18} color={theme.textPrimary} />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
               <Ionicons name="notifications" size={19} color={theme.textPrimary} />
               {requestCount > 0 && (
@@ -699,11 +840,7 @@ export default function DiscoverScreen() {
                 <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.cardProfileName}>{currentProfile.display_name || currentProfile.displayName || currentProfile.name}{currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}</Text>
-                    {(currentProfile.subscription_plan?.toLowerCase().includes('premium') || currentProfile.isGoldenTick) ? (
-                      <Ionicons name="checkmark-circle" size={19} color="#F59E0B" style={{ marginLeft: 6, alignSelf: 'center' }} />
-                    ) : (currentProfile.isVerified || currentProfile.user?.is_verified) ? (
-                      <Ionicons name="checkmark-circle" size={19} color="#3897F0" style={{ marginLeft: 6, alignSelf: 'center' }} />
-                    ) : null}
+                    {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
                     <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
@@ -749,7 +886,7 @@ export default function DiscoverScreen() {
                 onPress={handleSparkPress}
                 activeOpacity={0.8}
                 style={styles.actionBtnLargeLightning}
-                disabled={isAnimating}
+                disabled={isAnimating || isSuperlikeLoading}
               >
                 <LinearGradient
                   colors={['#FF007F', '#B5179E']}
@@ -757,7 +894,11 @@ export default function DiscoverScreen() {
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFill}
                 />
-                <Ionicons name="flash" size={28} color="#fff" />
+                {isSuperlikeLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="flash" size={28} color="#fff" />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -783,6 +924,10 @@ export default function DiscoverScreen() {
             closeDetail();
             moveToNext('like');
           }}
+          onSuperLike={() => {
+            closeDetail();
+            handleSparkPress();
+          }}
           onPass={() => {
             closeDetail();
             moveToPrevious();
@@ -807,39 +952,22 @@ export default function DiscoverScreen() {
       />
 
       <AadhaarVerificationModal
-        visible={aadhaarModalVisible}
-        onClose={() => setAadhaarModalVisible(false)}
+        visible={aadhaarModalVisible || dailyVerifyPromptVisible}
+        onClose={() => {
+          setAadhaarModalVisible(false);
+          setDailyVerifyPromptVisible(false);
+        }}
         initialStep="alert"
       />
 
-      <CustomAlertModal
+      <SuperlikeUpgradeModal
         visible={superlikeUpgradeModalVisible}
-        title="Superlikes Locked"
-        message="Superlikes are not included in your Basic plan. Upgrade to HeartLink Plus or Premium to send Superlikes, boost match priority, and stand out instantly!"
-        icon="flash"
-        iconColor="#FF007F"
-        confirmText="Upgrade Plan"
-        cancelText="Maybe Later"
-        onConfirm={() => {
+        message={superlikeModalMessage}
+        onUpgrade={() => {
           setSuperlikeUpgradeModalVisible(false);
           navigation.navigate('Plans');
         }}
-        onCancel={() => setSuperlikeUpgradeModalVisible(false)}
-      />
-
-      <CustomAlertModal
-        visible={dailyVerifyPromptVisible}
-        title="Verify Your Profile Identity"
-        message="Verify your profile for ₹99 to gain 3x more trust, get a verified checkmark badge, and stand out at the top of discover feeds!"
-        icon="shield-checkmark-outline"
-        iconColor="#FF007F"
-        confirmText="Verify"
-        cancelText="Maybe Later"
-        onConfirm={() => {
-          setDailyVerifyPromptVisible(false);
-          setAadhaarModalVisible(true);
-        }}
-        onCancel={() => setDailyVerifyPromptVisible(false)}
+        onClose={() => setSuperlikeUpgradeModalVisible(false)}
       />
 
       <CustomAlertModal
@@ -882,7 +1010,7 @@ const getStyles = (theme) => StyleSheet.create({
 
   headerWrap: {
     backgroundColor: 'transparent',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
+    paddingTop: 0,
   },
   headerPill: {
     flexDirection: 'row',
@@ -890,14 +1018,24 @@ const getStyles = (theme) => StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 24,
+    position: 'relative',
+  },
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerLeftBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-    borderWidth: 1.2,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
+    borderWidth: 0,
+    borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -910,8 +1048,8 @@ const getStyles = (theme) => StyleSheet.create({
     height: 38,
     borderRadius: 19,
     backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-    borderWidth: 1.2,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.28)' : 'rgba(0, 0, 0, 0.12)',
+    borderWidth: 0,
+    borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
@@ -927,21 +1065,40 @@ const getStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 2,
-    borderWidth: 1.5,
-    borderColor: theme.isDark ? '#0D0214' : '#fff',
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   headerBadgeText: {
     color: '#fff',
     fontSize: 8.5,
     fontWeight: '900',
   },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  headerHeartBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF007F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
   headerCenterTitle: {
-    fontFamily: Platform.OS === 'ios' ? 'serif' : 'math',
-    fontSize: 22,
-    fontWeight: '900',
+    fontFamily: 'Satisfy_400Regular',
+    fontSize: fs(24),
     color: theme.textPrimary,
-    letterSpacing: -0.6,
-    textShadowColor: theme.isDark ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)',
+    letterSpacing: 0.3,
+    lineHeight: 34,
+    paddingTop: Platform.OS === 'android' ? 2 : 0,
+    textShadowColor: theme.isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.1)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
@@ -1038,8 +1195,8 @@ const getStyles = (theme) => StyleSheet.create({
 
   cardStackContainer: {
     flex: 1,
-    marginTop: 12,
-    marginBottom: height * 0.015,
+    marginTop: verticalScale(6),
+    marginBottom: verticalScale(6),
     width: width - 48,
     alignSelf: 'center',
     position: 'relative',
@@ -1057,8 +1214,8 @@ const getStyles = (theme) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
+    borderWidth: 0,
+    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.15,
@@ -1116,6 +1273,9 @@ const getStyles = (theme) => StyleSheet.create({
     height: '100%',
     borderRadius: 36,
     overflow: 'hidden',
+    backgroundColor: '#000000',
+    borderWidth: 0,
+    borderColor: 'transparent',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
@@ -1131,6 +1291,9 @@ const getStyles = (theme) => StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
+    borderRadius: 36,
+    borderWidth: 0,
+    borderColor: 'transparent',
   },
   topGrad: {
     position: 'absolute',
@@ -1219,18 +1382,18 @@ const getStyles = (theme) => StyleSheet.create({
   },
   cardProfileName: {
     fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
-    fontSize: 26,
+    fontSize: fs(24),
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: -0.6,
-    marginBottom: 3,
+    marginBottom: verticalScale(3),
     textShadowColor: 'rgba(0,0,0,0.6)',
     textShadowOffset: { width: 0, height: 1.5 },
     textShadowRadius: 4,
   },
   cardProfileJob: {
     fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif-light',
-    fontSize: 14,
+    fontSize: fs(13),
     color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '600',
     textShadowColor: 'rgba(0,0,0,0.5)',
@@ -1242,23 +1405,24 @@ const getStyles = (theme) => StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: height * 0.015,
+    marginTop: verticalScale(4),
+    marginBottom: verticalScale(22),
   },
   actionsRowContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 14,
+    gap: scale(12),
   },
   actionBtnRewindFloating: {
     position: 'absolute',
-    left: 24,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    left: scale(20),
+    width: scale(36),
+    height: scale(36),
+    borderRadius: scale(18),
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderWidth: 1.2,
-    borderColor: '#F59E0B',
+    borderWidth: 0,
+    borderColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#F59E0B',
@@ -1269,9 +1433,9 @@ const getStyles = (theme) => StyleSheet.create({
     zIndex: 10,
   },
   actionBtnSmallX: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     backgroundColor: '#4A89FF',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1282,9 +1446,9 @@ const getStyles = (theme) => StyleSheet.create({
     elevation: 3,
   },
   actionBtnLargeLightning: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: scale(60),
+    height: scale(60),
+    borderRadius: scale(30),
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1295,9 +1459,9 @@ const getStyles = (theme) => StyleSheet.create({
     elevation: 4,
   },
   actionBtnSmallHeart: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     backgroundColor: '#8A66FF',
     justifyContent: 'center',
     alignItems: 'center',

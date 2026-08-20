@@ -1,16 +1,18 @@
-// src/components/AadhaarVerificationModal.jsx — In-App Aadhaar OTP Verification Modal
+// src/components/AadhaarVerificationModal.jsx — In-App Aadhaar OTP Verification & Profile Identity Modal
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ActivityIndicator, Dimensions, ScrollView,
+  ActivityIndicator, ScrollView, Alert, Linking, NativeModules
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { apiSendAadhaarOtp, apiVerifyAadhaarOtp } from '../services/api';
+import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiCreateRazorpayOrder, apiVerifyRazorpayPayment } from '../services/api';
+import RazorpayCheckout from 'react-native-razorpay';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width } = Dimensions.get('window');
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
 export default function AadhaarVerificationModal({
   visible,
@@ -18,10 +20,11 @@ export default function AadhaarVerificationModal({
   onVerifiedSuccess,
   initialStep = 'alert',
 }) {
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
 
-  // Steps: 'alert' -> 'payment' -> 'aadhaar' -> 'success'
+  // Steps: 'alert' (or 'verify') -> 'payment' -> 'aadhaar' -> 'success'
   const [step, setStep] = useState(initialStep);
   const [paying, setPaying] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -37,7 +40,7 @@ export default function AadhaarVerificationModal({
 
   useEffect(() => {
     if (visible) {
-      setStep(initialStep);
+      setStep(initialStep === 'verify' ? 'alert' : initialStep);
       setPaying(false);
       setVerifying(false);
       setAadhaarNumber('');
@@ -52,15 +55,126 @@ export default function AadhaarVerificationModal({
 
   if (!visible) return null;
 
-  const handleStartPayment = () => {
-    setStep('payment');
+  const handleStartPayment = async () => {
     setPaying(true);
+    setStep('payment');
+    try {
+      // Create Razorpay Order
+      const orderData = {
+        amount: 99,
+        currency: 'INR',
+        planId: 'verification_99',
+        planName: 'Profile Identity Verification',
+        durationId: 'lifetime',
+        durationLabel: 'Lifetime',
+        userId: user?.id,
+        userEmail: user?.email,
+        userPhone: user?.phone,
+        userName: user?.name,
+      };
 
-    // Simulate ₹99 payment gateway processing for 1 second
-    setTimeout(() => {
+      const orderResponse = await apiCreateRazorpayOrder(orderData);
+      
+      const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
+      if (!responseOrderId) {
+        throw new Error('No order ID received from server');
+      }
+      
+      const razorpayKeyId = orderResponse?.key_id || 'YOUR_RAZORPAY_KEY_ID';
+
+      // Check if backend provides a checkout URL (Fallback for Expo Go / Web)
+      if (orderResponse?.checkout_url) {
+        console.log('[Payment] Using server-side checkout URL');
+        Alert.alert(
+          'Redirecting to Payment',
+          'You will be redirected to the secure payment page.',
+          [
+            {
+              text: 'Continue to Payment',
+              onPress: () => {
+                Linking.openURL(orderResponse.checkout_url).catch(() => {
+                  Alert.alert('Error', 'Unable to open payment page');
+                });
+                setPaying(false);
+                setStep('awaiting_payment'); // Show the waiting screen with a manual 'I have paid' button
+              }
+            },
+            {
+              text: 'Cancel',
+              onPress: () => {
+                setPaying(false);
+                setStep('alert');
+              }
+            }
+          ]
+        );
+        return;
+      }
+
+      const razorpayOptions = {
+        description: 'Profile Identity Verification',
+        image: 'https://heartlink.app/logo.png',
+        currency: 'INR',
+        key: razorpayKeyId,
+        amount: 99 * 100, // paise
+        name: 'HeartLink',
+        order_id: responseOrderId,
+        prefill: {
+          email: user?.email || '',
+          contact: user?.phone || '',
+          name: user?.name || '',
+        },
+        theme: {
+          color: '#00C853',
+        },
+        modal: {
+          backdrop: true,
+        }
+      };
+
+      // Removed NativeModules bypass. This will throw an error in Expo Go,
+      // but will work in a custom dev client (e.g. npx expo run:android)
+
+      RazorpayCheckout.open(razorpayOptions)
+        .then(async (data) => {
+          try {
+            const verificationData = {
+              orderId: responseOrderId,
+              paymentId: data.razorpay_payment_id,
+              signature: data.razorpay_signature,
+              planId: 'verification_99',
+              durationId: 'lifetime',
+              userId: user?.id
+            };
+            
+            const verifyRes = await apiVerifyRazorpayPayment(verificationData);
+            if (verifyRes?.success) {
+              setPaying(false);
+              setStep('aadhaar'); // Payment successful, proceed to aadhaar verification
+            } else {
+              setPaying(false);
+              setStep('alert');
+              Alert.alert('Payment Verification Failed', 'We could not verify your payment. Please contact support.');
+            }
+          } catch (verifyError) {
+            setPaying(false);
+            setStep('alert');
+            Alert.alert('Payment Verification Failed', verifyError.message || 'Unknown error');
+          }
+        })
+        .catch((error) => {
+          setPaying(false);
+          setStep('alert');
+          if (error.code !== 'PAYMENT_CANCELED') {
+            Alert.alert('Payment Failed', error.description || error.message || 'An error occurred during payment processing.');
+          }
+        });
+
+    } catch (error) {
       setPaying(false);
-      setStep('aadhaar');
-    }, 1000);
+      setStep('alert');
+      Alert.alert('Payment Error', error.message || 'Failed to initiate payment. Please try again.');
+    }
   };
 
   const handleSendOtp = async () => {
@@ -133,58 +247,178 @@ export default function AadhaarVerificationModal({
     setAadhaarNumber(formatted);
   };
 
+  const isInitialPitchStep = step === 'alert' || step === 'verify';
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
+      <View style={[styles.backdrop, { paddingTop: insets.top + 12, paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
         <View style={[
           styles.card,
           {
-            backgroundColor: isDark ? '#1A1128' : '#FFFFFF',
-            borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
+            backgroundColor: isDark ? '#160B28' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
           }
         ]}>
 
-          {step === 'alert' ? (
-            // ─── STEP 1: Unverified Warning Popup ───────────────────────────
-            <View style={styles.contentWrap}>
-              <View style={styles.iconCircle}>
-                <Ionicons name="shield-checkmark" size={32} color="#FF007F" />
+          {/* Top Decorative Gradient Ambient Bar */}
+          <View style={styles.topBarGradWrapper}>
+            <LinearGradient
+              colors={['#0072E3', '#7000FF', '#FF007F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.topBarGrad}
+            />
+          </View>
+
+          {isInitialPitchStep ? (
+            // ─── STEP 1: WOW Benefits & Identity Pitch Modal ─────────────────
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollWrapPitch}>
+              {/* Header Close Row */}
+              <View style={styles.pitchHeaderRow}>
+                <View style={styles.verifyPillBadge}>
+                  <LinearGradient colors={['rgba(0, 114, 227, 0.18)', 'rgba(112, 0, 255, 0.18)']} style={styles.pillGrad}>
+                    <Ionicons name="shield-checkmark" size={13} color="#3897F0" style={{ marginRight: 5 }} />
+                    <Text style={styles.verifyPillTxt}>VERIFIED PROFILE IDENTITY</Text>
+                  </LinearGradient>
+                </View>
+                <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Ionicons name="close-circle" size={26} color={theme.textSec} />
+                </TouchableOpacity>
               </View>
 
-              <Text style={[styles.title, { color: theme.textPrimary }]}>
-                Verification Required
-              </Text>
-
-              <Text style={[styles.message, { color: theme.textSec }]}>
-                Verify your profile identity using your Aadhaar linked mobile OTP to unlock all HeartLink features.
-              </Text>
-
-              <View style={styles.priceTag}>
-                <Ionicons name="sparkles" size={15} color="#FF007F" style={{ marginRight: 6 }} />
-                <Text style={styles.priceTxt}>Profile Verification: ₹99 Only</Text>
+              {/* Central Glowing Hero Icon */}
+              <View style={styles.heroIconWrapper}>
+                <View style={styles.heroOuterGlow}>
+                  <LinearGradient colors={['#3897F0', '#0072E3']} style={styles.heroIconCircle}>
+                    <MaterialCommunityIcons name="check-decagram" size={40} color="#FFFFFF" />
+                  </LinearGradient>
+                </View>
+                <View style={styles.sparkleBadge}>
+                  <Ionicons name="sparkles" size={14} color="#FFD700" />
+                </View>
               </View>
 
+              {/* Title & Headline */}
+              <Text style={[styles.pitchTitle, { color: theme.textPrimary }]}>
+                Verify Your Profile Identity
+              </Text>
+              <Text style={[styles.pitchSubtitle, { color: theme.textSec }]}>
+                Unlock Instagram-style checkmark status, gain maximum trust, and supercharge your matching power on HeartLink!
+              </Text>
+
+              {/* ─── All User Benefits Section (WOW Feature Cards Grid) ───────── */}
+              <View style={styles.benefitsGrid}>
+
+                {/* Benefit 1: Instagram Style Checkmark Tiers */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,114,227,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,114,227,0.12)' }]}>
+                  <LinearGradient colors={['#0072E3', '#3897F0']} style={styles.benefitIconBox}>
+                    <MaterialCommunityIcons name="check-decagram" size={22} color="#FFF" />
+                  </LinearGradient>
+                  <View style={styles.benefitTextWrap}>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Instagram-Style Badge Tiers</Text>
+                    <Text style={[styles.benefitSub, { color: theme.textSec }]}>
+                      💙 Blue tick for Basic • 💜 Purple tick for Plus • 👑 Dark Golden tick for Premium!
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Benefit 2: 1 Free Monthly Boost */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,0,127,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,0,127,0.12)' }]}>
+                  <LinearGradient colors={['#FF007F', '#FF5252']} style={styles.benefitIconBox}>
+                    <Ionicons name="flash" size={20} color="#FFF" />
+                  </LinearGradient>
+                  <View style={styles.benefitTextWrap}>
+                    <View style={styles.tagRow}>
+                      <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>1 Free Monthly Boost</Text>
+                      <View style={styles.freeBadge}><Text style={styles.freeBadgeTxt}>FREE</Text></View>
+                    </View>
+                    <Text style={[styles.benefitSub, { color: theme.textSec }]}>
+                      Get 1 FREE Profile Boost every single month to reach #1 in Discover feeds!
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Benefit 3: 3x More Matches & Trust Factor */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,149,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,149,0,0.12)' }]}>
+                  <LinearGradient colors={['#FF9500', '#FF2D55']} style={styles.benefitIconBox}>
+                    <Ionicons name="heart-circle" size={20} color="#FFF" />
+                  </LinearGradient>
+                  <View style={styles.benefitTextWrap}>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>3x Matches & High Trust</Text>
+                    <Text style={[styles.benefitSub, { color: theme.textSec }]}>
+                      Verified profiles build instant trust and get up to 300% more likes & replies.
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Benefit 4: Priority Feed Placement */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(112,0,255,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(112,0,255,0.12)' }]}>
+                  <LinearGradient colors={['#7000FF', '#9D4EDD']} style={styles.benefitIconBox}>
+                    <Ionicons name="trending-up" size={20} color="#FFF" />
+                  </LinearGradient>
+                  <View style={styles.benefitTextWrap}>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Priority Feed Status</Text>
+                    <Text style={[styles.benefitSub, { color: theme.textSec }]}>
+                      Top rank placement in Discover stacks, search filters & match algorithms.
+                    </Text>
+                  </View>
+                </View>
+
+              </View>
+
+              {/* ─── Price Tag & Value Offer Banner ──────────────────────────── */}
+              <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>₹99</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14) }}>₹499</Text>
+                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • 80% Off</Text>
+                  </View>
+                  <Text style={[styles.offerDesc, { color: theme.textSec }]}>
+                    One-time identity verification fee • Includes 1 Free Profile Boost!
+                  </Text>
+                </View>
+                <View style={[styles.valueTag, { backgroundColor: '#00C853' }]}>
+                  <Ionicons name="sparkles" size={13} color="#FFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.valueTagTxt}>SPECIAL OFFER</Text>
+                </View>
+              </View>
+
+              {/* CTA Action Buttons Stack */}
               <View style={styles.btnStack}>
                 <TouchableOpacity
-                  style={styles.actionBtn}
+                  style={styles.ctaActionBtn}
                   onPress={handleStartPayment}
-                  activeOpacity={0.85}
+                  activeOpacity={0.88}
                 >
-                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.gradBtn}>
-                    <Ionicons name="card-outline" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.gradBtnTxt}>Verify Profile (₹99)</Text>
+                  <LinearGradient
+                    colors={['#00C853', '#0072E3', '#7000FF']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradCtaBtn}
+                  >
+                    <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.gradCtaBtnTxt}>Verify Profile Identity (₹99)</Text>
                   </LinearGradient>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.cancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)' }]}
+                  style={[styles.cancelBtn, { borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }]}
                   onPress={onClose}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.cancelBtnTxt, { color: theme.textSec }]}>Cancel</Text>
+                  <Text style={[styles.cancelBtnTxt, { color: theme.textSec }]}>Maybe Later</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+
+              <View style={styles.securityFooter}>
+                <Ionicons name="lock-closed-outline" size={12} color={theme.textFaint} style={{ marginRight: 4 }} />
+                <Text style={[styles.securityFooterTxt, { color: theme.textFaint }]}>
+                  Instant 30-sec Aadhaar OTP Verification • 100% Encrypted & Private
+                </Text>
+              </View>
+
+            </ScrollView>
 
           ) : step === 'payment' ? (
             // ─── STEP 2: Payment Processing Simulation ──────────────────────
@@ -198,43 +432,87 @@ export default function AadhaarVerificationModal({
               </Text>
 
               <Text style={[styles.message, { color: theme.textSec }]}>
-                Payment of ₹99 successful! Loading Aadhaar OTP verification...
+                Payment of ₹99 successful! Opening secure Aadhaar OTP verification...
               </Text>
+            </View>
+
+          ) : step === 'awaiting_payment' ? (
+            // ─── STEP 2.5: Web Fallback Payment Verification ──────────────────────
+            <View style={styles.contentWrap}>
+              <View style={[styles.iconCircle, { borderColor: '#FF9500', backgroundColor: 'rgba(255, 149, 0, 0.12)' }]}>
+                <Ionicons name="time" size={32} color="#FF9500" />
+              </View>
+
+              <Text style={[styles.title, { color: theme.textPrimary }]}>
+                Awaiting Payment ⏳
+              </Text>
+
+              <Text style={[styles.message, { color: theme.textSec }]}>
+                Please complete your ₹99 payment in the secure browser window that opened. Once successful, return here and click the button below.
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.ctaActionBtn, { width: '100%' }]}
+                onPress={() => setStep('aadhaar')}
+                activeOpacity={0.88}
+              >
+                <LinearGradient colors={['#FF9500', '#FF2D55']} style={styles.gradCtaBtn}>
+                  <Ionicons name="checkmark-done" size={19} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.gradCtaBtnTxt}>I've Paid - Continue to Aadhaar</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.cancelBtn, { marginTop: 12, width: '100%', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }]}
+                onPress={() => setStep('alert')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cancelBtnTxt, { color: theme.textSec }]}>Cancel</Text>
+              </TouchableOpacity>
             </View>
 
           ) : step === 'success' ? (
             // ─── STEP 4: Custom Verification Success Screen ──────────────────
             <View style={styles.contentWrap}>
               <View style={[styles.successIconCircle]}>
-                <Ionicons name="checkmark-circle" size={48} color="#00C853" />
+                <MaterialCommunityIcons name="check-decagram" size={54} color="#00C853" />
               </View>
 
               <Text style={[styles.title, { color: theme.textPrimary, marginTop: 4 }]}>
-                Aadhaar Verified! 🎉
+                Profile Identity Verified! 🎉
               </Text>
 
               <Text style={[styles.message, { color: theme.textSec }]}>
-                {successMessage || 'Your identity has been verified successfully. Profile verification badge is now active!'}
+                {successMessage || 'Your identity has been verified successfully via Aadhaar OTP!'}
               </Text>
 
-              <View style={styles.successBadgeRow}>
-                <View style={styles.successBadge}>
-                  <Ionicons name="shield-checkmark" size={14} color="#00C853" style={{ marginRight: 5 }} />
-                  <Text style={styles.successBadgeTxt}>IDENTITY VERIFIED</Text>
+              {/* Active Perks List */}
+              <View style={[styles.perksActiveBox, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.08)' : 'rgba(0, 200, 83, 0.05)', borderColor: 'rgba(0, 200, 83, 0.25)' }]}>
+                <View style={styles.perkRow}>
+                  <MaterialCommunityIcons name="check-decagram" size={16} color="#00C853" style={{ marginRight: 8 }} />
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>Instagram-Style Checkmark Badge Active on Profile</Text>
+                </View>
+                <View style={styles.perkRow}>
+                  <Ionicons name="flash" size={16} color="#FF007F" style={{ marginRight: 8 }} />
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>1 Free Profile Boost Ready to Use</Text>
+                </View>
+                <View style={styles.perkRow}>
+                  <Ionicons name="trending-up" size={16} color="#7000FF" style={{ marginRight: 8 }} />
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>3x Match Priority & High Trust Factor Unlocked</Text>
                 </View>
               </View>
 
               <TouchableOpacity
-                style={[styles.actionBtn, { marginTop: 20 }]}
+                style={[styles.ctaActionBtn, { marginTop: 20 }]}
                 onPress={() => {
                   if (onVerifiedSuccess) onVerifiedSuccess();
                   if (onClose) onClose();
                 }}
-                activeOpacity={0.85}
+                activeOpacity={0.88}
               >
-                <LinearGradient colors={['#00C853', '#00E676']} style={styles.gradBtn}>
-                  <Ionicons name="sparkles" size={18} color="#FFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.gradBtnTxt}>Awesome!</Text>
+                <LinearGradient colors={['#00C853', '#00E676']} style={styles.gradCtaBtn}>
+                  <Ionicons name="sparkles" size={19} color="#FFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.gradCtaBtnTxt}>Awesome! Explore Discover</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -368,7 +646,7 @@ export default function AadhaarVerificationModal({
                   ) : (
                     <>
                       <Ionicons name="checkmark-done-circle" size={20} color="#FFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.gradBtnTxt}>Verify OTP & Activate Profile</Text>
+                      <Text style={styles.gradBtnTxt}>Verify OTP & Activate Blue Tick</Text>
                     </>
                   )}
                 </LinearGradient>
@@ -377,8 +655,8 @@ export default function AadhaarVerificationModal({
               {/* Privacy Disclaimer Container */}
               <View style={[styles.privacyBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(26, 35, 126, 0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(26, 35, 126, 0.12)' }]}>
                 <View style={styles.privacyHeader}>
-                  <Ionicons name="shield-checkmark-sharp" size={14} color="#1A237E" style={{ marginRight: 6 }} />
-                  <Text style={styles.privacyHeaderTxt}>Official Verification & Privacy Notice</Text>
+                  <Ionicons name="shield-checkmark-sharp" size={14} color={isDark ? '#7986CB' : '#1A237E'} style={{ marginRight: 6 }} />
+                  <Text style={[styles.privacyHeaderTxt, { color: isDark ? '#7986CB' : '#1A237E' }]}>Official Verification & Privacy Notice</Text>
                 </View>
                 <Text style={[styles.privacyTxt, { color: theme.textSec }]}>
                   This data is used solely for identity verification purposes and is not shared with anyone. All verification is encrypted and processed via UIDAI authorised protocols.
@@ -396,108 +674,296 @@ export default function AadhaarVerificationModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(5, 2, 12, 0.82)',
+    backgroundColor: 'rgba(5, 2, 14, 0.86)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: scale(16),
     zIndex: 9999,
   },
   card: {
     width: '100%',
-    maxHeight: '85%',
-    borderRadius: 26,
-    padding: 24,
+    maxHeight: '90%',
+    borderRadius: scale(26),
+    paddingHorizontal: scale(20),
+    paddingTop: scale(16),
+    paddingBottom: scale(20),
     borderWidth: 1,
-    shadowColor: '#000',
+    shadowColor: '#0072E3',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 12,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 16,
+    overflow: 'hidden',
   },
-  contentWrap: {
+  topBarGradWrapper: {
+    height: 4,
+    width: '120%',
+    marginLeft: '-10%',
+    marginTop: scale(-16),
+    marginBottom: scale(14),
+  },
+  topBarGrad: {
+    flex: 1,
+  },
+  scrollWrapPitch: {
+    paddingBottom: verticalScale(8),
     alignItems: 'center',
+  },
+  pitchHeaderRow: {
     width: '100%',
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255, 0, 127, 0.12)',
-    justifyContent: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    borderWidth: 1.5,
-    borderColor: '#FF007F',
+    marginBottom: verticalScale(12),
   },
-  title: {
-    fontSize: 21,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 8,
+  verifyPillBadge: {
+    borderRadius: scale(16),
+    overflow: 'hidden',
   },
-  message: {
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  priceTag: {
+  pillGrad: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 0, 127, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 0, 127, 0.3)',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(5),
   },
-  priceTxt: {
-    fontSize: 14,
+  verifyPillTxt: {
+    fontSize: fs(10),
+    fontWeight: '900',
+    color: '#3897F0',
+    letterSpacing: 0.8,
+  },
+  heroIconWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: verticalScale(6),
+  },
+  heroOuterGlow: {
+    width: scale(72),
+    height: scale(72),
+    borderRadius: scale(36),
+    backgroundColor: 'rgba(0, 114, 227, 0.16)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 151, 240, 0.4)',
+  },
+  heroIconCircle: {
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6,
+  },
+  sparkleBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#160B28',
+    borderRadius: scale(12),
+    padding: scale(3),
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.6)',
+  },
+  pitchTitle: {
+    fontSize: fs(21),
+    fontWeight: '900',
+    textAlign: 'center',
+    marginTop: verticalScale(8),
+    marginBottom: verticalScale(4),
+  },
+  pitchSubtitle: {
+    fontSize: fs(12.5),
+    textAlign: 'center',
+    lineHeight: verticalScale(17),
+    paddingHorizontal: scale(10),
+    marginBottom: verticalScale(16),
+  },
+  benefitsGrid: {
+    width: '100%',
+    gap: verticalScale(10),
+    marginBottom: verticalScale(14),
+  },
+  benefitCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: scale(12),
+    borderRadius: scale(16),
+    borderWidth: 1,
+  },
+  benefitIconBox: {
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(14),
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(12),
+  },
+  benefitTextWrap: {
+    flex: 1,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  benefitTitle: {
+    fontSize: fs(13.5),
     fontWeight: '800',
-    color: '#FF007F',
+    marginBottom: verticalScale(2),
+  },
+  freeBadge: {
+    backgroundColor: '#FF007F',
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: scale(6),
+  },
+  freeBadgeTxt: {
+    color: '#FFF',
+    fontSize: fs(9),
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  benefitSub: {
+    fontSize: fs(11.5),
+    lineHeight: verticalScale(15),
+  },
+  offerBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: scale(12),
+    borderRadius: scale(16),
+    borderWidth: 1,
+    borderColor: 'rgba(0, 114, 227, 0.3)',
+    marginBottom: verticalScale(16),
+  },
+  offerPrice: {
+    fontSize: fs(22),
+    fontWeight: '900',
+    color: '#0072E3',
+  },
+  offerPriceSub: {
+    fontSize: fs(12),
+    fontWeight: '700',
+    color: '#3897F0',
+  },
+  offerDesc: {
+    fontSize: fs(10.5),
+    marginTop: verticalScale(2),
+  },
+  valueTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0072E3',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(12),
+  },
+  valueTagTxt: {
+    color: '#FFF',
+    fontSize: fs(10),
+    fontWeight: '900',
+    letterSpacing: 0.5,
   },
   btnStack: {
     width: '100%',
-    gap: 12,
+    gap: verticalScale(10),
   },
-  actionBtn: {
-    height: 50,
-    borderRadius: 25,
+  ctaActionBtn: {
+    height: verticalScale(50),
+    borderRadius: scale(25),
     overflow: 'hidden',
+    shadowColor: '#0072E3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  gradCtaBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: scale(16),
+  },
+  gradCtaBtnTxt: {
+    color: '#FFF',
+    fontSize: fs(15.5),
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   cancelBtn: {
-    height: 46,
-    borderRadius: 23,
+    height: verticalScale(44),
+    borderRadius: scale(22),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
   },
   cancelBtnTxt: {
-    fontSize: 15,
+    fontSize: fs(14),
     fontWeight: '700',
+  },
+  securityFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: verticalScale(12),
+  },
+  securityFooterTxt: {
+    fontSize: fs(10.5),
+  },
+  contentWrap: {
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: verticalScale(10),
+  },
+  iconCircle: {
+    width: scale(64),
+    height: scale(64),
+    borderRadius: scale(32),
+    backgroundColor: 'rgba(255, 0, 127, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: verticalScale(16),
+    borderWidth: 1.5,
+    borderColor: '#FF007F',
+  },
+  title: {
+    fontSize: fs(21),
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: verticalScale(8),
+  },
+  message: {
+    fontSize: fs(14),
+    textAlign: 'center',
+    lineHeight: verticalScale(20),
+    marginBottom: verticalScale(16),
   },
   gradBtn: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: scale(16),
   },
   gradBtnTxt: {
     color: '#FFF',
-    fontSize: 15.5,
+    fontSize: fs(15.5),
     fontWeight: '800',
   },
   scrollWrap: {
-    paddingBottom: 8,
+    paddingBottom: verticalScale(8),
   },
   govStripe: {
-    height: 4,
+    height: verticalScale(4),
     width: '100%',
-    borderRadius: 2,
+    borderRadius: scale(2),
     overflow: 'hidden',
-    marginBottom: 16,
+    marginBottom: verticalScale(14),
   },
   govStripeGrad: {
     flex: 1,
@@ -506,20 +972,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: verticalScale(12),
   },
   aadhaarBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(26, 35, 126, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(12),
     borderWidth: 1,
     borderColor: 'rgba(26, 35, 126, 0.25)',
   },
   aadhaarBadgeTxt: {
-    fontSize: 10.5,
+    fontSize: fs(10),
     fontWeight: '800',
     color: '#1A237E',
     letterSpacing: 0.5,
@@ -527,66 +993,66 @@ const styles = StyleSheet.create({
   govTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: verticalScale(10),
   },
   govEmblemCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
   },
   govSubtitle: {
-    fontSize: 11,
+    fontSize: fs(10.5),
     fontWeight: '700',
     color: '#1A237E',
     letterSpacing: 0.3,
   },
   titleLeft: {
-    fontSize: 19,
+    fontSize: fs(18),
     fontWeight: '900',
-    marginBottom: 2,
+    marginBottom: verticalScale(2),
   },
   subLeft: {
-    fontSize: 13.5,
-    lineHeight: 19,
-    marginBottom: 16,
+    fontSize: fs(13),
+    lineHeight: verticalScale(18),
+    marginBottom: verticalScale(14),
   },
   formContainer: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: verticalScale(16),
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: fs(12.5),
     fontWeight: '700',
-    marginBottom: 6,
+    marginBottom: verticalScale(5),
   },
   inputRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: scale(8),
     alignItems: 'center',
   },
   input: {
     flex: 1,
-    height: 46,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    height: verticalScale(44),
+    borderRadius: scale(12),
+    paddingHorizontal: scale(12),
+    fontSize: fs(13.5),
     borderWidth: 1,
   },
   inputFull: {
     width: '100%',
-    height: 46,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    fontSize: 14,
+    height: verticalScale(44),
+    borderRadius: scale(12),
+    paddingHorizontal: scale(12),
+    fontSize: fs(13.5),
     borderWidth: 1,
   },
   sendOtpBtn: {
-    height: 46,
-    width: 90,
-    borderRadius: 12,
+    height: verticalScale(44),
+    width: scale(85),
+    borderRadius: scale(12),
     overflow: 'hidden',
   },
   sendOtpGrad: {
@@ -596,97 +1062,93 @@ const styles = StyleSheet.create({
   },
   sendOtpTxt: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: fs(12.5),
     fontWeight: '800',
   },
   otpSection: {
-    marginTop: 14,
+    marginTop: verticalScale(12),
   },
   otpStatusBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 200, 83, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(10),
     borderWidth: 1,
     borderColor: 'rgba(0, 200, 83, 0.25)',
   },
   otpStatusTxt: {
-    fontSize: 12.5,
+    fontSize: fs(12),
     fontWeight: '600',
     color: '#00C853',
   },
   confirmVerifyBtn: {
-    height: 50,
-    borderRadius: 25,
+    height: verticalScale(48),
+    borderRadius: scale(24),
     overflow: 'hidden',
   },
   privacyBox: {
-    marginTop: 16,
-    padding: 12,
-    borderRadius: 12,
+    marginTop: verticalScale(14),
+    padding: scale(12),
+    borderRadius: scale(12),
     borderWidth: 1,
   },
   privacyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
   },
   privacyHeaderTxt: {
-    fontSize: 12,
+    fontSize: fs(11.5),
     fontWeight: '800',
     color: '#1A237E',
     letterSpacing: 0.3,
   },
   privacyTxt: {
-    fontSize: 11.5,
-    lineHeight: 16,
+    fontSize: fs(11),
+    lineHeight: verticalScale(15),
   },
   successIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: scale(76),
+    height: scale(76),
+    borderRadius: scale(38),
     backgroundColor: 'rgba(0, 200, 83, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: verticalScale(14),
     borderWidth: 2,
-    borderColor: 'rgba(0, 200, 83, 0.35)',
+    borderColor: 'rgba(0, 200, 83, 0.4)',
   },
-  successBadgeRow: {
-    alignItems: 'center',
-    marginTop: 4,
+  perksActiveBox: {
+    width: '100%',
+    padding: scale(14),
+    borderRadius: scale(16),
+    borderWidth: 1,
+    gap: verticalScale(10),
+    marginVertical: verticalScale(12),
   },
-  successBadge: {
+  perkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 200, 83, 0.12)',
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 200, 83, 0.3)',
   },
-  successBadgeTxt: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#00C853',
-    letterSpacing: 0.6,
+  perkTxt: {
+    fontSize: fs(12.5),
+    fontWeight: '700',
   },
   inlineError: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 55, 95, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(8),
+    borderRadius: scale(10),
     borderWidth: 1,
     borderColor: 'rgba(255, 55, 95, 0.25)',
-    marginBottom: 12,
+    marginBottom: verticalScale(10),
   },
   inlineErrorTxt: {
-    fontSize: 12.5,
+    fontSize: fs(12),
     fontWeight: '600',
     color: '#FF375F',
     flex: 1,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { getActiveServerBaseUrl } from '../services/api';
 
 export const formatName = (name, maxLength = 22) => {
@@ -10,19 +10,62 @@ export const formatName = (name, maxLength = 22) => {
   return `${trimmed.substring(0, maxLength)}...`;
 };
 
-export const renderVerifiedBadge = (item, size = 16, style = {}) => {
-  if (!item) return null;
-  const isVerified = item.is_verified === true || item.is_verified === 1 || item.is_verified === '1' || item.is_verified === 'true' || item.isVerified === true;
-  const plan = (item.subscription_plan || item.plan_name || item.activeSubscription?.plan_name || '').toLowerCase();
-  const isPremium = plan.includes('premium') || item.isGoldenTick === true;
+export const getVerifiedBadgeInfo = (item) => {
+  if (!item) return { isVerified: false, color: '#0095F6', planName: 'Basic' };
 
-  if (isVerified && isPremium) {
-    return <Ionicons name="checkmark-circle" size={size} color="#F59E0B" style={[{ marginLeft: 4, alignSelf: 'center' }, style]} />;
+  const userObj = item.user || item;
+
+  const isVerified = userObj.is_verified === true ||
+    userObj.is_verified === 1 ||
+    userObj.is_verified === '1' ||
+    userObj.is_verified === 'true' ||
+    userObj.isVerified === true ||
+    userObj.isVerified === 1 ||
+    userObj.isVerified === '1' ||
+    userObj.isVerified === 'true' ||
+    item.is_verified === true ||
+    item.is_verified === 1 ||
+    item.is_verified === '1' ||
+    item.is_verified === 'true' ||
+    item.isVerified === true ||
+    item.isVerified === 1 ||
+    item.isVerified === '1' ||
+    item.isVerified === 'true';
+
+  if (!isVerified) {
+    return { isVerified: false, color: '#0095F6', planName: 'None' };
   }
-  if (isVerified) {
-    return <Ionicons name="checkmark-circle" size={size} color="#3897F0" style={[{ marginLeft: 4, alignSelf: 'center' }, style]} />;
+
+  const rawPlan = (
+    userObj.subscription_plan ||
+    userObj.plan_name ||
+    userObj.activeSubscription?.plan_name ||
+    item.subscription_plan ||
+    item.plan_name ||
+    ''
+  ).toString().toLowerCase();
+
+  if (rawPlan.includes('premium') || userObj.isGoldenTick === true || item.isGoldenTick === true) {
+    return { isVerified: true, color: '#B8860B', planName: 'Premium' }; // Dark Golden for Premium
+  } else if (rawPlan.includes('plus')) {
+    return { isVerified: true, color: '#9D4EDD', planName: 'Plus' }; // Purple for Plus
+  } else {
+    return { isVerified: true, color: '#0095F6', planName: 'Basic' }; // Blue for Basic
   }
-  return null;
+};
+
+export const renderVerifiedBadge = (item, size = 16, style = {}) => {
+  const { isVerified, color } = getVerifiedBadgeInfo(item);
+  if (!isVerified) return null;
+
+  return (
+    <MaterialCommunityIcons
+      name="check-decagram"
+      size={size}
+      color={color}
+      style={[{ marginLeft: 4, alignSelf: 'center' }, style]}
+    />
+  );
 };
 
 export const formatImageUrl = (url, fallback = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900') => {

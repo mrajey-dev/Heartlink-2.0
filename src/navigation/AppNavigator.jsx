@@ -1,5 +1,6 @@
 // src/navigation/AppNavigator.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -11,7 +12,7 @@ import RequestsScreen from '../screens/RequestsScreen';
 import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
 import PlansScreen from '../screens/PlansScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import { ActivityIndicator, View } from 'react-native';
+import RadarLoader from '../components/RadarLoader';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
@@ -27,12 +28,27 @@ export default function AppNavigator() {
   const { isDark, theme } = useTheme();
   const { bannerVisible, bannerData, dismissNotification } = useNotification();
 
+  // 5-second RadarLoader display ONLY when user is authenticated (after login, account creation, or refresh)
+  const [showRadar, setShowRadar] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      setShowRadar(true);
+      const timer = setTimeout(() => {
+        setShowRadar(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowRadar(false);
+    }
+  }, [isAuthenticated, isLoading]);
+
   if (isLoading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: isDark ? '#0D0F1D' : '#F6F5FA', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#FF007F" />
-      </View>
-    );
+    return <View style={{ flex: 1, backgroundColor: theme.bgDark }} />;
+  }
+
+  if (isAuthenticated && showRadar) {
+    return <RadarLoader />;
   }
 
   return (

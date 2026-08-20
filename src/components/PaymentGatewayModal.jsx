@@ -9,10 +9,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  apiSubscribePlan, 
-  apiCreateRazorpayOrder, 
-  apiVerifyRazorpayPayment 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  apiSubscribePlan,
+  apiCreateRazorpayOrder,
+  apiVerifyRazorpayPayment
 } from '../services/api';
 import RazorpayCheckout from 'react-native-razorpay';
 
@@ -27,6 +28,7 @@ export default function PaymentGatewayModal({
   onClose,
   onPaymentSuccess,
 }) {
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
 
@@ -68,10 +70,10 @@ export default function PaymentGatewayModal({
     try {
       const planName = plan.name || 'HeartLink Basic';
       const amountInRupees = getNumericAmountInRupees(finalPrice);
-      
+
       console.log('[Payment] Final price:', finalPrice);
       console.log('[Payment] Amount in rupees:', amountInRupees);
-      
+
       if (isNaN(amountInRupees) || amountInRupees <= 0) {
         Alert.alert('Error', 'Invalid payment amount');
         setProcessing(false);
@@ -102,7 +104,7 @@ export default function PaymentGatewayModal({
       console.log('[Payment] Order response:', orderResponse);
 
       const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
-      
+
       if (!responseOrderId) {
         console.error('[Payment] No orderId in response:', orderResponse);
         throw new Error('No order ID received from server');
@@ -164,7 +166,7 @@ export default function PaymentGatewayModal({
       RazorpayCheckout.open(razorpayOptions)
         .then(async (data) => {
           console.log('[Payment] Razorpay success:', data);
-          
+
           try {
             const verificationData = {
               orderId: responseOrderId,
@@ -182,41 +184,57 @@ export default function PaymentGatewayModal({
             console.log('[Payment] Verification response:', verificationResponse);
 
             if (verificationResponse?.success) {
-              const subscriptionPayload = {
-                plan_id: plan.id,
-                duration: durObj.label,
-                plan_name: planName,
-                price: finalPrice,
-                payment_id: data.razorpay_payment_id,
-                order_id: responseOrderId,
-              };
+              const isSuperlikePack = (planName || '').toLowerCase().includes('superlike') || (plan?.id || '').toLowerCase().includes('superlike');
+              let updatedUser = verificationResponse?.user;
 
-              console.log('[Payment] Activating subscription:', subscriptionPayload);
+              if (!isSuperlikePack) {
+                const subscriptionPayload = {
+                  plan_id: plan.id,
+                  duration: durObj.label,
+                  plan_name: planName,
+                  price: finalPrice,
+                  payment_id: data.razorpay_payment_id,
+                  order_id: responseOrderId,
+                };
 
-              const subscribeResponse = await apiSubscribePlan(subscriptionPayload);
+                console.log('[Payment] Activating subscription:', subscriptionPayload);
+                const subscribeResponse = await apiSubscribePlan(subscriptionPayload);
+                console.log('[Payment] Subscription response:', subscribeResponse);
 
-              console.log('[Payment] Subscription response:', subscribeResponse);
+                if (subscribeResponse?.user) {
+                  updatedUser = subscribeResponse.user;
+                }
+              } else {
+                // For superlike pack, trigger subscribe endpoint to increment count if not already incremented by verify
+                const subscriptionPayload = {
+                  plan_id: plan.id,
+                  duration: durObj.label,
+                  plan_name: planName,
+                  price: finalPrice,
+                  payment_id: data.razorpay_payment_id,
+                  order_id: responseOrderId,
+                };
+                try {
+                  const subRes = await apiSubscribePlan(subscriptionPayload);
+                  if (subRes?.user) updatedUser = subRes.user;
+                } catch (e) {
+                  console.log('[Payment] Superlike pack subscribe note:', e);
+                }
+              }
 
-              const subInfo = subscribeResponse?.user?.active_subscription || 
-                             subscribeResponse?.subscription || {
-                plan_name: planName,
-                expires_at: subscribeResponse?.subscription?.expires_at || null,
-              };
-
-              const updatedUser = {
-                ...(subscribeResponse?.user || {}),
-                subscription_plan: planName,
-                active_subscription: subInfo,
-                activeSubscription: subInfo,
-                plan: planName,
-              };
-              
-              updateUser(updatedUser);
+              if (updatedUser) {
+                updateUser(updatedUser);
+              }
               setCompleted(true);
-              
+
+              const alertTitle = isSuperlikePack ? 'Superlikes Added! 🎉' : 'Payment Successful! 🎉';
+              const alertMsg = isSuperlikePack
+                ? `Your ${planName} has been processed! Superlikes added to your balance.`
+                : `Your ${planName} subscription has been activated successfully!`;
+
               Alert.alert(
-                'Payment Successful! 🎉',
-                `Your ${planName} subscription has been activated successfully!`,
+                alertTitle,
+                alertMsg,
                 [
                   {
                     text: 'Continue',
@@ -261,12 +279,12 @@ export default function PaymentGatewayModal({
     } catch (error) {
       console.error('[Payment] Initiation error:', error);
       console.error('[Payment] Error stack:', error.stack);
-      
+
       let errorMessage = 'Failed to initiate payment. Please try again.';
       if (error.message) {
         errorMessage = error.message;
       }
-      
+
       Alert.alert('Payment Error', errorMessage);
       setProcessing(false);
     }
@@ -274,11 +292,11 @@ export default function PaymentGatewayModal({
 
   return (
     <Modal visible={visible} transparent statusBarTranslucent={true} animationType="fade" onRequestClose={onClose}>
-      <View style={styles.backdrop}>
-        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-        <TouchableOpacity 
-          style={styles.backdropTouch} 
-          activeOpacity={1} 
+      <View style={[styles.backdrop, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
+        <TouchableOpacity
+          style={styles.backdropTouch}
+          activeOpacity={1}
           onPress={onClose}
         >
           <View style={[
@@ -312,30 +330,30 @@ export default function PaymentGatewayModal({
                 <View style={styles.planIconContainer}>
                   <Ionicons name="heart" size={32} color="#FFF" />
                 </View>
-                
+
                 <Text style={styles.planNameTxt}>{plan.name}</Text>
                 <Text style={styles.planDurTxt}>{durObj.label || 'Subscription'}</Text>
-                
+
                 <View style={styles.priceContainer}>
                   {!!showOriginalPrice && (
                     <Text style={styles.originalCutPriceTxt}>{showOriginalPrice}</Text>
                   )}
                   <Text style={styles.planPriceTxt}>{finalPrice}</Text>
                 </View>
-                
+
                 {!!showOriginalPrice && (
                   <View style={styles.offerBadgeTag}>
                     <Ionicons name="flame" size={14} color="#FFD700" style={{ marginRight: 6 }} />
                     <Text style={styles.offerBadgeTxt}>20% WELCOME OFFER</Text>
                   </View>
                 )}
-                
+
                 <Text style={styles.planTaxTxt}>✓ Inclusive of all taxes</Text>
               </LinearGradient>
 
               {/* Features/Benefits */}
               <View style={styles.featuresContainer}>
-               
+
                 <View style={styles.featureItem}>
                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
                   <Text style={[styles.featureText, { color: theme.textPrimary }]}>Secure payment via Razorpay</Text>

@@ -4,13 +4,14 @@ import {
   Modal, View, Text, StyleSheet, TouchableOpacity, Image, Animated, Easing, Dimensions, Platform, StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import BlurView from './SafeBlurView';
 import { Ionicons } from '@expo/vector-icons';
 import { formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
-
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = SCREEN;
 
 export default function MatchModal({
   visible,
@@ -19,13 +20,14 @@ export default function MatchModal({
   onClose,
   onSendMessage,
 }) {
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
 
   // Animation refs
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const heartPulseAnim = useRef(new Animated.Value(1)).current;
-  
+
   // Floating particle animations
   const floatAnim1 = useRef(new Animated.Value(0)).current;
   const floatAnim2 = useRef(new Animated.Value(0)).current;
@@ -112,8 +114,8 @@ export default function MatchModal({
 
   return (
     <Modal visible={visible} transparent statusBarTranslucent={true} animationType="none" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
+      <View style={[styles.overlay, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
         <BlurView intensity={85} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
         <LinearGradient
           colors={
@@ -301,21 +303,21 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   matchTitle: {
-    fontSize: 30,
+    fontSize: fs(28),
     fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 6,
+    marginBottom: verticalScale(6),
     textShadowColor: 'rgba(255, 0, 127, 0.6)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
   },
   matchSubtitle: {
-    fontSize: 14,
+    fontSize: fs(13.5),
     color: '#E0E0E0',
     textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 10,
+    marginBottom: verticalScale(20),
+    paddingHorizontal: scale(10),
   },
   highlightName: {
     color: '#FF4D94',
@@ -325,16 +327,16 @@ const styles = StyleSheet.create({
   // Tilted Overlapping Photo Cards Layout
   cardsRow: {
     width: '100%',
-    height: 220,
+    height: verticalScale(210),
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
+    marginBottom: verticalScale(16),
     position: 'relative',
   },
   photoCard: {
-    width: 140,
-    height: 190,
-    borderRadius: 20,
+    width: scale(135),
+    height: verticalScale(185),
+    borderRadius: scale(20),
     overflow: 'hidden',
     borderWidth: 3,
     position: 'absolute',
@@ -345,13 +347,13 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   leftCard: {
-    left: width * 0.1,
+    left: SCREEN.width * 0.08,
     transform: [{ rotate: '-8deg' }],
     borderColor: '#00F0FF',
     zIndex: 1,
   },
   rightCard: {
-    right: width * 0.1,
+    right: SCREEN.width * 0.08,
     transform: [{ rotate: '8deg' }],
     borderColor: '#FF007F',
     zIndex: 2,
@@ -363,24 +365,24 @@ const styles = StyleSheet.create({
   cardOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
-    padding: 8,
+    padding: scale(8),
   },
   cardUserTag: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: fs(12),
     position: 'absolute',
-    bottom: 10,
-    left: 10,
+    bottom: verticalScale(10),
+    left: scale(10),
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowRadius: 4,
   },
 
   // Center pulsing heart overlap
   centerHeartCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: scale(52),
+    height: scale(52),
+    borderRadius: scale(26),
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -391,9 +393,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   centerHeartGrad: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -404,29 +406,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 0, 127, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(14),
     borderWidth: 1,
     borderColor: 'rgba(255, 0, 127, 0.3)',
-    marginBottom: 8,
-    gap: 6,
+    marginBottom: verticalScale(8),
+    gap: scale(6),
   },
   compatText: {
     color: '#FF4D94',
-    fontSize: 12,
+    fontSize: fs(11.5),
     fontWeight: '700',
   },
   personNameAge: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: fs(17),
     fontWeight: '800',
-    marginBottom: 20,
+    marginBottom: verticalScale(18),
   },
 
   buttonsContainer: {
     width: '100%',
-    gap: 12,
+    gap: verticalScale(10),
   },
 
   primaryGrad: {
@@ -437,8 +439,8 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     width: '100%',
-    height: 46,
-    borderRadius: 23,
+    height: verticalScale(44),
+    borderRadius: verticalScale(22),
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
@@ -447,7 +449,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: {
     color: '#CCCCCC',
-    fontSize: 14,
+    fontSize: fs(13.5),
     fontWeight: '700',
   },
 });

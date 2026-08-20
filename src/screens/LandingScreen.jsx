@@ -16,8 +16,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = SCREEN;
 
 const SLIDES = [
   {
@@ -513,7 +514,7 @@ export default function LandingScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar style={isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
 
       {/* Dynamic Ambient Background Orbs */}
       <View style={styles.ambientOrb1} pointerEvents="none">
@@ -1018,13 +1019,13 @@ const getStyles = (theme, isDark) =>
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 0, 127, 0.06)',
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 0, 127, 0.18)',
-      paddingHorizontal: 16,
-      paddingVertical: 6,
-      borderRadius: 20,
-      marginTop: 8,
+      paddingHorizontal: scale(14),
+      paddingVertical: verticalScale(5),
+      borderRadius: scale(20),
+      marginTop: verticalScale(8),
     },
     badgePillText: {
-      fontSize: 12,
+      fontSize: fs(11.5),
       fontWeight: '700',
       color: '#FF007F',
     },
@@ -1033,56 +1034,56 @@ const getStyles = (theme, isDark) =>
     textSection: {
       alignItems: 'center',
       maxWidth: width * 0.85,
-      marginTop: 16,
+      marginTop: verticalScale(14),
     },
     titleText: {
-      fontSize: 29,
+      fontSize: fs(26),
       fontWeight: '800',
       color: isDark ? '#FFFFFF' : '#111827',
       textAlign: 'center',
-      lineHeight: 36,
+      lineHeight: verticalScale(34),
       letterSpacing: -0.4,
     },
     titleHighlightText: {
       color: '#FF007F',
     },
     descriptionText: {
-      fontSize: 14,
+      fontSize: fs(13.5),
       fontWeight: '400',
       color: isDark ? '#94A3B8' : '#6B7280',
       textAlign: 'center',
-      marginTop: 10,
-      lineHeight: 22,
+      marginTop: verticalScale(8),
+      lineHeight: verticalScale(21),
     },
 
     // Bottom Controls
     bottomBarContainer: {
-      paddingHorizontal: 28,
-      paddingBottom: 20,
+      paddingHorizontal: scale(24),
+      paddingBottom: verticalScale(18),
     },
     dotsRow: {
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: 18,
-      gap: 6,
+      marginBottom: verticalScale(16),
+      gap: scale(6),
     },
     dot: {
-      height: 8,
-      borderRadius: 4,
+      height: verticalScale(8),
+      borderRadius: scale(4),
     },
     actionsArea: {
-      minHeight: 110,
+      minHeight: verticalScale(100),
       justifyContent: 'center',
     },
     nextCircleRow: {
       alignItems: 'center',
-      marginVertical: 10,
+      marginVertical: verticalScale(8),
     },
     nextCircleBtn: {
-      width: 64,
-      height: 64,
-      borderRadius: 32,
+      width: scale(60),
+      height: scale(60),
+      borderRadius: scale(30),
       elevation: 10,
       shadowColor: '#FF007F',
       shadowOffset: { width: 0, height: 6 },
@@ -1091,7 +1092,7 @@ const getStyles = (theme, isDark) =>
     },
     nextCircleGrad: {
       flex: 1,
-      borderRadius: 32,
+      borderRadius: scale(30),
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1099,34 +1100,34 @@ const getStyles = (theme, isDark) =>
       width: '100%',
     },
     primaryBtnShadow: {
-      borderRadius: 18,
+      borderRadius: scale(16),
       shadowColor: '#FF007F',
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.35,
       shadowRadius: 14,
       elevation: 10,
-      marginBottom: 12,
+      marginBottom: verticalScale(10),
     },
     primaryBtn: {
-      height: 54,
-      borderRadius: 18,
+      height: verticalScale(50),
+      borderRadius: scale(16),
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
     },
     primaryBtnText: {
       color: '#FFFFFF',
-      fontSize: 16,
+      fontSize: fs(15.5),
       fontWeight: '700',
       letterSpacing: 0.2,
     },
     secondaryBtn: {
-      height: 54,
-      borderRadius: 18,
+      height: verticalScale(50),
+      borderRadius: scale(16),
       borderWidth: 1.5,
       borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.15)',
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.85)',
-      marginBottom: 10,
+      marginBottom: verticalScale(8),
     },
     secondaryBtnInner: {
       flex: 1,
@@ -1136,16 +1137,16 @@ const getStyles = (theme, isDark) =>
     },
     secondaryBtnText: {
       color: isDark ? '#FFFFFF' : '#111827',
-      fontSize: 16,
+      fontSize: fs(15.5),
       fontWeight: '700',
       letterSpacing: 0.2,
     },
     termsNotice: {
-      fontSize: 11,
+      fontSize: fs(10.5),
       color: isDark ? '#64748B' : '#9CA3AF',
       textAlign: 'center',
-      marginTop: 4,
-      lineHeight: 16,
+      marginTop: verticalScale(4),
+      lineHeight: verticalScale(15),
     },
     termsLink: {
       color: '#FF007F',

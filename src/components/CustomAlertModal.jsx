@@ -1,12 +1,14 @@
 // src/components/CustomAlertModal.jsx — HeartLink Overlapping Icon Pop-Up Design
 import React from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Dimensions, StatusBar } from 'react-native';
-import { BlurView } from 'expo-blur';
+import BlurView from './SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
-const { width } = Dimensions.get('window');
+const { width, height } = SCREEN;
 
 export default function CustomAlertModal({
   visible,
@@ -21,6 +23,7 @@ export default function CustomAlertModal({
   onClose,
   isDanger = false,
 }) {
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
 
   const handleConfirm = onConfirm || onClose;
@@ -38,8 +41,8 @@ export default function CustomAlertModal({
       animationType="fade"
       onRequestClose={handleCancel}
     >
-      <View style={styles.backdrop}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
+      <View style={[styles.backdrop, { paddingTop: insets.top + verticalScale(8), paddingBottom: Math.max(insets.bottom + verticalScale(16), verticalScale(24)) }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
         <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFill} />
 
         {/* Outer Wrap allowing top overlapping badge */}
@@ -52,7 +55,7 @@ export default function CustomAlertModal({
               end={{ x: 1, y: 1 }}
               style={styles.topBadgeGrad}
             >
-              <Ionicons name={icon} size={28} color={iconColor} />
+              <Ionicons name={icon} size={scale(26)} color={iconColor} />
             </LinearGradient>
           </View>
 
@@ -125,23 +128,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(5, 2, 12, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 22,
+    paddingHorizontal: scale(22),
     zIndex: 9999,
   },
   cardWrap: {
-    width: width * 0.88,
-    maxWidth: 360,
+    width: '88%',
+    maxWidth: scale(360),
     position: 'relative',
     alignItems: 'center',
   },
   topBadgeContainer: {
     position: 'absolute',
-    top: -29,
+    top: -verticalScale(28),
     zIndex: 20,
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 4,
+    width: scale(56),
+    height: scale(56),
+    borderRadius: scale(28),
+    borderWidth: scale(4),
     elevation: 12,
     shadowColor: '#FF007F',
     shadowOffset: { width: 0, height: 6 },
@@ -150,16 +153,16 @@ const styles = StyleSheet.create({
   },
   topBadgeGrad: {
     flex: 1,
-    borderRadius: 25,
+    borderRadius: scale(24),
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
     width: '100%',
-    borderRadius: 26,
-    paddingTop: 38,
-    paddingBottom: 22,
-    paddingHorizontal: 22,
+    borderRadius: scale(24),
+    paddingTop: verticalScale(36),
+    paddingBottom: verticalScale(20),
+    paddingHorizontal: scale(20),
     alignItems: 'center',
     borderWidth: 1.5,
     elevation: 14,
@@ -169,30 +172,30 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
   },
   title: {
-    fontSize: 19,
+    fontSize: fs(18),
     fontWeight: '900',
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
     textAlign: 'center',
     letterSpacing: -0.2,
   },
   message: {
-    fontSize: 14,
+    fontSize: fs(13.5),
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 22,
-    paddingHorizontal: 4,
+    lineHeight: verticalScale(20),
+    marginBottom: verticalScale(20),
+    paddingHorizontal: scale(4),
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: scale(10),
     width: '100%',
     justifyContent: 'center',
   },
   btn: {
     flex: 1,
-    height: 46,
-    borderRadius: 14,
+    height: verticalScale(44),
+    borderRadius: scale(14),
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
@@ -202,7 +205,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelTxt: {
-    fontSize: 14.5,
+    fontSize: fs(14),
     fontWeight: '700',
   },
   confirmBtnShadow: {
@@ -220,7 +223,7 @@ const styles = StyleSheet.create({
   },
   confirmTxt: {
     color: '#FFFFFF',
-    fontSize: 14.5,
+    fontSize: fs(14),
     fontWeight: '800',
     letterSpacing: 0.3,
   },

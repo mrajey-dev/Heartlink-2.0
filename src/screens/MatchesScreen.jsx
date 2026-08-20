@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, Dimensions, TextInput, ScrollView, Platform, ActivityIndicator,
+  Image, StatusBar, Dimensions, TextInput, ScrollView, Platform, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -329,7 +330,7 @@ const getStyles = (theme) => StyleSheet.create({
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
+    paddingTop: 6,
     paddingBottom: 12,
     zIndex: 10,
   },
@@ -525,7 +526,7 @@ const getStyles = (theme) => StyleSheet.create({
   onlineDot: {
     position: 'absolute', top: 12, left: 12,
     width: 11, height: 11, borderRadius: 5.5,
-    backgroundColor: '#30D158', borderWidth: 2, borderColor: '#140E2D',
+    backgroundColor: '#30D158', borderWidth: 2, borderColor: theme.isDark ? '#140E2D' : '#FFFFFF',
     zIndex: 5,
   },
   compatBadge: {

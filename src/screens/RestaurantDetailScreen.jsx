@@ -2,9 +2,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Alert, Linking, Platform, ActivityIndicator,
+  Image, StatusBar, ScrollView, Dimensions, Alert, Linking, Platform, ActivityIndicator,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -128,7 +129,7 @@ export default function RestaurantDetailScreen() {
 
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.root}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       {/* Background glowing depth blobs */}
       <View style={styles.glowBlobPurple} pointerEvents="none" />
@@ -362,7 +363,7 @@ const getStyles = (theme) => StyleSheet.create({
   // Translucent Status Bar Spacing
   headerWrap: {
     backgroundColor: 'transparent',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 0,
+    paddingTop: 0,
     zIndex: 10,
   },
   header: {
@@ -498,7 +499,7 @@ const getStyles = (theme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 5,

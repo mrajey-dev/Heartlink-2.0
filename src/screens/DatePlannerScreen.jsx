@@ -2,10 +2,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, ScrollView, Dimensions, Platform,
+  Image, StatusBar, ScrollView, Dimensions, Platform,
   ActivityIndicator,FlatList,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -261,7 +262,7 @@ const getStyles = (theme) => StyleSheet.create({
 
   header: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
+    paddingTop: 6,
     paddingBottom: 12,
   },
   title: { fontSize: 28, fontWeight: '900', color: theme.textPrimary, letterSpacing: -0.6 },

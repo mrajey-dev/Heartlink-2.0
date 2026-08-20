@@ -1,6 +1,20 @@
 // App.js
 import React, { useEffect } from 'react';
+import { Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+
+// Standardize mobile OS font scale cap across entire application
+if (Text.defaultProps) {
+  Text.defaultProps.maxFontSizeMultiplier = 1.25;
+} else {
+  Text.defaultProps = { maxFontSizeMultiplier: 1.25 };
+}
+
+if (TextInput.defaultProps) {
+  TextInput.defaultProps.maxFontSizeMultiplier = 1.25;
+} else {
+  TextInput.defaultProps = { maxFontSizeMultiplier: 1.25 };
+}
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as ScreenCapture from 'expo-screen-capture';
 import {

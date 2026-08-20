@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Image, StatusBar, ScrollView, Dimensions, FlatList, Platform, Modal, ActivityIndicator, Animated, KeyboardAvoidingView,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -17,8 +17,11 @@ import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpe
 import { ALL_VIBE_NODES, getVibeByName } from '../utils/vibeData';
 
 import CustomAlertModal from '../components/CustomAlertModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { width, height } = Dimensions.get('window');
+import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
+
+const { width, height } = SCREEN;
 
 const FALLBACK_PHOTOS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
@@ -43,15 +46,19 @@ export default function ProfileScreen() {
   const navigation = useNavigation();
   const { user, logout, updateUser } = useAuth();
   const { isDark, theme, toggleTheme } = useTheme();
-  const styles = useMemo(() => getStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const safeTopSpacing = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 44);
+  const topHeaderOffset = safeTopSpacing + 6;
+  const styles = useMemo(() => getStyles(theme, safeTopSpacing), [theme, safeTopSpacing]);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [heroLoading, setHeroLoading] = useState(false);
   const [thumbLoadingMap, setThumbLoadingMap] = useState({});
+  const [isFullScreenViewerOpen, setIsFullScreenViewerOpen] = useState(false);
+  const [mainPhotoSuccessAlertVisible, setMainPhotoSuccessAlertVisible] = useState(false);
+  const [settingMainPhoto, setSettingMainPhoto] = useState(false);
 
   const scrollY = React.useRef(new Animated.Value(0)).current;
-
-  const topHeaderOffset = Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 46;
 
   const headerBgOpacity = scrollY.interpolate({
     inputRange: [100, 170],
@@ -79,37 +86,43 @@ export default function ProfileScreen() {
 
   const morphWidth = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [width, 46],
+    outputRange: [width, 42],
     extrapolate: 'clamp',
   });
 
   const morphHeight = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [height * 0.42, 46],
+    outputRange: [height * 0.42, 42],
     extrapolate: 'clamp',
   });
 
   const morphRadius = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, 23],
+    outputRange: [0, 21],
     extrapolate: 'clamp',
   });
 
   const morphLeft = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, 68],
+    outputRange: [0, 62],
     extrapolate: 'clamp',
   });
 
   const morphTop = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, topHeaderOffset + 4],
+    outputRange: [0, topHeaderOffset - 1],
     extrapolate: 'clamp',
   });
 
   const morphBorderWidth = scrollY.interpolate({
     inputRange: [0, 180],
     outputRange: [0, 2],
+    extrapolate: 'clamp',
+  });
+
+  const heroImgHeight = scrollY.interpolate({
+    inputRange: [0, 180],
+    outputRange: [width * 1.33, 42],
     extrapolate: 'clamp',
   });
 
@@ -296,7 +309,7 @@ export default function ProfileScreen() {
 
         const uploadedUrl = await apiUploadImage(imagePayload, { user_id: user?.id, email: user?.email });
 
-        if (!uploadedUrl || typeof uploadedUrl !== 'string' || uploadedUrl.startsWith('file://') || uploadedUrl.startsWith('content://')) {
+        if (!uploadedUrl || typeof uploadedUrl !== 'string' || (!uploadedUrl.startsWith('http://') && !uploadedUrl.startsWith('https://'))) {
           setErrorMsg('Failed to upload profile photo to server. Please try again.');
           setErrorAlertVisible(true);
           return;
@@ -322,6 +335,8 @@ export default function ProfileScreen() {
       }
     } catch (e) {
       console.warn('Photo picker error:', e);
+      setErrorMsg(e?.message || 'Failed to upload photo. Inappropriate content or explicit images are strictly prohibited on HeartLink.');
+      setErrorAlertVisible(true);
     } finally {
       setUploadingPhoto(false);
     }
@@ -344,6 +359,24 @@ export default function ProfileScreen() {
       await updateUserProfile(user?.id, updatedPayload);
     } catch (e) {
       console.log('Profile photo update cached locally:', e);
+    }
+  };
+
+  const currentViewerPhoto = allPhotos[photoIdx] || allPhotos[0];
+  const isCurrentMainPhoto = user?.avatar === currentViewerPhoto || profileUser?.avatar === currentViewerPhoto;
+
+  const handleSetMainPhoto = async (targetPhotoUrl) => {
+    const photoToSet = targetPhotoUrl || currentViewerPhoto;
+    if (!photoToSet) return;
+    try {
+      setSettingMainPhoto(true);
+      await handleSelectProfilePic(photoToSet, photoIdx);
+      setMainPhotoSuccessAlertVisible(true);
+    } catch (err) {
+      console.warn('[ProfileScreen] Error setting main avatar:', err?.message);
+      setMainPhotoSuccessAlertVisible(true);
+    } finally {
+      setSettingMainPhoto(false);
     }
   };
 
@@ -504,117 +537,7 @@ export default function ProfileScreen() {
       <View style={styles.glowBlobPurple} pointerEvents="none" />
       <View style={styles.glowBlobCyan} pointerEvents="none" />
 
-      {/* Fixed Sticky Top Header Bar — Guaranteed 100% Solid White Background */}
-      <View style={styles.fixedHeaderContainer} pointerEvents="box-none">
-        <View
-          style={[
-            styles.fixedHeaderBg,
-            {
-              backgroundColor: isDark ? '#0D0F1A' : '#FFFFFF',
-            },
-          ]}
-        />
-
-        <View style={styles.fixedHeaderContent}>
-          <TouchableOpacity
-            style={styles.solidControlBtn}
-            onPress={handleBack}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="chevron-back" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
-          </TouchableOpacity>
-
-          <Animated.View
-            style={[
-              styles.fixedHeaderNameWrap,
-              {
-                opacity: headerNameOpacity,
-                transform: [{ translateY: headerNameTranslateY }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text
-                style={[
-                  styles.fixedHeaderName,
-                  { color: isDark ? '#ffffffff' : '#000000' },
-                ]}
-                numberOfLines={1}
-              >
-                {profileUser.name}
-              </Text>
-              {renderVerifiedBadge(user, 16, { marginLeft: 4 })}
-            </View>
-          </Animated.View>
-
-          <TouchableOpacity
-            style={styles.solidControlBtn}
-            onPress={() => navigation.navigate('Settings')}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="settings-outline" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Dynamic Morphing Hero Photo */}
-      <Animated.View
-        style={[
-          styles.morphPhotoWrapper,
-          {
-            width: morphWidth,
-            height: morphHeight,
-            borderRadius: morphRadius,
-            left: morphLeft,
-            top: morphTop,
-            borderWidth: morphBorderWidth,
-          },
-        ]}
-      >
-        <Image
-          source={{ uri: allPhotos[photoIdx] || allPhotos[0] }}
-          style={styles.heroImg}
-          onLoadStart={() => setHeroLoading(true)}
-          onLoadEnd={() => setHeroLoading(false)}
-        />
-        {(heroLoading || uploadingPhoto) && (
-          <View style={styles.heroLoadingOverlay}>
-            <ActivityIndicator size="large" color="#FF007F" />
-          </View>
-        )}
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroControlsOpacity }]} pointerEvents="box-none">
-          <LinearGradient colors={['rgba(0,0,0,0.5)', 'transparent']} style={styles.heroTopGrad} />
-          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
-
-          {/* Change Photo Floating Badge */}
-          <TouchableOpacity
-            style={styles.changePhotoBtn}
-            onPress={() => setPhotoPickerVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="camera" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.changePhotoTxt}>Change Photo</Text>
-          </TouchableOpacity>
-
-          {/* Photo Indicator Dots */}
-          {allPhotos.length > 1 && (
-            <View style={styles.photoIndicatorRow}>
-              {allPhotos.map((_, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => setPhotoIdx(i)}
-                  style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
-                />
-              ))}
-            </View>
-          )}
-        </Animated.View>
-      </Animated.View>
-
-      {/* Main Scroll Content */}
+      {/* 1. Main Scroll Content (Bottom Layer) */}
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
         bounces={false}
@@ -864,7 +787,10 @@ export default function ProfileScreen() {
                   <TouchableOpacity
                     key={index}
                     style={[styles.galleryThumb, isCurrentAvatar && styles.galleryThumbActive]}
-                    onPress={() => handleSelectProfilePic(item, index)}
+                    onPress={() => {
+                      setPhotoIdx(index);
+                      setIsFullScreenViewerOpen(true);
+                    }}
                     onLongPress={() => handleLongPressPhoto(item, index)}
                     delayLongPress={350}
                     activeOpacity={0.85}
@@ -901,6 +827,121 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Animated.ScrollView>
+
+      {/* 2. Fixed Sticky Top Header Background Shield (Middle Layer - masks body scroll) */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.fixedHeaderBgShield,
+          {
+            backgroundColor: isDark ? '#0D0F1A' : '#FFFFFF',
+            opacity: headerBgOpacity,
+          },
+        ]}
+      />
+
+      {/* 3. Dynamic Morphing Hero Photo (Above background shield, morphs into circle) */}
+      <Animated.View
+        style={[
+          styles.morphPhotoWrapper,
+          {
+            width: morphWidth,
+            height: morphHeight,
+            borderRadius: morphRadius,
+            left: morphLeft,
+            top: morphTop,
+            borderWidth: morphBorderWidth,
+          },
+        ]}
+      >
+        <View style={StyleSheet.absoluteFill}>
+          <Animated.Image
+            source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
+            style={[styles.heroImg, { height: heroImgHeight }]}
+            onLoadStart={() => setHeroLoading(true)}
+            onLoadEnd={() => setHeroLoading(false)}
+          />
+        </View>
+        {(heroLoading || uploadingPhoto) && (
+          <View style={styles.heroLoadingOverlay}>
+            <ActivityIndicator size="large" color="#FF007F" />
+          </View>
+        )}
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroControlsOpacity }]} pointerEvents="box-none">
+          <LinearGradient colors={['rgba(0,0,0,0.22)', 'transparent']} style={styles.heroTopGrad} />
+          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
+
+          {/* Change Photo Floating Badge */}
+          <TouchableOpacity
+            style={styles.changePhotoBtn}
+            onPress={() => setPhotoPickerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="camera" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.changePhotoTxt}>Change Photo</Text>
+          </TouchableOpacity>
+
+          {/* Photo Indicator Dots */}
+          {allPhotos.length > 1 && (
+            <View style={styles.photoIndicatorRow}>
+              {allPhotos.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setPhotoIdx(i)}
+                  style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
+                />
+              ))}
+            </View>
+          )}
+        </Animated.View>
+      </Animated.View>
+
+      {/* 4. Fixed Sticky Top Header Controls (Top Layer - Back button, Title, Settings gear) */}
+      <View style={styles.fixedHeaderContainer} pointerEvents="box-none">
+        <View style={styles.fixedHeaderContent}>
+          <TouchableOpacity
+            style={styles.solidControlBtn}
+            onPress={handleBack}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
+          </TouchableOpacity>
+
+          <Animated.View
+            style={[
+              styles.fixedHeaderNameWrap,
+              {
+                opacity: headerNameOpacity,
+                transform: [{ translateY: headerNameTranslateY }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text
+                style={[
+                  styles.fixedHeaderName,
+                  { color: isDark ? '#FFFFFF' : '#000000' },
+                ]}
+                numberOfLines={1}
+              >
+                {profileUser.name}
+              </Text>
+              {renderVerifiedBadge(user, 16, { marginLeft: 4 })}
+            </View>
+          </Animated.View>
+
+          <TouchableOpacity
+            style={styles.solidControlBtn}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {/* ─── Interactive Edit Profile Modal ───────────────────────────── */}
       <Modal visible={isEditing} animationType="slide" transparent onRequestClose={() => setIsEditing(false)}>
@@ -1229,6 +1270,109 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* 3. Dynamic Morphing Hero Photo (Above background shield, morphs into circle) */}
+      <Animated.View
+        style={[
+          styles.morphPhotoWrapper,
+          {
+            width: morphWidth,
+            height: morphHeight,
+            borderRadius: morphRadius,
+            left: morphLeft,
+            top: morphTop,
+            borderWidth: morphBorderWidth,
+          },
+        ]}
+      >
+        <View style={StyleSheet.absoluteFill}>
+          <Animated.Image
+            source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
+            style={[styles.heroImg, { height: heroImgHeight }]}
+            onLoadStart={() => setHeroLoading(true)}
+            onLoadEnd={() => setHeroLoading(false)}
+          />
+        </View>
+        {(heroLoading || uploadingPhoto) && (
+          <View style={styles.heroLoadingOverlay}>
+            <ActivityIndicator size="large" color="#FF007F" />
+          </View>
+        )}
+        <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroControlsOpacity }]} pointerEvents="box-none">
+          <LinearGradient colors={['rgba(0,0,0,0.22)', 'transparent']} style={styles.heroTopGrad} />
+          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
+
+          {/* Change Photo Floating Badge */}
+          <TouchableOpacity
+            style={styles.changePhotoBtn}
+            onPress={() => setPhotoPickerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="camera" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.changePhotoTxt}>Change Photo</Text>
+          </TouchableOpacity>
+
+          {/* Photo Indicator Dots */}
+          {allPhotos.length > 1 && (
+            <View style={styles.photoIndicatorRow}>
+              {allPhotos.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setPhotoIdx(i)}
+                  style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
+                />
+              ))}
+            </View>
+          )}
+        </Animated.View>
+      </Animated.View>
+
+      {/* 4. Fixed Sticky Top Header Controls (Top Layer - Back button, Title, Settings gear) */}
+      <View style={styles.fixedHeaderContainer} pointerEvents="box-none">
+        <View style={styles.fixedHeaderContent}>
+          <TouchableOpacity
+            style={styles.solidControlBtn}
+            onPress={handleBack}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
+          </TouchableOpacity>
+
+          <Animated.View
+            style={[
+              styles.fixedHeaderNameWrap,
+              {
+                opacity: headerNameOpacity,
+                transform: [{ translateY: headerNameTranslateY }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text
+                style={[
+                  styles.fixedHeaderName,
+                  { color: isDark ? '#FFFFFF' : '#000000' },
+                ]}
+                numberOfLines={1}
+              >
+                {profileUser.name}
+              </Text>
+              {renderVerifiedBadge(user, 16, { marginLeft: 4 })}
+            </View>
+          </Animated.View>
+
+          <TouchableOpacity
+            style={styles.solidControlBtn}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="settings-outline" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Custom Alert Modals */}
       <CustomAlertModal
         visible={logoutAlertVisible}
@@ -1261,6 +1405,16 @@ export default function ProfileScreen() {
         iconColor="#FF007F"
         confirmText="Got it"
         onConfirm={() => setErrorAlertVisible(false)}
+      />
+
+      <CustomAlertModal
+        visible={mainPhotoSuccessAlertVisible}
+        title="Main Profile Photo Set!"
+        message="This photo is now set as your primary profile photo visible to other users across HeartLink."
+        icon="star"
+        iconColor="#FFD700"
+        confirmText="Awesome"
+        onConfirm={() => setMainPhotoSuccessAlertVisible(false)}
       />
 
       <CustomAlertModal
@@ -1329,56 +1483,294 @@ export default function ProfileScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Full Screen Photo Viewer Modal */}
+      <Modal
+        visible={isFullScreenViewerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsFullScreenViewerOpen(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#000000', position: 'relative', justifyContent: 'center', alignItems: 'center' }}>
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
+
+          {/* Full Screen Photo Backdrop */}
+          <TouchableOpacity
+            activeOpacity={1}
+            style={StyleSheet.absoluteFill}
+            onPress={(e) => {
+              const touchX = e.nativeEvent.locationX;
+              if (allPhotos.length > 1) {
+                if (touchX < width / 2) {
+                  setPhotoIdx(prev => (prev > 0 ? prev - 1 : allPhotos.length - 1));
+                } else {
+                  setPhotoIdx(prev => (prev < allPhotos.length - 1 ? prev + 1 : 0));
+                }
+              }
+            }}
+          >
+            <Image
+              source={{ uri: allPhotos[photoIdx] || allPhotos[0] }}
+              style={{ width: width, height: height * 0.85, resizeMode: 'contain', backgroundColor: '#000000' }}
+            />
+          </TouchableOpacity>
+
+          {/* Top Ambient Black Gradient */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.85)', 'rgba(0,0,0,0.3)', 'transparent']}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: safeTopSpacing + 75,
+              zIndex: 40,
+            }}
+            pointerEvents="none"
+          />
+
+          {/* Bottom Ambient Black Gradient */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.9)']}
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 140,
+              zIndex: 40,
+            }}
+            pointerEvents="none"
+          />
+
+          {/* Close (X) Button */}
+          <TouchableOpacity
+            style={{
+              position: 'absolute',
+              top: safeTopSpacing + 10,
+              right: 20,
+              zIndex: 60,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              borderWidth: 1,
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => setIsFullScreenViewerOpen(false)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Previous Photo Button (Left Side) */}
+          {allPhotos.length > 1 && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                left: 16,
+                top: height / 2 - 26,
+                zIndex: 60,
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => setPhotoIdx(prev => (prev > 0 ? prev - 1 : allPhotos.length - 1))}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chevron-back" size={30} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {/* Next Photo Button (Right Side) */}
+          {allPhotos.length > 1 && (
+            <TouchableOpacity
+              style={{
+                position: 'absolute',
+                right: 16,
+                top: height / 2 - 26,
+                zIndex: 60,
+                width: 52,
+                height: 52,
+                borderRadius: 26,
+                backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={() => setPhotoIdx(prev => (prev < allPhotos.length - 1 ? prev + 1 : 0))}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="chevron-forward" size={30} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+
+          {/* Bottom Actions Container */}
+          <View
+            style={{
+              position: 'absolute',
+              bottom: safeTopSpacing + 18,
+              alignSelf: 'center',
+              alignItems: 'center',
+              gap: 10,
+              zIndex: 60,
+              width: '90%',
+            }}
+          >
+            {/* Separate Option Button to Set Profile Photo */}
+            {isCurrentMainPhoto ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: 'rgba(255, 215, 0, 0.25)',
+                  borderWidth: 1.5,
+                  borderColor: '#FFD700',
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  borderRadius: 25,
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="star" size={18} color="#FFD700" />
+                <Text style={{ color: '#FFD700', fontWeight: '800', fontSize: 13 }}>
+                  Main Profile Photo
+                </Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#FF007F',
+                  paddingHorizontal: 20,
+                  paddingVertical: 11,
+                  borderRadius: 25,
+                  gap: 8,
+                  shadowColor: '#FF007F',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.4,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+                onPress={() => handleSetMainPhoto(allPhotos[photoIdx])}
+                disabled={settingMainPhoto}
+                activeOpacity={0.8}
+              >
+                {settingMainPhoto ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="person-circle-outline" size={20} color="#FFFFFF" />
+                    <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 13.5 }}>
+                      Set as Main Profile Photo
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Photo Indicator Dots */}
+            {allPhotos.length > 1 && (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  gap: 8,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                }}
+              >
+                {allPhotos.map((_, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    onPress={() => setPhotoIdx(i)}
+                    style={{
+                      width: i === photoIdx ? 24 : 10,
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: i === photoIdx ? '#FF007F' : 'rgba(255, 255, 255, 0.45)',
+                    }}
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
   flex: { flex: 1 },
   scrollContainer: {
-    paddingTop: height * 0.42 + 10,
+    paddingTop: height * 0.42 + safeTopSpacing + 10,
     paddingBottom: 110,
   },
 
   // Dynamic Morphing Hero Photo
   morphPhotoWrapper: {
     position: 'absolute',
-    zIndex: 95,
+    zIndex: 105,
+    elevation: 105,
     overflow: 'hidden',
     borderColor: '#FF007F',
     backgroundColor: '#1E1938',
   },
 
-  // Fixed Sticky Top Header
+  fixedHeaderBgShield: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: safeTopSpacing + 54,
+    zIndex: 90,
+    elevation: 90,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
+  },
   fixedHeaderContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 100,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 46,
-    paddingBottom: 10,
+    zIndex: 110,
+    elevation: 110,
+    paddingTop: safeTopSpacing + 6,
+    paddingBottom: 8,
   },
   fixedHeaderBg: {
     ...StyleSheet.absoluteFillObject,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
   },
   fixedHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     height: 40,
     position: 'relative',
-
   },
   fixedHeaderNameWrap: {
     position: 'absolute',
-    left: 126,
+    left: 112,
     right: 60,
     alignItems: 'flex-start',
   },
   fixedHeaderName: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: -0.3,
   },
@@ -1386,11 +1778,17 @@ const getStyles = (theme) => StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: theme.isDark ? 'rgba(148, 44, 44, 0.12)' : '#F3F4F6',
+    backgroundColor: theme.isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.08)',
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 110,
+    zIndex: 110,
   },
 
   coverBgWrapper: {
@@ -1454,14 +1852,16 @@ const getStyles = (theme) => StyleSheet.create({
   },
   heroImg: {
     position: 'absolute',
-    left: 0, right: 0, top: 0, bottom: 0,
-    width: '100%', height: '100%',
+    top: 0,
+    left: 0,
+    right: 0,
+    width: '100%',
     resizeMode: 'cover',
   },
   heroTopGrad: {
     position: 'absolute',
     left: 0, right: 0, top: 0,
-    height: 110,
+    height: 70,
   },
   heroBottomGrad: {
     position: 'absolute',

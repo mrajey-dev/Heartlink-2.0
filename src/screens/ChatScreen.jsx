@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  Image, SafeAreaView, StatusBar, TextInput, ScrollView, Dimensions, Platform, ActivityIndicator,
+  Image, StatusBar, TextInput, ScrollView, Dimensions, Platform, ActivityIndicator,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -217,7 +217,7 @@ const getStyles = (theme) => StyleSheet.create({
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 14 : 14,
+    paddingTop: 6,
     paddingBottom: 12,
     zIndex: 10,
   },
@@ -278,7 +278,7 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 7,
     backgroundColor: '#30D158',
     borderWidth: 2.2,
-    borderColor: '#150A2E',
+    borderColor: theme.isDark ? '#150A2E' : '#FFFFFF',
   },
   sparkName: {
     fontSize: 11,
@@ -301,7 +301,7 @@ const getStyles = (theme) => StyleSheet.create({
   onlineDot: {
     position: 'absolute', bottom: 1, right: 1,
     width: 13, height: 13, borderRadius: 6.5,
-    backgroundColor: theme.accentGreen, borderWidth: 2, borderColor: '#150A2E',
+    backgroundColor: theme.accentGreen, borderWidth: 2, borderColor: theme.isDark ? '#150A2E' : '#FFFFFF',
   },
   chatInfo: { flex: 1 },
   chatRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },

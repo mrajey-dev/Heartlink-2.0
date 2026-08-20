@@ -15,11 +15,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 import { navigate } from '../navigation/navigationRef';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const OFFER_DURATION_MS = 48 * 60 * 60 * 1000; // 48 Hours
 
 export default function WelcomeOfferModal() {
+  const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDark } = useTheme();
 
@@ -176,8 +178,8 @@ export default function WelcomeOfferModal() {
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
+      <View style={[styles.overlay, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
         {/* 3D Main Pop-Up Container */}
         <View style={styles.popUpCardWrap}>

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import DiscoverScreen    from '../screens/DiscoverScreen';
@@ -35,6 +36,7 @@ const ICONS = {
 };
 
 function CustomTabBar({ state, descriptors, navigation }) {
+  const insets = useSafeAreaInsets();
   const { isDark, theme } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
   const slideAnim = useRef(new Animated.Value(state.index * TAB_WIDTH + INDICATOR_OFFSET)).current;
@@ -80,8 +82,10 @@ function CustomTabBar({ state, descriptors, navigation }) {
     }).start();
   }, [state.index]);
 
+  const dynamicBottom = Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 24 : 14);
+
   return (
-    <View style={styles.tabBarContainer}>
+    <View style={[styles.tabBarContainer, { bottom: dynamicBottom }]}>
       {/* Sliding indicator line at the top, perfectly centered and offset to padding */}
       <Animated.View
         style={[

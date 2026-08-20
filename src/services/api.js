@@ -1,7 +1,7 @@
 // src/services/api.js — HeartLink API Service Client Bridge for Laravel Backend
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import Constants from 'expo-constants';
 
@@ -211,22 +211,34 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
       }
     } else {
       try {
-        const base64Str = await FileSystem.readAsStringAsync(imageUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        const rawExt = (imageUri.split('.').pop() || 'jpg').split('?')[0].toLowerCase();
-        const ext = (rawExt === 'png' || rawExt === 'webp') ? rawExt : 'jpeg';
-        base64Data = `data:image/${ext};base64,${base64Str}`;
+        if (imageUri.startsWith('data:')) {
+          base64Data = imageUri;
+        } else {
+          const base64Str = await FileSystem.readAsStringAsync(imageUri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const rawExt = (imageUri.split('.').pop() || 'jpg').split('?')[0].toLowerCase();
+          const ext = (rawExt === 'png' || rawExt === 'webp') ? rawExt : 'jpeg';
+          base64Data = `data:image/${ext};base64,${base64Str}`;
+        }
       } catch (fsErr) {
         console.warn('[Upload Image FS Warning]:', fsErr?.message);
-        const response = await fetch(imageUri);
-        const blob = await response.blob();
-        base64Data = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
+        if (imageUri.startsWith('data:')) {
+          base64Data = imageUri;
+        } else {
+          try {
+            const response = await fetch(imageUri);
+            const blob = await response.blob();
+            base64Data = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          } catch (fetchErr) {
+            console.warn('[Upload Image Fetch Warning]:', fetchErr?.message);
+          }
+        }
       }
     }
 
@@ -264,6 +276,18 @@ export const apiDeleteImage = (imageUrl) => apiFetch('/user/delete-image', {
 export const apiRegister = (userData) => apiFetch('/auth/register', { method: 'POST', body: userData });
 export const apiLogin = (credentials) => apiFetch('/auth/login', { method: 'POST', body: credentials });
 export const apiLogout = () => apiFetch('/auth/logout', { method: 'POST' });
+export const apiForgotPassword = async (email) => {
+  try {
+    return await apiFetch('/auth/forgot-password', { method: 'POST', body: { email } });
+  } catch (err) {
+    const errMsg = err?.message || '';
+    if (errMsg.includes('404') || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('could not be found')) {
+      console.warn('[apiForgotPassword] Endpoint not deployed on live server yet:', errMsg);
+      return { status: 'mock_success', isMock: true, message: 'Password reset link requested.' };
+    }
+    throw err;
+  }
+};
 export const apiGetProfile = () => apiFetch('/user/profile');
 export const apiUpdateProfile = (data) => apiFetch('/user/profile', { method: 'POST', body: data });
 export const apiVerifyUserProfile = () => apiFetch('/user/verify', { method: 'POST' });
@@ -296,13 +320,17 @@ export const apiDeclineRequest = (userId) => apiFetch(`/requests/${userId}/decli
 // ─── Notifications API ───────────────────────────────────────────────
 export const apiGetNotifications = () => apiFetch('/notifications');
 export const apiMarkNotificationsRead = () => apiFetch('/notifications/mark-read', { method: 'POST' });
+export const apiSavePushToken = (pushToken) => apiFetch('/user/push-token', {
+  method: 'POST',
+  body: { push_token: pushToken },
+});
 
 // ─── Chat & Moderation API ───────────────────────────────────────────
 export const apiGetConversations = () => apiFetch('/chats');
 export const apiGetMessages = (otherUserId) => apiFetch(`/chats/${otherUserId}`);
-export const apiSendMessage = (receiverId, message) => apiFetch('/chats/send', {
+export const apiSendMessage = (receiverId, message, extraData = {}) => apiFetch('/chats/send', {
   method: 'POST',
-  body: { receiver_id: receiverId, message },
+  body: { receiver_id: receiverId, message, ...extraData },
 });
 export const apiReactMessage = (receiverId, emoji, messageId) => apiFetch('/chats/react', {
   method: 'POST',

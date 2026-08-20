@@ -1,10 +1,10 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  SafeAreaView, StatusBar, Dimensions, Platform, Animated,
+  StatusBar, Dimensions, Platform, Animated,
   ActivityIndicator, Linking,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -34,11 +34,7 @@ export default function PlansScreen() {
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [cardDurations, setCardDurations] = useState({
-    basic: '6m',
-    plus: '6m',
-    premium: '6m',
-  });
+  const [cardDurations, setCardDurations] = useState({});
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [successAlertVisible, setSuccessAlertVisible] = useState(false);
@@ -117,20 +113,31 @@ export default function PlansScreen() {
     return '₹' + discounted.toLocaleString('en-IN');
   };
 
-  useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        setLoading(true);
-        const res = await apiGetSubscriptionPlans();
-        if (res?.plans && Array.isArray(res.plans)) {
-          setPlans(res.plans);
-        }
-      } catch (e) {
-        console.warn('Fetch plans error:', e);
-      } finally {
-        setLoading(false);
+  const fetchPlans = async () => {
+    setLoading(true);
+    try {
+      const res = await apiGetSubscriptionPlans();
+      if (res?.plans && Array.isArray(res.plans) && res.plans.length > 0) {
+        setPlans(res.plans);
+        // Initialize default selected durations for each plan
+        const initialDurations = {};
+        res.plans.forEach(plan => {
+          const defaultDur = plan.durations?.find(d => d.popular)?.id || plan.durations?.[1]?.id || plan.durations?.[0]?.id || '6m';
+          initialDurations[plan.id] = defaultDur;
+        });
+        setCardDurations(prev => ({ ...initialDurations, ...prev }));
+      } else {
+        setPlans([]);
       }
-    };
+    } catch (e) {
+      console.warn('Fetch plans error:', e);
+      setPlans([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchPlans();
   }, [route.params]);
 
@@ -177,51 +184,71 @@ export default function PlansScreen() {
       extrapolate: 'clamp',
     });
 
-    const selectedDurId = cardDurations[card.id] || '6m';
-    const selectedDurObj = card.durations.find(d => d.id === selectedDurId) || card.durations[1];
+    const durationsList = card.durations && Array.isArray(card.durations) && card.durations.length > 0
+      ? card.durations
+      : [{ id: '1m', label: '1 Month', price: '₹117', unit: '/mo', total: '₹117' }];
+
+    const selectedDurId = cardDurations[card.id] || durationsList.find(d => d.popular)?.id || durationsList[1]?.id || durationsList[0]?.id || '6m';
+    const selectedDurObj = durationsList.find(d => d.id === selectedDurId) || durationsList[0];
+
+    const badgeTitle = card.badgeText || card.badge || card.badge_text;
+    const cardGlow = card.glowColor || card.glow_color || 'rgba(255, 0, 127, 0.25)';
+    const cardGrad = Array.isArray(card.gradient) && card.gradient.length >= 2 ? card.gradient : ['#FF007F', '#B5179E'];
+    const accentCol = card.accentColor || card.accent_color || cardGrad[0] || '#FF007F';
+    const icon = card.iconName || card.icon_name || card.icon || 'sparkles-outline';
 
     return (
       <Animated.View style={[styles.cardWrapper, { transform: [{ scale }], opacity }]}>
         <View style={styles.cardContainer}>
           {/* Top Subtle Gradient Glow */}
           <LinearGradient
-            colors={[card.glowColor, 'transparent']}
+            colors={[cardGlow, 'transparent']}
             start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.4 }}
             style={StyleSheet.absoluteFill}
           />
 
-          {/* Use ScrollView inside card for vertical scrolling */}
-          <ScrollView 
-            showsVerticalScrollIndicator={false} 
+          {/* ScrollView inside card for main card content */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.cardInnerScroll}
             style={styles.cardScrollView}
+            nestedScrollEnabled={true}
           >
             {/* Top Pill Badge */}
-            <View style={styles.badgeRow}>
-              <View style={styles.badgeCapsule}>
+            {!!badgeTitle && (
+              <View style={styles.badgeRow}>
+                <LinearGradient
+                  colors={cardGrad}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={styles.badgeCapsule}
+                >
+                  <Text style={styles.badgeText}>{String(badgeTitle).toUpperCase()}</Text>
+                </LinearGradient>
               </View>
-            </View>
+            )}
 
             {/* Header Icon & Plan Name */}
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { shadowColor: card.accentColor }]}>
+              <View style={[styles.iconCircle, { shadowColor: accentCol }]}>
                 <LinearGradient
-                  colors={card.gradient}
+                  colors={cardGrad}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                   style={styles.iconGrad}
                 >
-                  <Ionicons name={card.iconName} size={isSmallDevice ? 24 : 28} color="#FFFFFF" />
+                  <Ionicons name={icon} size={isSmallDevice ? 24 : 28} color="#FFFFFF" />
                 </LinearGradient>
               </View>
               <Text style={[styles.cardTitle, isSmallDevice && styles.smallCardTitle]}>{card.name}</Text>
-              <Text style={[styles.cardTagline, isSmallDevice && styles.smallCardTagline]}>{card.tagline}</Text>
+              {!!card.tagline && (
+                <Text style={[styles.cardTagline, isSmallDevice && styles.smallCardTagline]}>{card.tagline}</Text>
+              )}
             </View>
 
             {/* Duration Selector Tabs inside Card */}
             <View style={styles.durationSection}>
               <Text style={styles.sectionLabel}>SELECT DURATION</Text>
               <View style={styles.durationRow}>
-                {card.durations.map((dur) => {
+                {durationsList.map((dur) => {
                   const isSelected = dur.id === selectedDurId;
                   return (
                     <TouchableOpacity
@@ -236,7 +263,7 @@ export default function PlansScreen() {
                     >
                       {isSelected && (
                         <LinearGradient
-                          colors={card.gradient}
+                          colors={cardGrad}
                           start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                           style={StyleSheet.absoluteFill}
                         />
@@ -255,7 +282,7 @@ export default function PlansScreen() {
                           {dur.label}
                         </Text>
                         <Text style={[styles.durPriceText, isSelected && styles.whiteTxt, isSmallDevice && styles.smallDurPriceText]}>
-                          {dur.price}<Text style={styles.durUnitText}>{dur.unit}</Text>
+                          {dur.price}<Text style={styles.durUnitText}>{dur.unit || ''}</Text>
                         </Text>
                         <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
                           {isWelcomeDiscount ? `${calculateDiscountedPrice(dur.total, 20)} (20% OFF)` : dur.total}
@@ -267,19 +294,37 @@ export default function PlansScreen() {
               </View>
             </View>
 
-            {/* Features Checklist */}
+            {/* Features Checklist with Scroller */}
             <View style={styles.featuresSection}>
-              <Text style={styles.sectionLabel}>INCLUDED PERKS</Text>
-              <View style={styles.featuresList}>
-                {card.features.map((feat, fIdx) => (
-                  <View key={fIdx} style={[styles.featureRow, isSmallDevice && styles.smallFeatureRow]}>
-                    <View style={[styles.featureIconBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
-                      <Ionicons name={feat.icon} size={isSmallDevice ? 13 : 15} color={card.accentColor} />
-                    </View>
-                    <Text style={[styles.featureTitle, isSmallDevice && styles.smallFeatureTitle]}>{feat.title}</Text>
+              <View style={styles.featuresHeaderRow}>
+                <Text style={styles.sectionLabel}>INCLUDED PERKS ({(card.features || []).length})</Text>
+                {(card.features || []).length > 3 && (
+                  <View style={styles.scrollHintBadge}>
+                    <Ionicons name="swap-vertical" size={11} color={accentCol} />
+                    <Text style={[styles.scrollHintTxt, { color: theme.textSec }]}>Scroll list</Text>
                   </View>
-                ))}
+                )}
               </View>
+
+              <ScrollView
+                style={[styles.featuresScrollView, { maxHeight: isSmallDevice ? 140 : 190 }]}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+                contentContainerStyle={styles.featuresListContainer}
+              >
+                {(card.features || []).map((feat, fIdx) => {
+                  const featIcon = typeof feat === 'object' ? (feat.icon || feat.icon_name || 'checkmark-circle-outline') : 'checkmark-circle-outline';
+                  const featTitle = typeof feat === 'object' ? feat.title : String(feat);
+                  return (
+                    <View key={fIdx} style={[styles.featureRow, isSmallDevice && styles.smallFeatureRow]}>
+                      <View style={[styles.featureIconBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
+                        <Ionicons name={featIcon} size={isSmallDevice ? 13 : 15} color={accentCol} />
+                      </View>
+                      <Text style={[styles.featureTitle, isSmallDevice && styles.smallFeatureTitle]}>{featTitle}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* Add extra bottom padding for CTA */}
@@ -291,16 +336,16 @@ export default function PlansScreen() {
             <TouchableOpacity
               onPress={() => handleSubscribe(card)}
               activeOpacity={0.88}
-              style={[styles.cardCtaBtn, { shadowColor: card.accentColor }]}
+              style={[styles.cardCtaBtn, { shadowColor: accentCol }]}
             >
               <LinearGradient
-                colors={card.gradient}
+                colors={cardGrad}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.cardCtaGrad}
               >
                 <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" />
                 <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
-                  Get {card.name} ({selectedDurObj.price}{selectedDurObj.unit})
+                  Get {card.name} ({selectedDurObj?.price || ''}{selectedDurObj?.unit || ''})
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -319,119 +364,133 @@ export default function PlansScreen() {
       <View style={styles.glowBlobCyan} pointerEvents="none" />
 
       <SafeAreaView style={styles.flex}>
-        {/* Header */}
-        <View style={[styles.header, isSmallDevice && styles.smallHeader]}>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="close" size={20} color={theme.textPrimary} />
-          </TouchableOpacity>
-
-          <View style={styles.headerTitleWrap}>
-            <Text style={[styles.headerTitle, isSmallDevice && styles.smallHeaderTitle]}>HeartLink Membership</Text>
-            <Text style={[styles.headerSubtitle, isSmallDevice && styles.smallHeaderSubtitle]}>Swipe to choose your plan</Text>
-          </View>
-
-          <View style={{ width: 38 }} />
-        </View>
-
-        {/* Top 20% Welcome Offer Banner with Countdown Timer for 48-Hour New Users */}
-        {isOfferEligible && (
-          <View style={[styles.topOfferBannerWrap, isSmallDevice && styles.smallTopOfferBannerWrap]}>
-            <LinearGradient
-              colors={['#FF007F', '#E0006C', '#8A2BE2']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.topOfferBannerGrad}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+          contentContainerStyle={styles.rootScrollContent}
+        >
+          {/* Header */}
+          <View style={[styles.header, isSmallDevice && styles.smallHeader]}>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
             >
-              <Text style={[styles.topOfferBannerTitle, isSmallDevice && styles.smallTopOfferBannerTitle]}>
-                <Text style={styles.boldOfferTxt}>20% OFF </Text>WELCOME OFFER ACTIVE
-              </Text>
-              <Text style={[styles.topOfferBannerSub, isSmallDevice && styles.smallTopOfferBannerSub]}>Expires in {formatTimeLeft(timeLeftMs)}</Text>
-            </LinearGradient>
-          </View>
-        )}
+              <Ionicons name="close" size={20} color={theme.textPrimary} />
+            </TouchableOpacity>
 
-        {/* Slidable Carousel of Cards */}
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator size="large" color="#FF007F" />
-            <Text style={{ color: theme.textSec, fontSize: 13, marginTop: 12 }}>Loading membership plans…</Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.carouselContainer}>
-              <Animated.FlatList
-                ref={flatListRef}
-                data={plans}
-                renderItem={renderCard}
-                keyExtractor={item => item.id}
-                horizontal
-                pagingEnabled={false}
-                snapToInterval={CARD_WIDTH}
-                decelerationRate="fast"
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.flatListContent}
-                onScroll={Animated.event(
-                  [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                  { useNativeDriver: false }
-                )}
-                onMomentumScrollEnd={(e) => {
-                  const newIndex = Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH);
-                  setActiveIndex(newIndex);
-                }}
-              />
+            <View style={styles.headerTitleWrap}>
+              <Text style={[styles.headerTitle, isSmallDevice && styles.smallHeaderTitle]}>HeartLink Membership</Text>
+              <Text style={[styles.headerSubtitle, isSmallDevice && styles.smallHeaderSubtitle]}>Swipe to choose your plan</Text>
             </View>
 
-            {/* Page Dots Indicator */}
-            <View style={[styles.paginationRow, isSmallDevice && styles.smallPaginationRow]}>
-              {plans.map((card, i) => {
-                const inputRange = [
-                  (i - 1) * CARD_WIDTH,
-                  i * CARD_WIDTH,
-                  (i + 1) * CARD_WIDTH,
-                ];
-
-                const dotWidth = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [7, 24, 7],
-                  extrapolate: 'clamp',
-                });
-
-                const opacity = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.35, 1.0, 0.35],
-                  extrapolate: 'clamp',
-                });
-
-                return (
-                  <Animated.View
-                    key={card.id}
-                    style={[
-                      styles.dot,
-                      { width: dotWidth, opacity, backgroundColor: card.accentColor },
-                      isSmallDevice && styles.smallDot,
-                    ]}
-                  />
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        <View style={[styles.disclaimerWrap, isSmallDevice && styles.smallDisclaimerWrap]}>
-          <View style={styles.policyLinksRow}>
-            {/* <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/terms').catch(() => {})}>
-              <Text style={[styles.policyLinkTxt, isSmallDevice && styles.smallPolicyLinkTxt]}>Terms of Service</Text>
-            </TouchableOpacity> */}
-            <Text style={styles.policyDot}>•</Text>
-            {/* <TouchableOpacity onPress={() => Linking.openURL('https://heartlink.app/privacy').catch(() => {})}>
-              <Text style={[styles.policyLinkTxt, isSmallDevice && styles.smallPolicyLinkTxt]}>Privacy Policy</Text>
-            </TouchableOpacity> */}
+            <View style={{ width: 38 }} />
           </View>
-        </View>
+
+          {/* Top 20% Welcome Offer Banner with Countdown Timer for 48-Hour New Users */}
+          {isOfferEligible && (
+            <View style={[styles.topOfferBannerWrap, isSmallDevice && styles.smallTopOfferBannerWrap]}>
+              <LinearGradient
+                colors={['#FF007F', '#E0006C', '#8A2BE2']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.topOfferBannerGrad}
+              >
+                <Text style={[styles.topOfferBannerTitle, isSmallDevice && styles.smallTopOfferBannerTitle]}>
+                  <Text style={styles.boldOfferTxt}>20% OFF </Text>WELCOME OFFER ACTIVE
+                </Text>
+                <Text style={[styles.topOfferBannerSub, isSmallDevice && styles.smallTopOfferBannerSub]}>Expires in {formatTimeLeft(timeLeftMs)}</Text>
+              </LinearGradient>
+            </View>
+          )}
+
+          {/* Slidable Carousel of Cards */}
+          {loading ? (
+            <View style={{ paddingVertical: 80, justifyContent: 'center', alignItems: 'center' }}>
+              <ActivityIndicator size="large" color="#FF007F" />
+              <Text style={{ color: theme.textSec, fontSize: 13, marginTop: 12 }}>Loading database membership plans…</Text>
+            </View>
+          ) : plans.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cloud-offline-outline" size={44} color={theme.textFaint} />
+              <Text style={styles.emptyTitle}>Refresh</Text>
+              <Text style={styles.emptySubtitle}>Check your internet connection and try again.</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={fetchPlans} activeOpacity={0.8}>
+                <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.retryGrad}>
+                  <Ionicons name="refresh" size={15} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.retryBtnTxt}>Retry Loading Plans</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.carouselContainer}>
+                <Animated.FlatList
+                  ref={flatListRef}
+                  data={plans}
+                  renderItem={renderCard}
+                  keyExtractor={item => item.id || item.name}
+                  horizontal
+                  pagingEnabled={false}
+                  snapToInterval={CARD_WIDTH}
+                  decelerationRate="fast"
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.flatListContent}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: false }
+                  )}
+                  onMomentumScrollEnd={(e) => {
+                    const newIndex = Math.round(e.nativeEvent.contentOffset.x / CARD_WIDTH);
+                    setActiveIndex(newIndex);
+                  }}
+                />
+              </View>
+
+              {/* Page Dots Indicator */}
+              <View style={[styles.paginationRow, isSmallDevice && styles.smallPaginationRow]}>
+                {plans.map((card, i) => {
+                  const inputRange = [
+                    (i - 1) * CARD_WIDTH,
+                    i * CARD_WIDTH,
+                    (i + 1) * CARD_WIDTH,
+                  ];
+
+                  const dotWidth = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [7, 24, 7],
+                    extrapolate: 'clamp',
+                  });
+
+                  const opacity = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [0.35, 1.0, 0.35],
+                    extrapolate: 'clamp',
+                  });
+
+                  const dotColor = card.accentColor || card.accent_color || '#FF007F';
+
+                  return (
+                    <Animated.View
+                      key={card.id || i}
+                      style={[
+                        styles.dot,
+                        { width: dotWidth, opacity, backgroundColor: dotColor },
+                        isSmallDevice && styles.smallDot,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+            </>
+          )}
+
+          <View style={[styles.disclaimerWrap, isSmallDevice && styles.smallDisclaimerWrap]}>
+            <View style={styles.policyLinksRow}>
+              <Text style={styles.policyDot}>•</Text>
+            </View>
+          </View>
+        </ScrollView>
       </SafeAreaView>
 
       {/* Payment Gateway Modal */}
@@ -474,6 +533,9 @@ export default function PlansScreen() {
 const getStyles = (theme) => StyleSheet.create({
   flex: { flex: 1 },
   root: { flex: 1, position: 'relative' },
+  rootScrollContent: {
+    paddingBottom: 40,
+  },
 
   glowBlobFuchsia: {
     position: 'absolute',
@@ -553,12 +615,12 @@ const getStyles = (theme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 10 : 10,
+    paddingTop: 6,
     paddingBottom: 8,
     zIndex: 10,
   },
   smallHeader: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 6,
+    paddingTop: 4,
     paddingBottom: 4,
     paddingHorizontal: 16,
   },
@@ -595,9 +657,8 @@ const getStyles = (theme) => StyleSheet.create({
 
   // Carousel
   carouselContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingVertical: 6,
+    paddingVertical: 12,
+    marginVertical: 6,
   },
   flatListContent: {
     paddingHorizontal: CARD_SPACING,
@@ -607,9 +668,9 @@ const getStyles = (theme) => StyleSheet.create({
   // Card Outer & Inner
   cardWrapper: {
     width: CARD_WIDTH,
-    height: isSmallDevice ? height * 0.78 : height * 0.81,
+    height: isSmallDevice ? 520 : Math.max(height * 0.76, 560),
     paddingHorizontal: 4,
-    paddingVertical: 4,
+    paddingVertical: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: theme.isDark ? 0.45 : 0.15,
@@ -629,7 +690,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   cardInnerScroll: {
     padding: 18,
-    paddingBottom: isSmallDevice ? 70 : 80,
+    paddingBottom: 90,
   },
   bottomSpacer: {
     height: isSmallDevice ? 10 : 20,
@@ -787,8 +848,36 @@ const getStyles = (theme) => StyleSheet.create({
   featuresSection: {
     marginBottom: isSmallDevice ? 6 : 10,
   },
-  featuresList: {
-    gap: isSmallDevice ? 6 : 10,
+  featuresHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  scrollHintBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+  },
+  scrollHintTxt: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  featuresScrollView: {
+    borderRadius: 14,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  featuresListContainer: {
+    gap: isSmallDevice ? 6 : 8,
+    paddingVertical: 6,
   },
   featureRow: {
     flexDirection: 'row',
@@ -799,24 +888,61 @@ const getStyles = (theme) => StyleSheet.create({
     gap: 8,
   },
   featureIconBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.border,
   },
   featureTitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: theme.textPrimary,
     fontWeight: '400',
     flex: 1,
-    lineHeight: 18,
+    lineHeight: 17,
   },
   smallFeatureTitle: {
-    fontSize: 11.5,
-    lineHeight: 15,
+    fontSize: 11,
+    lineHeight: 14,
+  },
+
+  // Empty Database State
+  emptyContainer: {
+    paddingVertical: 60,
+    paddingHorizontal: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.textPrimary,
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: theme.textSec,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 18,
+  },
+  retryBtn: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  retryGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  retryBtnTxt: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 
   // Sticky Card CTA
