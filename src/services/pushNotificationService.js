@@ -1,16 +1,17 @@
-// src/services/pushNotificationService.js — Expo Remote Push Notifications Service
+// src/services/pushNotificationService.js — Expo Remote & Local Phone Notifications Service
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiSavePushToken } from './api';
 
-// Detect if app is running inside Expo Go client app (where SDK 53+ disabled remote push notifications)
+// Detect if app is running inside Expo Go client app (where remote push notifications are disabled by Expo in SDK 53+)
 export const isExpoGo =
   Constants.executionEnvironment === ExecutionEnvironment.StoreClient ||
   Constants.appOwnership === 'expo';
 
-// Lazily load expo-notifications ONLY when NOT running in Expo Go to prevent SDK 53+ auto-registration error
+// Dynamically and lazily load expo-notifications ONLY outside Expo Go (Development Build / Standalone APK)
 export let Notifications = null;
+
 if (!isExpoGo) {
   try {
     Notifications = require('expo-notifications');
@@ -27,44 +28,85 @@ if (!isExpoGo) {
 }
 
 /**
+ * Setup default Android notification channels for high priority popups
+ */
+export async function setupNotificationChannelsAsync() {
+  if (isExpoGo || !Notifications || Platform.OS !== 'android') return;
+
+  try {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'HeartLink Alerts',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF007F',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
+  } catch (error) {
+    console.warn('[PushNotificationService] Error creating notification channel:', error?.message || error);
+  }
+}
+
+/**
+ * Instantly triggers a native phone notification (system tray, lock screen, banner)
+ * @param {Object} param0
+ * @param {string} param0.title Notification title
+ * @param {string} param0.body Notification message body
+ * @param {Object} [param0.data] Additional payload/navigation data
+ */
+export async function displayPhoneNotification({ title, body, data = {} }) {
+  if (isExpoGo || !Notifications) return;
+
+  try {
+    await setupNotificationChannelsAsync();
+
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: title || 'HeartLink',
+        body: body || '',
+        data,
+        sound: 'default',
+        priority: Notifications.AndroidNotificationPriority.HIGH,
+        color: '#FF007F',
+      },
+      trigger: null, // null trigger means trigger immediately
+    });
+  } catch (error) {
+    console.warn('[PushNotificationService] Error displaying phone notification:', error?.message || error);
+  }
+}
+
+/**
  * Registers device for remote push notifications, gets Expo Push Token, and uploads it to Laravel backend.
  */
 export async function registerForPushNotificationsAsync() {
   if (isExpoGo || !Notifications) {
-    console.log(
-      '[PushNotificationService] Remote push notifications are disabled in Expo Go (SDK 53+). Use a development build (npx expo run:android or EAS Build) to test remote push notifications.'
-    );
     return null;
   }
 
   let token = null;
 
   try {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF007F',
-        sound: 'default',
-      });
+    await setupNotificationChannelsAsync();
+
+    // Request notification permissions
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('[PushNotificationService] Push notification permission not granted.');
+      return null;
     }
 
     if (Device.isDevice) {
-      const { status: existingStatus } = await Notifications.getPermissionsAsync();
-      let finalStatus = existingStatus;
-
-      if (existingStatus !== 'granted') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        finalStatus = status;
-      }
-
-      if (finalStatus !== 'granted') {
-        console.log('[PushNotificationService] Push notification permission not granted.');
-        return null;
-      }
-
-      // Extract EAS Project ID from Expo Constants or fallback to hardcoded project ID
+      // Extract EAS Project ID from Expo Constants or fallback
       const projectId =
         Constants.expoConfig?.extra?.eas?.projectId ||
         Constants.easConfig?.projectId ||
@@ -74,7 +116,7 @@ export async function registerForPushNotificationsAsync() {
         projectId,
       });
 
-      token = tokenData.data;
+      token = tokenData?.data;
       console.log('[PushNotificationService] Obtained Expo Push Token:', token);
 
       if (token) {
@@ -84,11 +126,12 @@ export async function registerForPushNotificationsAsync() {
         );
       }
     } else {
-      console.log('[PushNotificationService] Physical device required for remote push notifications.');
+      console.log('[PushNotificationService] Physical device required for remote push token registration.');
     }
   } catch (error) {
-    console.warn('[PushNotificationService] Error registering push notifications:', error);
+    console.warn('[PushNotificationService] Error registering push notifications:', error?.message || error);
   }
 
   return token;
 }
+

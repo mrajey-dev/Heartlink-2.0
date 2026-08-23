@@ -14,13 +14,13 @@ import { useAuth } from '../hooks/useAuth';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import CustomAlertModal from '../components/CustomAlertModal';
 import MatchModal from '../components/MatchModal';
-import { apiGetRequests, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal, apiUnmatchUser } from '../services/api';
+import { apiGetRequests, apiGetSentRequests, apiCancelSentRequest, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal, apiUnmatchUser } from '../services/api';
 import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 
 const { width, height } = Dimensions.get('window');
 
-function SwipeableCard({ itemId, isSwiped, onSwipe, onDelete, children }) {
+function SwipeableCard({ itemId, isSwiped, onSwipe, onDelete, actionText = 'Delete', actionIcon = 'trash-outline', actionColors = ['#FF375F', '#FF007F'], children }) {
   const animX = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -39,85 +39,63 @@ function SwipeableCard({ itemId, isSwiped, onSwipe, onDelete, children }) {
       animX.stopAnimation();
     },
     onPanResponderMove: (_, g) => {
-      const initialOffset = isSwiped ? -85 : 0;
-      let newX = initialOffset + g.dx;
-
-      // Smooth rubber-banding limits
-      if (newX > 0) {
-        newX = newX * 0.2;
-      } else if (newX < -110) {
-        const overflow = newX + 110;
-        newX = -110 + overflow * 0.2;
+      if (g.dx < 0) {
+        animX.setValue(Math.max(g.dx, -110));
+      } else if (isSwiped && g.dx > 0) {
+        animX.setValue(-85 + Math.min(g.dx, 85));
       }
-
-      animX.setValue(newX);
     },
     onPanResponderRelease: (_, g) => {
-      const initialOffset = isSwiped ? -85 : 0;
-      const finalX = initialOffset + g.dx;
-
-      if (g.vx < -0.35 || finalX < -45) {
+      if (g.dx < -45) {
         onSwipe(itemId);
-        Animated.spring(animX, {
-          toValue: -85,
-          tension: 55,
-          friction: 8,
-          useNativeDriver: true,
-        }).start();
       } else {
-        onSwipe(null);
         Animated.spring(animX, {
           toValue: 0,
           tension: 55,
           friction: 8,
           useNativeDriver: true,
         }).start();
+        if (isSwiped) onSwipe(null);
       }
-    },
-    onPanResponderTerminate: () => {
-      Animated.spring(animX, {
-        toValue: isSwiped ? -85 : 0,
-        tension: 55,
-        friction: 8,
-        useNativeDriver: true,
-      }).start();
     },
   }), [itemId, isSwiped, onSwipe]);
 
-  const btnScale = animX.interpolate({
-    inputRange: [-85, 0],
-    outputRange: [1, 0.5],
+  const deleteOpacity = animX.interpolate({
+    inputRange: [-85, -20, 0],
+    outputRange: [1, 0.4, 0],
     extrapolate: 'clamp',
   });
 
-  const btnOpacity = animX.interpolate({
-    inputRange: [-85, -30, 0],
-    outputRange: [1, 0.2, 0],
+  const deleteScale = animX.interpolate({
+    inputRange: [-85, 0],
+    outputRange: [1, 0.6],
     extrapolate: 'clamp',
   });
 
   return (
-    <View style={{ marginBottom: 10, position: 'relative' }}>
-      {/* Revealed Action Button behind card with smooth scale and opacity transition */}
+    <View style={{ marginBottom: 10, position: 'relative', overflow: 'hidden', borderRadius: 22 }}>
+      {/* Background Action revealed ONLY upon active slide */}
       <Animated.View
         pointerEvents={isSwiped ? 'auto' : 'none'}
         style={[
           swipeDeleteStyles.swipeDeleteContainer,
           {
-            opacity: btnOpacity,
-            transform: [{ scale: btnScale }],
+            opacity: deleteOpacity,
+            transform: [{ scale: deleteScale }],
           },
         ]}
       >
         <TouchableOpacity
-          style={swipeDeleteStyles.swipeDeleteTouch}
           onPress={() => onDelete(itemId)}
-          disabled={!isSwiped}
           activeOpacity={0.8}
+          style={swipeDeleteStyles.swipeDeleteTouch}
         >
-          <LinearGradient colors={['#FF375F', '#D00040']} style={swipeDeleteStyles.swipeDeleteGrad}>
-            <Ionicons name="trash-outline" size={20} color="#FFF" style={{ marginBottom: 2 }} />
-            <Text style={swipeDeleteStyles.swipeDeleteTxt}>Delete</Text>
+          <LinearGradient
+            colors={actionColors}
+            style={swipeDeleteStyles.swipeDeleteGrad}
+          >
+            <Ionicons name={actionIcon} size={20} color="#FFF" style={{ marginBottom: 2 }} />
+            <Text style={swipeDeleteStyles.swipeDeleteTxt}>{actionText}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </Animated.View>
@@ -176,7 +154,10 @@ const swipeDeleteStyles = StyleSheet.create({
 export default function RequestsScreen() {
   const navigation = useNavigation();
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('received'); // 'received' | 'sent'
   const [requests, setRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [sentLoading, setSentLoading] = useState(false);
   const [expandedIds, setExpandedIds] = useState({});
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -256,6 +237,50 @@ export default function RequestsScreen() {
     }
   };
 
+  const loadSentRequests = async (isBackground = false) => {
+    try {
+      if (!isBackground && sentRequests.length === 0) setSentLoading(true);
+      const res = await apiGetSentRequests();
+      if (res?.sent_requests && Array.isArray(res.sent_requests)) {
+        const formatted = res.sent_requests.map(s => {
+          const u = s.user || {};
+          const rawAvatar = s.avatar || (u.photos && u.photos[0]?.photo_url) || u.avatar || '';
+          const rawPhotos = ensureArray(u.photos?.map(p => (typeof p === 'string' ? p : (p ? (p.photo_url || p.uri) : null))).filter(Boolean));
+          if (rawAvatar && !rawPhotos.includes(rawAvatar)) rawPhotos.unshift(rawAvatar);
+          const formattedPhotos = rawPhotos.map(p => formatImageUrl(p)).filter(Boolean);
+
+          return {
+            id: s.id,
+            user_id: s.user_id || u.id,
+            name: s.name || u.name,
+            display_name: s.display_name || u.display_name || u.name,
+            age: u.age || 24,
+            is_verified: u.is_verified,
+            isVerified: u.is_verified,
+            subscription_plan: u.subscription_plan,
+            user: u,
+            job: u.job || 'Member',
+            city: u.city || 'Nearby',
+            image: formatImageUrl(rawAvatar),
+            images: formattedPhotos.length > 0 ? formattedPhotos : ['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600'],
+            interests: ensureArray(u.interests, ['Travel', 'Music', 'Photography']),
+            likedAt: s.date_sent || 'Recently',
+            dateSent: s.date_sent || 'Recently',
+            bio: u.bio || 'Interested in connecting!',
+            type: s.type, // 'like' or 'super_like'
+            status: s.request_status || 'pending',
+            timestamp: s.timestamp || 0,
+          };
+        });
+        setSentRequests(formatted);
+      }
+    } catch (err) {
+      console.warn('Load sent requests error:', err?.message);
+    } finally {
+      setSentLoading(false);
+    }
+  };
+
   const sortRequestsList = (list) => {
     return [...list].sort((a, b) => {
       const aPending = (a.status === 'pending');
@@ -278,12 +303,17 @@ export default function RequestsScreen() {
   useFocusEffect(
     useCallback(() => {
       loadRequests(false);
+      loadSentRequests(false);
 
       const interval = setInterval(() => {
         loadRequests(true);
+        loadSentRequests(true);
       }, 8000);
 
-      const unsubEvent = eventEmitter.on(EVENTS.REQUEST_UPDATED, () => loadRequests(true));
+      const unsubEvent = eventEmitter.on(EVENTS.REQUEST_UPDATED, () => {
+        loadRequests(true);
+        loadSentRequests(true);
+      });
 
       return () => {
         clearInterval(interval);
@@ -353,8 +383,26 @@ export default function RequestsScreen() {
   const openChatForProfile = (item) => {
     if (!item) return;
     const rawId = item.id;
-    const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '') : rawId);
+    const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '').replace('sent_swipe_', '') : rawId);
     navigation.navigate('ChatDetail', { userId: targetUserId });
+  };
+
+  const handleCancelSentRequest = async (item) => {
+    if (!item) return;
+    const targetUserId = item.user_id || (item.user && item.user.id);
+    if (!targetUserId) return;
+
+    // Optimistically remove from sent list
+    setSentRequests(prev => prev.filter(s => s.id !== item.id));
+
+    try {
+      await apiCancelSentRequest(targetUserId);
+      eventEmitter.emit(EVENTS.REQUEST_UPDATED);
+      eventEmitter.emit(EVENTS.MATCH_UPDATED);
+    } catch (err) {
+      console.warn('Cancel sent request error:', err?.message);
+      loadSentRequests(true);
+    }
   };
 
   const acceptDateProposal = async (item) => {
@@ -428,14 +476,6 @@ export default function RequestsScreen() {
                   {item.dateSent || item.likedAt || 'Recently'}
                 </Text>
               </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{ padding: 10, borderRadius: 20, backgroundColor: 'rgba(255, 55, 95, 0.12)', marginLeft: 8 }}
-              onPress={() => unmatchAndRemove(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={18} color="#FF375F" />
             </TouchableOpacity>
           </View>
         </SwipeableCard>
@@ -659,7 +699,7 @@ export default function RequestsScreen() {
         {showPendingHeader && (
           <View style={styles.sectionHeaderRow}>
             <Ionicons name="time-outline" size={14} color="#F59E0B" style={{ marginRight: 6 }} />
-            <Text style={styles.listSectionTitle}>PENDING REQUESTS ({pendingCount})</Text>
+            <Text style={styles.listSectionTitle}>PENDING REQUESTS</Text>
           </View>
         )}
         {showHandledHeader && (
@@ -669,6 +709,102 @@ export default function RequestsScreen() {
           </View>
         )}
         {cardElement}
+      </View>
+    );
+  };
+
+  const renderSentItem = ({ item }) => {
+    const isSuperlike = item.type === 'super_like';
+    const isMatched = item.status === 'accepted';
+    const isDeclined = item.status === 'declined';
+    const isPending = item.status === 'pending';
+    const sparkColor = isDark ? '#FBBF24' : '#B45309';
+
+    const cardContent = (
+      <TouchableOpacity
+        style={[
+          styles.sentCard,
+          isSuperlike && styles.sentCardSpark,
+          isMatched && styles.sentCardMatched,
+        ]}
+        onPress={() => openProfile(item)}
+        activeOpacity={0.88}
+      >
+        <Image source={{ uri: item.image }} style={[styles.sentAvatar, isSuperlike && styles.sentAvatarSpark]} />
+
+        <View style={styles.sentInfo}>
+          <View style={styles.stripTitleRow}>
+            <Text style={styles.stripName} numberOfLines={1}>
+              {item.name}, {item.age}
+            </Text>
+            {renderVerifiedBadge(item.user || item, 14)}
+          </View>
+
+          {/* Sent Type & Date Row */}
+          <View style={styles.sentTypeRow}>
+            <View style={[styles.sentTypePill, isSuperlike && styles.sentTypePillSpark]}>
+              <Ionicons
+                name={isSuperlike ? 'sparkles' : 'heart'}
+                size={11}
+                color={isSuperlike ? sparkColor : '#FF007F'}
+                style={{ marginRight: 3 }}
+              />
+              <Text style={[styles.sentTypeTxt, isSuperlike && { color: sparkColor }]}>
+                {isSuperlike ? 'Super Spark Sent' : 'Liked'}
+              </Text>
+            </View>
+            <Text style={styles.sentDateTxt}>• {item.dateSent}</Text>
+          </View>
+        </View>
+
+        {/* Status indicator / Chat button */}
+        <View style={styles.sentStatusWrap}>
+          {isMatched ? (
+            <TouchableOpacity
+              style={styles.sentChatBtn}
+              onPress={() => openChatForProfile(item)}
+              activeOpacity={0.85}
+            >
+              <LinearGradient colors={['#00C853', '#00E676']} style={styles.sentChatBtnGrad}>
+                <Ionicons name="chatbubble-ellipses" size={13} color="#FFF" style={{ marginRight: 4 }} />
+                <Text style={styles.sentChatBtnTxt}>Chat</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : isDeclined ? (
+            <View style={styles.declinedPill}>
+              <Text style={styles.declinedPillTxt}>Passed</Text>
+            </View>
+          ) : (
+            <View style={styles.sentPendingPill}>
+              <Ionicons name="time-outline" size={11} color="#F59E0B" style={{ marginRight: 3 }} />
+              <Text style={styles.sentPendingTxt}>Pending</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+
+    // Only PENDING sent requests can be swiped left to cancel!
+    if (isPending) {
+      return (
+        <SwipeableCard
+          key={item.id}
+          itemId={item.id}
+          isSwiped={swipedCardId === item.id}
+          onSwipe={setSwipedCardId}
+          onDelete={() => handleCancelSentRequest(item)}
+          actionText="Cancel"
+          actionIcon="close-circle-outline"
+          actionColors={['#FF375F', '#FF007F']}
+        >
+          {cardContent}
+        </SwipeableCard>
+      );
+    }
+
+    return (
+      <View key={item.id} style={{ marginBottom: 10 }}>
+        {cardContent}
       </View>
     );
   };
@@ -689,38 +825,115 @@ export default function RequestsScreen() {
         {/* Header navigation bar */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>Notifications</Text>
-            <Text style={styles.sub}>{requests.length} notifications</Text>
+            <Text style={styles.title}>Likes & Requests</Text>
+            <Text style={styles.sub}>
+              {activeTab === 'received'
+                ? 'Incoming likes & connections'
+                : 'Profiles you have liked'}
+            </Text>
           </View>
           <TouchableOpacity onPress={() => navigation.navigate('Main', { screen: 'Discover' })} style={styles.bellBtn} activeOpacity={0.75}>
-            <Ionicons name="notifications" size={20} color="#FF007F" />
+            <Ionicons name="sparkles" size={20} color="#FF007F" />
           </TouchableOpacity>
         </View>
 
-        {loading ? (
-          <View style={styles.emptyWrap}>
-            <ActivityIndicator size="large" color="#FF007F" />
-          </View>
-        ) : requests.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <View style={styles.emptyCard}>
-              <Ionicons name="heart-half-outline" size={60} color={theme.textFaint} />
-              <Text style={styles.emptyTitle}>Empty space</Text>
-              <Text style={styles.emptySub}>When someone sends you cosmic likes, they'll appear here</Text>
+        {/* Top Segmented Tab Switcher */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'received' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('received')}
+            activeOpacity={0.8}
+          >
+            {activeTab === 'received' && (
+              <LinearGradient
+                colors={['rgba(255, 0, 127, 0.18)', 'rgba(112, 0, 255, 0.18)']}
+                style={StyleSheet.absoluteFillObject}
+                borderRadius={14}
+              />
+            )}
+            <Ionicons
+              name="heart"
+              size={15}
+              color={activeTab === 'received' ? '#FF007F' : theme.textSec}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.tabBtnText, activeTab === 'received' && styles.tabBtnTextActive]}>
+              Received
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabBtn, activeTab === 'sent' && styles.tabBtnActive]}
+            onPress={() => setActiveTab('sent')}
+            activeOpacity={0.8}
+          >
+            {activeTab === 'sent' && (
+              <LinearGradient
+                colors={['rgba(0, 114, 227, 0.18)', 'rgba(112, 0, 255, 0.18)']}
+                style={StyleSheet.absoluteFillObject}
+                borderRadius={14}
+              />
+            )}
+            <Ionicons
+              name="paper-plane"
+              size={14}
+              color={activeTab === 'sent' ? '#0072E3' : theme.textSec}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.tabBtnText, activeTab === 'sent' && styles.tabBtnTextActive]}>
+              Sent Likes
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'received' ? (
+          loading ? (
+            <View style={styles.emptyWrap}>
+              <ActivityIndicator size="large" color="#FF007F" />
             </View>
-          </View>
+          ) : requests.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyCard}>
+                <Ionicons name="heart-half-outline" size={60} color={theme.textFaint} />
+                <Text style={styles.emptyTitle}>Empty space</Text>
+                <Text style={styles.emptySub}>When someone sends you cosmic likes, they'll appear here</Text>
+              </View>
+            </View>
+          ) : (
+            <Pressable style={{ flex: 1 }} onPress={() => { if (swipedCardId) setSwipedCardId(null); }}>
+              <FlatList
+                data={requests}
+                renderItem={renderAdmirer}
+                keyExtractor={i => i.id}
+                ListHeaderComponent={renderHeader}
+                contentContainerStyle={styles.list}
+                showsVerticalScrollIndicator={false}
+                onScrollBeginDrag={() => { if (swipedCardId) setSwipedCardId(null); }}
+              />
+            </Pressable>
+          )
         ) : (
-          <Pressable style={{ flex: 1 }} onPress={() => { if (swipedCardId) setSwipedCardId(null); }}>
+          sentLoading ? (
+            <View style={styles.emptyWrap}>
+              <ActivityIndicator size="large" color="#0072E3" />
+            </View>
+          ) : sentRequests.length === 0 ? (
+            <View style={styles.emptyWrap}>
+              <View style={styles.emptyCard}>
+                <Ionicons name="paper-plane-outline" size={60} color={theme.textFaint} />
+                <Text style={styles.emptyTitle}>No Sent Likes Yet</Text>
+                <Text style={styles.emptySub}>Profiles you like or super-spark in Discover will show up here</Text>
+              </View>
+            </View>
+          ) : (
             <FlatList
-              data={requests}
-              renderItem={renderAdmirer}
+              data={sentRequests}
+              renderItem={renderSentItem}
               keyExtractor={i => i.id}
-              ListHeaderComponent={renderHeader}
               contentContainerStyle={styles.list}
               showsVerticalScrollIndicator={false}
-              onScrollBeginDrag={() => { if (swipedCardId) setSwipedCardId(null); }}
             />
-          </Pressable>
+          )
         )}
       </SafeAreaView>
 
@@ -823,9 +1036,185 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     paddingBottom: 110,
   },
 
-  // ── Boost Section at the Top ──────────────────────────────────────────
-  boostSection: {
-    marginBottom: 26,
+  // ── Top Segmented Tab Switcher ──────────────────────────────────────
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 4,
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  tabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 14,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  tabBtnActive: {
+    backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.25 : 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tabBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.textSec,
+  },
+  tabBtnTextActive: {
+    color: theme.textPrimary,
+    fontWeight: '800',
+  },
+  tabBadge: {
+    marginLeft: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    backgroundColor: 'rgba(142, 142, 147, 0.25)',
+    minWidth: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: '#FF007F',
+  },
+  tabBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  // ── Sent Likes Cards Styles ─────────────────────────────────────────
+  sentCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.glass,
+    borderRadius: 22,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+  },
+  sentCardSpark: {
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.55)' : 'rgba(217, 119, 6, 0.35)',
+    borderWidth: 1.5,
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.10)' : 'rgba(245, 158, 11, 0.05)',
+  },
+  sentCardMatched: {
+    borderColor: '#00C853',
+    borderWidth: 1.5,
+    backgroundColor: isDark ? 'rgba(0, 200, 83, 0.08)' : 'rgba(0, 200, 83, 0.05)',
+  },
+  sentAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  sentAvatarSpark: {
+    borderWidth: 2,
+    borderColor: isDark ? '#F59E0B' : '#D97706',
+  },
+  sentInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+    justifyContent: 'center',
+  },
+  sentTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 4,
+  },
+  sentTypePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 0, 127, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 127, 0.25)',
+  },
+  sentTypePillSpark: {
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.18)' : 'rgba(217, 119, 6, 0.12)',
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.45)' : 'rgba(217, 119, 6, 0.30)',
+  },
+  sentTypeTxt: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#FF007F',
+  },
+  sentDateTxt: {
+    fontSize: 11,
+    color: theme.textSec,
+    fontWeight: '500',
+  },
+  sentStatusWrap: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  sentChatBtn: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#00C853',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+  },
+  sentChatBtnGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  sentChatBtnTxt: {
+    color: '#FFF',
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  sentPendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  sentPendingTxt: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  cancelSentBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 55, 95, 0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 55, 95, 0.25)',
+  },
+  cancelSentBtnTxt: {
+    color: '#FF375F',
+    fontSize: 10.5,
+    fontWeight: '800',
   },
   boostHeader: {
     flexDirection: 'row',
@@ -904,7 +1293,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   cardStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.glass,
+    backgroundColor: isDark ? '#14141E' : '#FFFFFF',
     borderRadius: 22,
     padding: 12,
     marginBottom: 10,
@@ -914,7 +1303,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: isDark ? 0.25 : 0.06,
     shadowRadius: 6,
   },
   cardStripBoosted: {
@@ -1079,7 +1468,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
 
   // Date Proposal Card Styles
   dateProposalCard: {
-    backgroundColor: theme.glass,
+    backgroundColor: isDark ? '#14141E' : '#FFFFFF',
     borderRadius: 24,
     padding: 16,
     marginBottom: 14,
@@ -1089,7 +1478,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     position: 'relative',
     shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: isDark ? 0.35 : 0.15,
+    shadowOpacity: isDark ? 0.35 : 0.12,
     shadowRadius: 10,
   },
   dateProposalHeader: {

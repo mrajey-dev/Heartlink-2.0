@@ -11,11 +11,12 @@ export const formatName = (name, maxLength = 22) => {
 };
 
 export const getVerifiedBadgeInfo = (item) => {
-  if (!item) return { isVerified: false, color: '#0095F6', planName: 'Basic' };
+  if (!item) return { isVerified: false, iconName: 'shield-checkmark', iconLibrary: 'Ionicons', color: '#2B7FFF', planName: 'None' };
 
   const userObj = item.user || item;
 
-  const isVerified = userObj.is_verified === true ||
+  const isVerified =
+    userObj.is_verified === true ||
     userObj.is_verified === 1 ||
     userObj.is_verified === '1' ||
     userObj.is_verified === 'true' ||
@@ -32,37 +33,88 @@ export const getVerifiedBadgeInfo = (item) => {
     item.isVerified === '1' ||
     item.isVerified === 'true';
 
-  if (!isVerified) {
-    return { isVerified: false, color: '#0095F6', planName: 'None' };
-  }
-
   const rawPlan = (
     userObj.subscription_plan ||
     userObj.plan_name ||
     userObj.activeSubscription?.plan_name ||
+    userObj.active_subscription?.plan_name ||
     item.subscription_plan ||
     item.plan_name ||
+    item.activeSubscription?.plan_name ||
+    item.active_subscription?.plan_name ||
     ''
   ).toString().toLowerCase();
 
-  if (rawPlan.includes('premium') || userObj.isGoldenTick === true || item.isGoldenTick === true) {
-    return { isVerified: true, color: '#B8860B', planName: 'Premium' }; // Dark Golden for Premium
-  } else if (rawPlan.includes('plus')) {
-    return { isVerified: true, color: '#9D4EDD', planName: 'Plus' }; // Purple for Plus
-  } else {
-    return { isVerified: true, color: '#0095F6', planName: 'Basic' }; // Blue for Basic
+  const isPremiumPlan =
+    rawPlan.includes('premium') ||
+    rawPlan.includes('black') ||
+    rawPlan.includes('platinum') ||
+    userObj.isGoldenTick === true ||
+    item.isGoldenTick === true;
+
+  const isPlusPlan =
+    rawPlan.includes('plus') ||
+    rawPlan.includes('access') ||
+    rawPlan.includes('gold');
+
+  // Tier badges for users who purchased paid plans:
+  if (isPremiumPlan) {
+    return {
+      isVerified: true,
+      iconName: 'check-decagram',
+      iconLibrary: 'MaterialCommunityIcons',
+      color: '#B8860B',
+      planName: 'Premium',
+    };
+  } else if (isPlusPlan) {
+    return {
+      isVerified: true,
+      iconName: 'check-decagram',
+      iconLibrary: 'MaterialCommunityIcons',
+      color: '#9D4EDD',
+      planName: 'Plus',
+    };
+  } else if (isVerified) {
+    // Only Aadhaar verified (Free/Basic user who completed Aadhaar identity verification):
+    // Use official Blue Shield Checkmark badge!
+    return {
+      isVerified: true,
+      iconName: 'shield-checkmark',
+      iconLibrary: 'Ionicons',
+      color: '#2B7FFF',
+      planName: 'Aadhaar Verified',
+    };
   }
+
+  return {
+    isVerified: false,
+    iconName: 'shield-checkmark',
+    iconLibrary: 'Ionicons',
+    color: '#2B7FFF',
+    planName: 'None',
+  };
 };
 
 export const renderVerifiedBadge = (item, size = 16, style = {}) => {
-  const { isVerified, color } = getVerifiedBadgeInfo(item);
-  if (!isVerified) return null;
+  const badgeInfo = getVerifiedBadgeInfo(item);
+  if (!badgeInfo.isVerified) return null;
+
+  if (badgeInfo.iconLibrary === 'Ionicons') {
+    return (
+      <Ionicons
+        name={badgeInfo.iconName}
+        size={size}
+        color={badgeInfo.color}
+        style={[{ marginLeft: 4, alignSelf: 'center' }, style]}
+      />
+    );
+  }
 
   return (
     <MaterialCommunityIcons
-      name="check-decagram"
+      name={badgeInfo.iconName}
       size={size}
-      color={color}
+      color={badgeInfo.color}
       style={[{ marginLeft: 4, alignSelf: 'center' }, style]}
     />
   );

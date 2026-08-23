@@ -60,6 +60,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/matches',                         [MatchController::class, 'index']);
         Route::post('/matches/unmatch',                [MatchController::class, 'unmatch']);
         Route::get('/requests',                        [MatchController::class, 'requests']);
+        Route::get('/sent-requests',                   [MatchController::class, 'sentRequests']);
+        Route::post('/sent-requests/cancel',            [MatchController::class, 'cancelSentRequest']);
         Route::post('/requests/{userId}/accept',       [RequestController::class, 'accept']);
         Route::post('/requests/{userId}/decline',      [RequestController::class, 'decline']);
 

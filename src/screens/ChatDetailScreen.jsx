@@ -451,8 +451,8 @@ export default function ChatDetailScreen() {
 
 
   const handleAddEmoji = (emoji) => {
-    if (input.length >= 50) return;
-    setInput((prev) => (prev + emoji).slice(0, 50));
+    if (input.length >= 2000) return;
+    setInput((prev) => (prev + emoji).slice(0, 2000));
   };
 
   // Custom toast notification state
@@ -862,8 +862,8 @@ export default function ChatDetailScreen() {
     const textToSend = input.trim();
     if (!textToSend || isSending) return;
 
-    if (textToSend.length > 50) {
-      triggerCustomToast('Message limit is 50 characters');
+    if (textToSend.length > 2000) {
+      triggerCustomToast('Message limit is 2000 characters');
       return;
     }
 
@@ -978,7 +978,7 @@ export default function ChatDetailScreen() {
 
   // Handle input change
   const handleInputChange = (text) => {
-    setInput(text.slice(0, 50));
+    setInput(text.slice(0, 2000));
   };
 
   // Input timeout ref
@@ -1480,7 +1480,7 @@ export default function ChatDetailScreen() {
                       placeholderTextColor={theme.textFaint}
                       value={input}
                       onChangeText={handleInputChange}
-                      maxLength={50}
+                      maxLength={2000}
                       multiline
                     />
                   </View>

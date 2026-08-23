@@ -53,6 +53,11 @@ class ChatController extends Controller
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
+        \App\Models\Notification::where('user_id', $authId)
+            ->where('from_user_id', $otherUserId)
+            ->where('is_read', false)
+            ->update(['is_read' => true]);
+
         $otherUser = \App\Models\User::with('photos')->find($otherUserId);
 
         // Check persistent male free message counter (unlimited if user bought ANY subscription plan)
@@ -93,7 +98,9 @@ class ChatController extends Controller
         $blockedIds = UserBlock::where('blocker_id', $authId)
             ->pluck('blocked_user_id')
             ->merge(UserBlock::where('blocked_user_id', $authId)->pluck('blocker_id'))
-            ->unique();
+            ->unique()
+            ->filter()
+            ->values();
 
         $matches = UserMatch::where(function ($q) use ($authId) {
                 $q->where('user_1_id', $authId)->orWhere('user_2_id', $authId);
@@ -103,10 +110,10 @@ class ChatController extends Controller
             ->with(['user1.photos', 'user2.photos'])
             ->get();
 
-        $conversations = $matches->map(function ($match) use ($authId) {
+        $conversations = $matches->map(function ($match) use ($authId, $blockedIds) {
             $otherUser = $match->user_1_id === $authId ? $match->user2 : $match->user1;
 
-            if (!$otherUser) return null;
+            if (!$otherUser || $blockedIds->contains($otherUser->id)) return null;
 
             $lastMsg = Message::where(function ($q) use ($authId, $otherUser) {
                 $q->where('sender_id', $authId)
@@ -159,7 +166,7 @@ class ChatController extends Controller
     {
         $validated = $request->validate([
            'receiver_id'     => 'required|exists:users,id',
-            'message'         => 'required|string|max:50',
+            'message'         => 'required|string|max:2000',
             'reply_to_id'     => 'nullable',
             'reply_to_text'   => 'nullable|string',
             'reply_to_sender' => 'nullable|string',
@@ -222,13 +229,14 @@ class ChatController extends Controller
         $message = Message::create($messageData);
 
         $senderName = $user->display_name ?: $user->name;
+        $notifSnippet = mb_strlen($validated['message']) > 200 ? mb_substr($validated['message'], 0, 197) . '...' : $validated['message'];
 
         // Create database in-app notification record for targeted user
         \App\Models\Notification::create([
             'user_id'      => $receiverId,
             'from_user_id' => $senderId,
             'type'         => 'message',
-            'message'      => "{$senderName}: {$validated['message']}",
+            'message'      => "{$senderName}: {$notifSnippet}",
             'is_read'      => false,
         ]);
 
@@ -236,7 +244,7 @@ class ChatController extends Controller
         ExpoPushService::sendToUser(
             $receiverId,
             $senderName,
-            $validated['message'],
+            $notifSnippet,
             [
                 'screen' => 'ChatDetail',
                 'params' => [
@@ -435,6 +443,19 @@ class ChatController extends Controller
             $q->where('swiper_id', $blockedUserId)->where('swiped_user_id', $blockerId);
         })->delete();
 
+        // Mark all messages and notifications between blocker and blocked user as read
+        Message::where(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('sender_id', $blockerId)->where('receiver_id', $blockedUserId);
+        })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('sender_id', $blockedUserId)->where('receiver_id', $blockerId);
+        })->update(['is_read' => true]);
+
+        \App\Models\Notification::where(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('user_id', $blockerId)->where('from_user_id', $blockedUserId);
+        })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('user_id', $blockedUserId)->where('from_user_id', $blockerId);
+        })->update(['is_read' => true]);
+
         return response()->json([
             'message' => 'User blocked and unmatched successfully',
             'block'   => $block,
@@ -486,20 +507,27 @@ class ChatController extends Controller
         $blockedIds = UserBlock::where('blocker_id', $authId)
             ->pluck('blocked_user_id')
             ->merge(UserBlock::where('blocked_user_id', $authId)->pluck('blocker_id'))
-            ->unique();
-
-        $unreadMessages = Message::where('receiver_id', $authId)
-            ->where('is_read', false)
-            ->where('deleted_by_receiver', false)
-            ->whereNotIn('sender_id', $blockedIds)
-            ->count();
+            ->unique()
+            ->filter()
+            ->values();
 
         $matchedIds = UserMatch::where('user_1_id', $authId)
             ->orWhere('user_2_id', $authId)
             ->get()
             ->flatMap(fn($m) => [$m->user_1_id, $m->user_2_id])
             ->filter(fn($id) => $id !== $authId)
+            ->values()
             ->toArray();
+
+        // Only count unread messages from active matches (never from unmatched or blocked users!)
+        $unreadMessages = empty($matchedIds)
+            ? 0
+            : Message::where('receiver_id', $authId)
+                ->where('is_read', false)
+                ->where('deleted_by_receiver', false)
+                ->whereNotIn('sender_id', $blockedIds)
+                ->whereIn('sender_id', $matchedIds)
+                ->count();
 
         $pendingRequests = Swipe::where('swiped_user_id', $authId)
             ->whereIn('type', ['like', 'super_like'])

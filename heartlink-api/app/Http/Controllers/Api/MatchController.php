@@ -113,6 +113,13 @@ class MatchController extends Controller
             $q->where('proposer_id', $otherId)->where('partner_id', $userId);
         })->delete();
 
+        // 5. Mark all messages between both users as read
+        \App\Models\Message::where(function ($q) use ($userId, $otherId) {
+            $q->where('sender_id', $userId)->where('receiver_id', $otherId);
+        })->orWhere(function ($q) use ($userId, $otherId) {
+            $q->where('sender_id', $otherId)->where('receiver_id', $userId);
+        })->update(['is_read' => true]);
+
         return response()->json([
             'message' => 'Unmatched and deleted successfully',
         ]);
@@ -363,6 +370,107 @@ class MatchController extends Controller
 
         return response()->json([
             'requests' => $merged,
+        ]);
+    }
+
+    public function sentRequests(Request $request)
+    {
+        $userId = $request->user()->id;
+
+        $blockedIds = UserBlock::where('blocker_id', $userId)
+            ->pluck('blocked_user_id')
+            ->merge(UserBlock::where('blocked_user_id', $userId)->pluck('blocker_id'))
+            ->filter()
+            ->unique()
+            ->toArray();
+
+        $matchedIds = UserMatch::where('user_1_id', $userId)
+            ->pluck('user_2_id')
+            ->merge(UserMatch::where('user_2_id', $userId)->pluck('user_1_id'))
+            ->filter(fn($id) => $id !== $userId)
+            ->unique()
+            ->toArray();
+
+        // All likes / superlikes sent by this user
+        $sentSwipes = Swipe::where('swiper_id', $userId)
+            ->whereIn('type', ['like', 'super_like'])
+            ->whereNotIn('swiped_user_id', $blockedIds)
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $targetUserIds = $sentSwipes->pluck('swiped_user_id')->unique()->values();
+
+        $usersMap = User::whereIn('id', $targetUserIds)
+            ->with('photos')
+            ->get()
+            ->keyBy('id');
+
+        $list = $sentSwipes->map(function ($swipe) use ($usersMap, $matchedIds) {
+            $targetUser = $usersMap->get($swipe->swiped_user_id);
+            if (!$targetUser) return null;
+
+            $isMatched = in_array($targetUser->id, $matchedIds);
+            $isDeclined = (bool) ($swipe->is_declined_by_receiver ?? false);
+
+            $status = $isMatched ? 'accepted' : ($isDeclined ? 'declined' : 'pending');
+
+            return [
+                'id'             => 'sent_swipe_' . $swipe->id,
+                'user_id'        => $targetUser->id,
+                'swipe_id'       => $swipe->id,
+                'type'           => $swipe->type, // 'like' or 'super_like'
+                'request_status' => $status,
+                'name'           => $targetUser->name,
+                'display_name'   => $targetUser->display_name ?: $targetUser->name,
+                'avatar'         => $targetUser->avatar ?: ($targetUser->photos[0]->photo_url ?? null),
+                'user'           => $targetUser,
+                'date_sent'      => $swipe->created_at ? $swipe->created_at->diffForHumans() : 'Recently',
+                'timestamp'      => $swipe->created_at ? $swipe->created_at->timestamp : time(),
+            ];
+        })->filter()->values();
+
+        return response()->json([
+            'sent_requests'    => $list,
+            'total_sent'       => $list->count(),
+            'total_likes'      => $list->where('type', 'like')->count(),
+            'total_superlikes' => $list->where('type', 'super_like')->count(),
+        ]);
+    }
+
+    public function cancelSentRequest(Request $request)
+    {
+        $rawId = $request->input('target_user_id', $request->input('user_id'));
+        if ($rawId !== null) {
+            $rawId = (int) preg_replace('/[^0-9]/', '', (string) $rawId);
+        }
+
+        $userId = $request->user()->id;
+        $targetUserId = (int) $rawId;
+
+        if (!$targetUserId) {
+            return response()->json(['error' => 'Valid target user ID required'], 422);
+        }
+
+        // 1. Delete swipe record from swiper to target (allowing them to re-appear in Discover)
+        Swipe::where('swiper_id', $userId)
+            ->where('swiped_user_id', $targetUserId)
+            ->delete();
+
+        // 2. Delete notifications sent to target user
+        \App\Models\Notification::where('user_id', $targetUserId)
+            ->where('from_user_id', $userId)
+            ->whereIn('type', ['match_request', 'like', 'super_like', 'spark'])
+            ->delete();
+
+        // 3. Remove match record if existing
+        UserMatch::where(function ($q) use ($userId, $targetUserId) {
+            $q->where('user_1_id', $userId)->where('user_2_id', $targetUserId);
+        })->orWhere(function ($q) use ($userId, $targetUserId) {
+            $q->where('user_1_id', $targetUserId)->where('user_2_id', $userId);
+        })->delete();
+
+        return response()->json([
+            'message' => 'Sent request cancelled successfully. Profile will appear in Discover again.',
         ]);
     }
 }

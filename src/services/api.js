@@ -314,6 +314,11 @@ export const apiSwipeUser = (swipedUserId, type) => apiFetch('/discover/swipe', 
 // ─── Matches & Requests API ──────────────────────────────────────────
 export const apiGetMatches = (search = '') => apiFetch(search ? `/matches?q=${encodeURIComponent(search)}` : '/matches');
 export const apiGetRequests = () => apiFetch('/requests');
+export const apiGetSentRequests = () => apiFetch('/sent-requests');
+export const apiCancelSentRequest = (targetUserId) => apiFetch('/sent-requests/cancel', {
+  method: 'POST',
+  body: { target_user_id: targetUserId },
+});
 export const apiAcceptRequest = (userId) => apiFetch(`/requests/${userId}/accept`, { method: 'POST' });
 export const apiDeclineRequest = (userId) => apiFetch(`/requests/${userId}/decline`, { method: 'POST' });
 

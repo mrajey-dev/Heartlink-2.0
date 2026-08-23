@@ -271,14 +271,14 @@ export default function AadhaarVerificationModal({
           </View>
 
           {isInitialPitchStep ? (
-            // ─── STEP 1: WOW Benefits & Identity Pitch Modal ─────────────────
+            // ─── STEP 1: Official Aadhaar e-KYC Verification Modal ─────────────────
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollWrapPitch}>
               {/* Header Close Row */}
               <View style={styles.pitchHeaderRow}>
                 <View style={styles.verifyPillBadge}>
-                  <LinearGradient colors={['rgba(0, 114, 227, 0.18)', 'rgba(112, 0, 255, 0.18)']} style={styles.pillGrad}>
-                    <Ionicons name="shield-checkmark" size={13} color="#3897F0" style={{ marginRight: 5 }} />
-                    <Text style={styles.verifyPillTxt}>VERIFIED PROFILE IDENTITY</Text>
+                  <LinearGradient colors={['rgba(0, 114, 227, 0.18)', 'rgba(0, 200, 83, 0.18)']} style={styles.pillGrad}>
+                    <Ionicons name="shield-checkmark" size={13} color="#00C853" style={{ marginRight: 5 }} />
+                    <Text style={styles.verifyPillTxt}>GOVERNMENT RECOGNIZED e-KYC</Text>
                   </LinearGradient>
                 </View>
                 <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -286,101 +286,97 @@ export default function AadhaarVerificationModal({
                 </TouchableOpacity>
               </View>
 
-              {/* Central Glowing Hero Icon */}
+              {/* Central Official Shield Hero Icon */}
               <View style={styles.heroIconWrapper}>
                 <View style={styles.heroOuterGlow}>
-                  <LinearGradient colors={['#3897F0', '#0072E3']} style={styles.heroIconCircle}>
-                    <MaterialCommunityIcons name="check-decagram" size={40} color="#FFFFFF" />
+                  <LinearGradient colors={['#0072E3', '#00C853']} style={styles.heroIconCircle}>
+                    <Ionicons name="shield-checkmark" size={42} color="#FFFFFF" />
                   </LinearGradient>
                 </View>
                 <View style={styles.sparkleBadge}>
-                  <Ionicons name="sparkles" size={14} color="#FFD700" />
+                  <Ionicons name="lock-closed" size={13} color="#FFD700" />
                 </View>
               </View>
 
               {/* Title & Headline */}
               <Text style={[styles.pitchTitle, { color: theme.textPrimary }]}>
-                Verify Your Profile Identity
+                Aadhaar Identity Verification
               </Text>
               <Text style={[styles.pitchSubtitle, { color: theme.textSec }]}>
-                Unlock Instagram-style checkmark status, gain maximum trust, and supercharge your matching power on HeartLink!
+                Authenticate your profile via secure UIDAI Aadhaar e-KYC. Gain instant trust, guarantee authenticity, and unlock the official Verified Shield badge!
               </Text>
 
-              {/* ─── All User Benefits Section (WOW Feature Cards Grid) ───────── */}
+              {/* ─── Aadhaar Verification Benefits (Government e-KYC Theme) ───────── */}
               <View style={styles.benefitsGrid}>
 
-                {/* Benefit 1: Instagram Style Checkmark Tiers */}
-                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,114,227,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,114,227,0.12)' }]}>
-                  <LinearGradient colors={['#0072E3', '#3897F0']} style={styles.benefitIconBox}>
+                {/* Benefit 1: 100% Authentic Identity */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,200,83,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,200,83,0.18)' }]}>
+                  <LinearGradient colors={['#00C853', '#00E676']} style={styles.benefitIconBox}>
                     <MaterialCommunityIcons name="check-decagram" size={22} color="#FFF" />
                   </LinearGradient>
                   <View style={styles.benefitTextWrap}>
-                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Instagram-Style Badge Tiers</Text>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>100% Authentic Profile Badge</Text>
                     <Text style={[styles.benefitSub, { color: theme.textSec }]}>
-                      💙 Blue tick for Basic • 💜 Purple tick for Plus • 👑 Dark Golden tick for Premium!
+                      Get the official Verified Shield checkmark proving you are a 100% verified, genuine person.
                     </Text>
                   </View>
                 </View>
 
-                {/* Benefit 2: 1 Free Monthly Boost */}
-                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,0,127,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,0,127,0.12)' }]}>
-                  <LinearGradient colors={['#FF007F', '#FF5252']} style={styles.benefitIconBox}>
-                    <Ionicons name="flash" size={20} color="#FFF" />
+                {/* Benefit 2: Anti-Fraud & Community Trust */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,114,227,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,114,227,0.18)' }]}>
+                  <LinearGradient colors={['#0072E3', '#3897F0']} style={styles.benefitIconBox}>
+                    <Ionicons name="shield-checkmark" size={20} color="#FFF" />
                   </LinearGradient>
                   <View style={styles.benefitTextWrap}>
-                    <View style={styles.tagRow}>
-                      <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>1 Free Monthly Boost</Text>
-                      <View style={styles.freeBadge}><Text style={styles.freeBadgeTxt}>FREE</Text></View>
-                    </View>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Fraud & Bot Protection</Text>
                     <Text style={[styles.benefitSub, { color: theme.textSec }]}>
-                      Get 1 FREE Profile Boost every single month to reach #1 in Discover feeds!
+                      Eliminates fake accounts, bots, and impersonators for a safe dating environment.
                     </Text>
                   </View>
                 </View>
 
-                {/* Benefit 3: 3x More Matches & Trust Factor */}
-                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,149,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,149,0,0.12)' }]}>
+                {/* Benefit 3: Higher Trust & More Connections */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,149,0,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,149,0,0.18)' }]}>
                   <LinearGradient colors={['#FF9500', '#FF2D55']} style={styles.benefitIconBox}>
                     <Ionicons name="heart-circle" size={20} color="#FFF" />
                   </LinearGradient>
                   <View style={styles.benefitTextWrap}>
-                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>3x Matches & High Trust</Text>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Maximum Trust & Match Priority</Text>
                     <Text style={[styles.benefitSub, { color: theme.textSec }]}>
-                      Verified profiles build instant trust and get up to 300% more likes & replies.
+                      Aadhaar verified profiles receive up to 3x higher response rates and instant mutual trust.
                     </Text>
                   </View>
                 </View>
 
-                {/* Benefit 4: Priority Feed Placement */}
-                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(112,0,255,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(112,0,255,0.12)' }]}>
+                {/* Benefit 4: Encrypted UIDAI Privacy */}
+                <View style={[styles.benefitCard, { backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(112,0,255,0.04)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(112,0,255,0.18)' }]}>
                   <LinearGradient colors={['#7000FF', '#9D4EDD']} style={styles.benefitIconBox}>
-                    <Ionicons name="trending-up" size={20} color="#FFF" />
+                    <Ionicons name="lock-closed" size={20} color="#FFF" />
                   </LinearGradient>
                   <View style={styles.benefitTextWrap}>
-                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>Priority Feed Status</Text>
+                    <Text style={[styles.benefitTitle, { color: theme.textPrimary }]}>100% Encrypted & Private</Text>
                     <Text style={[styles.benefitSub, { color: theme.textSec }]}>
-                      Top rank placement in Discover stacks, search filters & match algorithms.
+                      Verification is processed strictly via 256-bit UIDAI protocols. Your data is never shared.
                     </Text>
                   </View>
                 </View>
 
               </View>
 
-              {/* ─── Price Tag & Value Offer Banner ──────────────────────────── */}
+              {/* ─── Official Verification Processing Notice ──────────────────── */}
               <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[styles.offerPrice, { color: '#00C853' }]}>₹99</Text>
-                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14) }}>₹499</Text>
-                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • 80% Off</Text>
+                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • One-Time e-KYC Fee</Text>
                   </View>
                   <Text style={[styles.offerDesc, { color: theme.textSec }]}>
-                    One-time identity verification fee • Includes 1 Free Profile Boost!
+                    Official one-time Aadhaar identity verification and background validation.
                   </Text>
                 </View>
                 <View style={[styles.valueTag, { backgroundColor: '#00C853' }]}>
-                  <Ionicons name="sparkles" size={13} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.valueTagTxt}>SPECIAL OFFER</Text>
+                  <Ionicons name="shield-checkmark" size={13} color="#FFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.valueTagTxt}>UIDAI VERIFIED</Text>
                 </View>
               </View>
 
@@ -392,13 +388,13 @@ export default function AadhaarVerificationModal({
                   activeOpacity={0.88}
                 >
                   <LinearGradient
-                    colors={['#00C853', '#0072E3', '#7000FF']}
+                    colors={['#00C853', '#0072E3', '#005bb5']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.gradCtaBtn}
                   >
                     <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.gradCtaBtnTxt}>Verify Profile Identity (₹99)</Text>
+                    <Text style={styles.gradCtaBtnTxt}>Proceed to Aadhaar e-KYC (₹99)</Text>
                   </LinearGradient>
                 </TouchableOpacity>
 
@@ -414,7 +410,7 @@ export default function AadhaarVerificationModal({
               <View style={styles.securityFooter}>
                 <Ionicons name="lock-closed-outline" size={12} color={theme.textFaint} style={{ marginRight: 4 }} />
                 <Text style={[styles.securityFooterTxt, { color: theme.textFaint }]}>
-                  Instant 30-sec Aadhaar OTP Verification • 100% Encrypted & Private
+                  UIDAI Certified e-KYC • 100% Encrypted & Safe
                 </Text>
               </View>
 
@@ -490,15 +486,15 @@ export default function AadhaarVerificationModal({
               <View style={[styles.perksActiveBox, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.08)' : 'rgba(0, 200, 83, 0.05)', borderColor: 'rgba(0, 200, 83, 0.25)' }]}>
                 <View style={styles.perkRow}>
                   <MaterialCommunityIcons name="check-decagram" size={16} color="#00C853" style={{ marginRight: 8 }} />
-                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>Instagram-Style Checkmark Badge Active on Profile</Text>
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>Official Verified Identity Badge Active on Profile</Text>
                 </View>
                 <View style={styles.perkRow}>
-                  <Ionicons name="flash" size={16} color="#FF007F" style={{ marginRight: 8 }} />
-                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>1 Free Profile Boost Ready to Use</Text>
+                  <Ionicons name="shield-checkmark" size={16} color="#0072E3" style={{ marginRight: 8 }} />
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>Government Aadhaar e-KYC Authentication Completed</Text>
                 </View>
                 <View style={styles.perkRow}>
-                  <Ionicons name="trending-up" size={16} color="#7000FF" style={{ marginRight: 8 }} />
-                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>3x Match Priority & High Trust Factor Unlocked</Text>
+                  <Ionicons name="trending-up" size={16} color="#00C853" style={{ marginRight: 8 }} />
+                  <Text style={[styles.perkTxt, { color: theme.textPrimary }]}>Maximum Trust Factor & Match Priority Unlocked</Text>
                 </View>
               </View>
 

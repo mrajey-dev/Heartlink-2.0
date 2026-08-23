@@ -289,7 +289,7 @@ export default function SettingsScreen() {
                   {/* {renderVerifiedBadge(user, 17, { marginLeft: 4 })} */}
                 </View>
                 <Text style={styles.verifiedActiveSub}>
-                  Your profile identity is verified! Your Instagram-style checkmark badge ({user?.subscription_plan?.toLowerCase().includes('premium') ? 'Dark Golden' : user?.subscription_plan?.toLowerCase().includes('plus') ? 'Purple' : 'Blue'}) is active on your profile cards.
+                  Your profile identity is verified! Your official checkmark badge ({user?.subscription_plan?.toLowerCase().includes('premium') ? 'Dark Golden' : user?.subscription_plan?.toLowerCase().includes('plus') ? 'Purple' : 'Blue'}) is active on your profile cards.
                 </Text>
               </View>
             </View>

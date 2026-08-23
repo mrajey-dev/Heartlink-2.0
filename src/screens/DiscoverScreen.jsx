@@ -339,15 +339,54 @@ export default function DiscoverScreen() {
     user?.isVerified === 'true';
 
   useEffect(() => {
-    if (!isVerifiedUser) {
-      const timer = setTimeout(() => {
-        setDailyVerifyPromptVisible(true);
-      }, 700);
-      return () => clearTimeout(timer);
-    } else {
-      setDailyVerifyPromptVisible(false);
-    }
-  }, [isVerifiedUser]);
+    let timer;
+    const checkAndShowVerifyPrompt = async () => {
+      if (!user || !user.id || isVerifiedUser) {
+        setDailyVerifyPromptVisible(false);
+        return;
+      }
+
+      try {
+        const storageKey = `@heartlink_verify_popup_shown_${user.id}`;
+
+        // 1. If already shown or dismissed before for this user, do not show again
+        const hasShown = await AsyncStorage.getItem(storageKey);
+        if (hasShown === 'true') {
+          setDailyVerifyPromptVisible(false);
+          return;
+        }
+
+        // 2. Only show within the first 24 hours of account creation
+        if (user.created_at) {
+          const createdAtTime = new Date(user.created_at).getTime();
+          const now = Date.now();
+          if (!isNaN(createdAtTime)) {
+            const hoursSinceCreation = (now - createdAtTime) / (1000 * 60 * 60);
+            if (hoursSinceCreation > 24) {
+              // Account is older than 24 hours, mark as shown so it never prompts
+              await AsyncStorage.setItem(storageKey, 'true').catch(() => { });
+              setDailyVerifyPromptVisible(false);
+              return;
+            }
+          }
+        }
+
+        // Show once after a brief delay
+        timer = setTimeout(async () => {
+          setDailyVerifyPromptVisible(true);
+          await AsyncStorage.setItem(storageKey, 'true').catch(() => { });
+        }, 1000);
+      } catch (err) {
+        console.warn('Verify prompt check error:', err?.message);
+      }
+    };
+
+    checkAndShowVerifyPrompt();
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [user?.id, user?.created_at, isVerifiedUser]);
 
   const [superlikeUpgradeModalVisible, setSuperlikeUpgradeModalVisible] = useState(false);
   const [superlikeModalMessage, setSuperlikeModalMessage] = useState('');
@@ -953,9 +992,12 @@ export default function DiscoverScreen() {
 
       <AadhaarVerificationModal
         visible={aadhaarModalVisible || dailyVerifyPromptVisible}
-        onClose={() => {
+        onClose={async () => {
           setAadhaarModalVisible(false);
           setDailyVerifyPromptVisible(false);
+          if (user?.id) {
+            await AsyncStorage.setItem(`@heartlink_verify_popup_shown_${user.id}`, 'true').catch(() => { });
+          }
         }}
         initialStep="alert"
       />

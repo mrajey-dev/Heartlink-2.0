@@ -5,7 +5,8 @@ import { apiGetConversations, apiGetRequests, apiGetNotifications, apiMarkNotifi
 import { formatImageUrl } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 import MatchModal from '../components/MatchModal';
-import { navigationRef } from '../navigation/navigationRef';
+import { navigationRef, navigate } from '../navigation/navigationRef';
+import { registerForPushNotificationsAsync, displayPhoneNotification, isExpoGo, Notifications } from '../services/pushNotificationService';
 
 const getActiveChatUserId = () => {
   if (navigationRef.isReady()) {
@@ -16,7 +17,6 @@ const getActiveChatUserId = () => {
   }
   return null;
 };
-import { registerForPushNotificationsAsync, isExpoGo, Notifications } from '../services/pushNotificationService';
 
 const NotificationContext = createContext({
   bannerVisible: false,
@@ -43,8 +43,31 @@ export const NotificationProvider = ({ children }) => {
   const isFetchingRef = useRef(false);
 
   const triggerNotification = useCallback((data) => {
+    // 1. Always show custom in-app banner
     setBannerData(data);
     setBannerVisible(true);
+
+    // 2. Trigger native phone notification in standalone/development builds
+    if (!isExpoGo) {
+      const targetScreen =
+        data?.type === 'chat' || data?.type === 'message'
+          ? 'ChatDetail'
+          : (data?.type === 'request' || data?.type === 'date_proposal' || data?.type === 'notification'
+            ? 'Notifications'
+            : 'HomeTabs');
+
+      displayPhoneNotification({
+        title: data?.title || 'HeartLink',
+        body: data?.message || '',
+        data: {
+          screen: targetScreen,
+          params: {
+            userId: data?.userId,
+            user: data?.user,
+          },
+        },
+      });
+    }
   }, []);
 
   const dismissNotification = useCallback(() => {
@@ -127,9 +150,11 @@ export const NotificationProvider = ({ children }) => {
         });
       }
 
-      // 3. Check for Notifications (e.g. request_accepted for original SENDER!)
+      // 3. Check for Notifications (e.g. request_accepted, matches, proposals)
       if (notifRes?.notifications && Array.isArray(notifRes.notifications)) {
-        const unreadNotifs = notifRes.notifications.filter((n) => !n.is_read);
+        const unreadNotifs = notifRes.notifications.filter(
+          (n) => !n.is_read && n.type !== 'message' && n.type !== 'chat'
+        );
 
         unreadNotifs.forEach((notif) => {
           if (!seenNotifIdsRef.current.has(notif.id)) {
@@ -221,24 +246,24 @@ export const NotificationProvider = ({ children }) => {
     const unsubChat = eventEmitter.on(EVENTS.CHAT_UPDATED, checkNotifications);
     const unsubReq = eventEmitter.on(EVENTS.REQUEST_UPDATED, checkNotifications);
 
-    // Expo Push Notification listeners (Only when running in Development / Standalone Build, not Expo Go)
+    // Expo Notification listeners (Handles both local & remote push notification taps)
     let foregroundSub = null;
     let responseSub = null;
 
     if (!isExpoGo && Notifications) {
       try {
         foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
-          console.log('[NotificationContext] Foreground push notification received:', notification);
+          console.log('[NotificationContext] Notification received:', notification);
           checkNotifications();
         });
 
         responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-          console.log('[NotificationContext] Push notification tapped by user:', response);
+          console.log('[NotificationContext] Phone notification tapped by user:', response);
           const data = response?.notification?.request?.content?.data;
           if (data?.screen) {
-            if (data.screen === 'ChatDetail' && data.params?.userId) {
+            if (data.screen === 'ChatDetail' && (data.params?.userId || data.params?.user?.id)) {
               navigate('ChatDetail', {
-                userId: data.params.userId,
+                userId: data.params.userId || data.params.user?.id,
                 user: data.params.user || { id: data.params.userId, name: 'User' },
               });
             } else {
@@ -247,7 +272,7 @@ export const NotificationProvider = ({ children }) => {
           }
         });
       } catch (err) {
-        console.warn('[NotificationContext] Error adding push notification listeners:', err?.message || err);
+        console.warn('[NotificationContext] Error adding notification listeners:', err?.message || err);
       }
     }
 
