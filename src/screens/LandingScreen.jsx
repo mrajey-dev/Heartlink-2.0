@@ -6,19 +6,18 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
+  useWindowDimensions,
   StatusBar,
   FlatList,
   Image,
   Easing,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
-import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
-
-const { width, height } = SCREEN;
+import { scale, verticalScale, fs } from '../utils/responsive';
 
 const SLIDES = [
   {
@@ -80,58 +79,52 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
       return;
     }
 
-    let timer1, timer2, timer3, timer4, timer5, timer6;
+    let isMounted = true;
+    let timer1, timer2, timer3, timer4;
 
     const startChatLoop = () => {
+      if (!isMounted) return;
       setChatStep(0);
       msg1Anim.setValue(0);
       msg2Anim.setValue(0);
       msg3Anim.setValue(0);
 
-      // Step 0: Receiver typing dots (1.2s)
+      // Step 1: Receiver message (1.2s)
       timer1 = setTimeout(() => {
-        // Step 1: Receiver sends "Hey! Up for coffee today? ☕"
+        if (!isMounted) return;
         setChatStep(1);
-        Animated.spring(msg1Anim, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }).start();
+        Animated.timing(msg1Anim, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start();
 
-        // Step 2: Sender typing dots (1.2s)
+        // Step 2: Sender message (1.8s)
         timer2 = setTimeout(() => {
-          setChatStep(2);
+          if (!isMounted) return;
+          setChatStep(3);
+          Animated.timing(msg2Anim, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start();
 
-          // Step 3: Sender sends "I'd love to! Let's pick a spot 🌸"
+          // Step 3: Receiver proposal (1.8s)
           timer3 = setTimeout(() => {
-            setChatStep(3);
-            Animated.spring(msg2Anim, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }).start();
+            if (!isMounted) return;
+            setChatStep(5);
+            Animated.timing(msg3Anim, { toValue: 1, duration: 300, useNativeDriver: Platform.OS !== 'web' }).start();
 
-            // Step 4: Receiver typing dots (1.2s)
+            // Loop restart (4s)
             timer4 = setTimeout(() => {
-              setChatStep(4);
-
-              // Step 5: Receiver sends "Check out the HeartLink Date Planner ✨"
-              timer5 = setTimeout(() => {
-                setChatStep(5);
-                Animated.spring(msg3Anim, { toValue: 1, friction: 6, tension: 50, useNativeDriver: true }).start();
-
-                // Loop pause (3.5s)
-                timer6 = setTimeout(() => {
-                  startChatLoop();
-                }, 3500);
-              }, 1200);
-            }, 1200);
-          }, 1200);
-        }, 1200);
+              if (!isMounted) return;
+              startChatLoop();
+            }, 4000);
+          }, 1800);
+        }, 1800);
       }, 1200);
     };
 
     startChatLoop();
 
     return () => {
+      isMounted = false;
       clearTimeout(timer1);
       clearTimeout(timer2);
       clearTimeout(timer3);
       clearTimeout(timer4);
-      clearTimeout(timer5);
-      clearTimeout(timer6);
     };
   }, [isActive]);
 
@@ -149,7 +142,7 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
             styles.bubbleReceiver,
             {
               opacity: msg1Anim,
-              transform: [{ scale: msg1Anim.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }) }],
+              transform: [{ scale: msg1Anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
             },
           ]}
         >
@@ -173,7 +166,7 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
             styles.bubbleSender,
             {
               opacity: msg2Anim,
-              transform: [{ scale: msg2Anim.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }) }],
+              transform: [{ scale: msg2Anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
             },
           ]}
         >
@@ -188,15 +181,6 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
         </Animated.View>
       )}
 
-      {/* Sender Typing Dots (Step 2) */}
-      {chatStep === 2 && (
-        <View style={[styles.typingBubble, { alignSelf: 'flex-end', backgroundColor: 'rgba(255, 0, 127, 0.18)', marginBottom: 14 }]}>
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim1, backgroundColor: '#FF007F' }]} />
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim2, backgroundColor: '#FF007F' }]} />
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim3, backgroundColor: '#FF007F' }]} />
-        </View>
-      )}
-
       {/* ─── Receiver Message 3 ─── */}
       {chatStep >= 5 && (
         <Animated.View
@@ -204,21 +188,12 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
             styles.bubbleReceiver,
             {
               opacity: msg3Anim,
-              transform: [{ scale: msg3Anim.interpolate({ inputRange: [0, 1], outputRange: [0.75, 1] }) }],
+              transform: [{ scale: msg3Anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
             },
           ]}
         >
           <Text style={styles.bubbleTxtReceiver}>Check out the HeartLink Date Planner ✨</Text>
         </Animated.View>
-      )}
-
-      {/* Receiver Typing Dots (Step 4) */}
-      {chatStep === 4 && (
-        <View style={[styles.typingBubble, { alignSelf: 'flex-start', marginBottom: 14 }]}>
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim1 }]} />
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim2 }]} />
-          <Animated.View style={[styles.typingDot, { opacity: dotAnim3 }]} />
-        </View>
       )}
     </Animated.View>
   );
@@ -226,7 +201,11 @@ function InteractiveChatGraphic({ isActive, floatAnim, dotAnim1, dotAnim2, dotAn
 
 export default function LandingScreen({ navigation }) {
   const { theme, isDark } = useTheme();
-  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const width = windowWidth || 375;
+  const height = windowHeight || 812;
+
+  const styles = useMemo(() => getStyles(theme, isDark, width, height), [theme, isDark, width, height]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
@@ -242,56 +221,49 @@ export default function LandingScreen({ navigation }) {
   const dotAnim3 = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
+    const useNative = Platform.OS !== 'web';
+
     // Floating Cards Loop
-    Animated.loop(
+    const anim1 = Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim1, { toValue: -12, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(floatAnim1, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(floatAnim1, { toValue: -10, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
+        Animated.timing(floatAnim1, { toValue: 0, duration: 2500, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
       ])
-    ).start();
+    );
+    anim1.start();
 
     // Floating Chat Bubbles & Date Card Loop
-    Animated.loop(
+    const anim2 = Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim2, { toValue: 10, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(floatAnim2, { toValue: 0, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(floatAnim2, { toValue: 8, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
+        Animated.timing(floatAnim2, { toValue: 0, duration: 3200, easing: Easing.inOut(Easing.ease), useNativeDriver: useNative }),
       ])
-    ).start();
+    );
+    anim2.start();
 
     // Pulse & Glowing Aura Loop
-    Animated.loop(
+    const anim3 = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.08, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.06, duration: 1500, useNativeDriver: useNative }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: useNative }),
       ])
-    ).start();
+    );
+    anim3.start();
 
-    Animated.loop(
+    const anim4 = Animated.loop(
       Animated.sequence([
-        Animated.timing(auraScale, { toValue: 1.22, duration: 2000, useNativeDriver: true }),
-        Animated.timing(auraScale, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(auraScale, { toValue: 1.15, duration: 2000, useNativeDriver: useNative }),
+        Animated.timing(auraScale, { toValue: 1, duration: 2000, useNativeDriver: useNative }),
       ])
-    ).start();
+    );
+    anim4.start();
 
-    // Typing Dots Animation
-    const createDotAnim = (dotVal, delay) => {
-      return Animated.sequence([
-        Animated.delay(delay),
-        Animated.loop(
-          Animated.sequence([
-            Animated.timing(dotVal, { toValue: 1, duration: 300, useNativeDriver: true }),
-            Animated.timing(dotVal, { toValue: 0.3, duration: 300, useNativeDriver: true }),
-            Animated.delay(300),
-          ])
-        ),
-      ]);
+    return () => {
+      anim1.stop();
+      anim2.stop();
+      anim3.stop();
+      anim4.stop();
     };
-
-    Animated.parallel([
-      createDotAnim(dotAnim1, 0),
-      createDotAnim(dotAnim2, 150),
-      createDotAnim(dotAnim3, 300),
-    ]).start();
   }, []);
 
   const handleScroll = Animated.event(
@@ -299,24 +271,37 @@ export default function LandingScreen({ navigation }) {
     { useNativeDriver: false }
   );
 
-  const handleViewableItemsChanged = useRef(({ viewableItems }) => {
-    if (viewableItems && viewableItems.length > 0) {
-      setCurrentIndex(viewableItems[0].index || 0);
-    }
-  }).current;
-
-  const viewConfig = useRef({ viewAreaCoveragePercentThreshold: 50 }).current;
-
   const goToNextSlide = () => {
     if (currentIndex < SLIDES.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      if (flatListRef.current) {
+        try {
+          flatListRef.current.scrollToIndex({ index: nextIndex, animated: true });
+        } catch (e) {
+          flatListRef.current.scrollToOffset({ offset: nextIndex * width, animated: true });
+        }
+      }
+    }
+  };
+
+  const jumpToSlide = (index) => {
+    if (index >= 0 && index < SLIDES.length) {
+      setCurrentIndex(index);
+      if (flatListRef.current) {
+        try {
+          flatListRef.current.scrollToIndex({ index, animated: true });
+        } catch (e) {
+          flatListRef.current.scrollToOffset({ offset: index * width, animated: true });
+        }
+      }
     }
   };
 
   // --- Render Individual Custom Visual Slide ---
   const renderSlideItem = ({ item, index }) => {
     return (
-      <View style={styles.slideContainer}>
+      <View style={[styles.slideContainer, { width }]}>
         {/* Custom Visual Graphic Header for Each Slide */}
         <View style={styles.visualGraphicWrapper}>
           {item.key === 'matches' && (
@@ -436,7 +421,7 @@ export default function LandingScreen({ navigation }) {
                   </View>
 
                   {/* Accept CTA Button */}
-                  <TouchableOpacity activeOpacity={0.85} style={styles.dateCardAcceptBtn}>
+                  <View style={styles.dateCardAcceptBtn}>
                     <LinearGradient
                       colors={['#FF007F', '#E0006C']}
                       start={{ x: 0, y: 0 }}
@@ -446,7 +431,7 @@ export default function LandingScreen({ navigation }) {
                       <Ionicons name="checkmark-circle" size={18} color="#FFF" style={{ marginRight: 6 }} />
                       <Text style={styles.dateCardAcceptTxt}>Accept Proposal</Text>
                     </LinearGradient>
-                  </TouchableOpacity>
+                  </View>
                 </LinearGradient>
               </View>
             </Animated.View>
@@ -495,8 +480,6 @@ export default function LandingScreen({ navigation }) {
               </View>
             </View>
           )}
-
-
         </View>
 
         {/* Text Copy Section */}
@@ -531,7 +514,7 @@ export default function LandingScreen({ navigation }) {
       </View>
 
       <SafeAreaView style={styles.safeArea}>
-        {/* Top Header Navigation (No Skip Button) */}
+        {/* Top Header Navigation */}
         <View style={styles.headerBar}>
           <View style={styles.brandGroup}>
             <Image
@@ -541,6 +524,14 @@ export default function LandingScreen({ navigation }) {
             />
             <Text style={styles.headerTitle}>HeartLink</Text>
           </View>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Login')}
+            style={styles.headerSignInBtn}
+            activeOpacity={0.75}
+          >
+            <Text style={styles.headerSignInTxt}>Sign In</Text>
+            <Ionicons name="chevron-forward" size={14} color="#FF007F" />
+          </TouchableOpacity>
         </View>
 
         {/* Paging Carousel FlatList */}
@@ -553,43 +544,45 @@ export default function LandingScreen({ navigation }) {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={handleScroll}
-          onViewableItemsChanged={handleViewableItemsChanged}
-          viewabilityConfig={viewConfig}
           scrollEventThrottle={16}
+          onMomentumScrollEnd={(e) => {
+            const offsetX = e.nativeEvent.contentOffset.x;
+            const index = Math.round(offsetX / width);
+            if (index >= 0 && index < SLIDES.length) {
+              setCurrentIndex(index);
+            }
+          }}
+          getItemLayout={(data, index) => ({
+            length: width,
+            offset: width * index,
+            index,
+          })}
           bounces={false}
         />
 
         {/* Bottom Navigation & Actions */}
         <View style={styles.bottomBarContainer}>
-          {/* Animated Indicator Dots */}
+          {/* Animated Interactive Indicator Dots */}
           <View style={styles.dotsRow}>
-            {SLIDES.map((_, idx) => {
-              const inputRange = [(idx - 1) * width, idx * width, (idx + 1) * width];
-              const dotWidth = scrollX.interpolate({
-                inputRange,
-                outputRange: [8, 28, 8],
-                extrapolate: 'clamp',
-              });
-              const dotOpacity = scrollX.interpolate({
-                inputRange,
-                outputRange: [0.3, 1, 0.3],
-                extrapolate: 'clamp',
-              });
-
-              return (
-                <Animated.View
-                  key={idx}
+            {SLIDES.map((_, idx) => (
+              <TouchableOpacity
+                key={idx}
+                onPress={() => jumpToSlide(idx)}
+                activeOpacity={0.7}
+                style={{ padding: 4 }}
+              >
+                <View
                   style={[
                     styles.dot,
                     {
-                      width: dotWidth,
-                      opacity: dotOpacity,
+                      width: idx === currentIndex ? 26 : 8,
+                      opacity: idx === currentIndex ? 1 : 0.4,
                       backgroundColor: idx === currentIndex ? '#FF007F' : (isDark ? '#FFF' : '#000'),
                     },
                   ]}
                 />
-              );
-            })}
+              </TouchableOpacity>
+            ))}
           </View>
 
           {/* Action Control Buttons */}
@@ -662,7 +655,7 @@ export default function LandingScreen({ navigation }) {
   );
 }
 
-const getStyles = (theme, isDark) =>
+const getStyles = (theme, isDark, width, height) =>
   StyleSheet.create({
     container: {
       flex: 1,
@@ -693,7 +686,7 @@ const getStyles = (theme, isDark) =>
     // Header Bar
     headerBar: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 24,
       paddingTop: 8,
@@ -715,10 +708,23 @@ const getStyles = (theme, isDark) =>
       color: isDark ? '#FFFFFF' : '#111827',
       letterSpacing: -0.3,
     },
+    headerSignInBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255, 0, 127, 0.12)' : 'rgba(255, 0, 127, 0.08)',
+      gap: 2,
+    },
+    headerSignInTxt: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#FF007F',
+    },
 
     // Slide Container
     slideContainer: {
-      width: width,
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -727,21 +733,22 @@ const getStyles = (theme, isDark) =>
 
     // Visual Hero Graphic Section
     visualGraphicWrapper: {
-      height: height * 0.44,
+      height: height * 0.42,
+      maxHeight: 340,
       justifyContent: 'center',
       alignItems: 'center',
       width: '100%',
-      marginBottom: 20,
-      paddingTop: 16,
+      marginBottom: 16,
+      paddingTop: 10,
     },
 
-    // Slide 1: 3D Stacked Match Cards Deck (Front Card Tilted Right)
+    // Slide 1: 3D Stacked Match Cards Deck
     cardsDeckContainer: {
-      width: width * 0.76,
-      height: 320,
+      width: Math.min(width * 0.76, 290),
+      height: 300,
       justifyContent: 'center',
       alignItems: 'center',
-      marginTop: 10,
+      marginTop: 6,
     },
     backCardShape2: {
       position: 'absolute',
@@ -809,24 +816,6 @@ const getStyles = (theme, isDark) =>
       fontWeight: '300',
       marginTop: 2,
     },
-    floatingMatchBadge: {
-      position: 'absolute',
-      top: 16,
-      right: 16,
-      borderRadius: 16,
-      overflow: 'hidden',
-    },
-    badgeGrad: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    badgeTxt: {
-      color: '#FFF',
-      fontSize: 12,
-      fontWeight: '800',
-    },
     floatingHeartBtn: {
       position: 'absolute',
       bottom: 16,
@@ -845,7 +834,7 @@ const getStyles = (theme, isDark) =>
 
     // Slide 2: Chat Graphic
     chatGraphicContainer: {
-      width: width * 0.82,
+      width: Math.min(width * 0.82, 320),
       height: 220,
       justifyContent: 'center',
     },
@@ -907,7 +896,7 @@ const getStyles = (theme, isDark) =>
 
     // Slide 3: Dedicated Date Planner Card Graphic
     dateGraphicContainer: {
-      width: width * 0.82,
+      width: Math.min(width * 0.82, 320),
       height: 220,
       justifyContent: 'center',
       alignItems: 'center',
@@ -1012,78 +1001,60 @@ const getStyles = (theme, isDark) =>
       fontSize: 22,
     },
 
-    // Badge Pill Header
-    badgePillContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 0, 127, 0.06)',
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(255, 0, 127, 0.18)',
-      paddingHorizontal: scale(14),
-      paddingVertical: verticalScale(5),
-      borderRadius: scale(20),
-      marginTop: verticalScale(8),
-    },
-    badgePillText: {
-      fontSize: fs(11.5),
-      fontWeight: '700',
-      color: '#FF007F',
-    },
-
     // Text Section
     textSection: {
       alignItems: 'center',
-      maxWidth: width * 0.85,
-      marginTop: verticalScale(14),
+      maxWidth: Math.min(width * 0.88, 380),
+      marginTop: 10,
     },
     titleText: {
-      fontSize: fs(26),
+      fontSize: fs(24),
       fontWeight: '800',
       color: isDark ? '#FFFFFF' : '#111827',
       textAlign: 'center',
-      lineHeight: verticalScale(34),
+      lineHeight: verticalScale(32),
       letterSpacing: -0.4,
     },
     titleHighlightText: {
       color: '#FF007F',
     },
     descriptionText: {
-      fontSize: fs(13.5),
+      fontSize: fs(13),
       fontWeight: '400',
       color: isDark ? '#94A3B8' : '#6B7280',
       textAlign: 'center',
-      marginTop: verticalScale(8),
-      lineHeight: verticalScale(21),
+      marginTop: 6,
+      lineHeight: 20,
     },
 
     // Bottom Controls
     bottomBarContainer: {
-      paddingHorizontal: scale(24),
-      paddingBottom: verticalScale(18),
+      paddingHorizontal: 24,
+      paddingBottom: 16,
     },
     dotsRow: {
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: verticalScale(16),
-      gap: scale(6),
+      marginBottom: 12,
+      gap: 6,
     },
     dot: {
-      height: verticalScale(8),
-      borderRadius: scale(4),
+      height: 8,
+      borderRadius: 4,
     },
     actionsArea: {
-      minHeight: verticalScale(100),
+      minHeight: 90,
       justifyContent: 'center',
     },
     nextCircleRow: {
       alignItems: 'center',
-      marginVertical: verticalScale(8),
+      marginVertical: 4,
     },
     nextCircleBtn: {
-      width: scale(60),
-      height: scale(60),
-      borderRadius: scale(30),
+      width: 58,
+      height: 58,
+      borderRadius: 29,
       elevation: 10,
       shadowColor: '#FF007F',
       shadowOffset: { width: 0, height: 6 },
@@ -1092,7 +1063,7 @@ const getStyles = (theme, isDark) =>
     },
     nextCircleGrad: {
       flex: 1,
-      borderRadius: scale(30),
+      borderRadius: 29,
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1100,34 +1071,34 @@ const getStyles = (theme, isDark) =>
       width: '100%',
     },
     primaryBtnShadow: {
-      borderRadius: scale(16),
+      borderRadius: 16,
       shadowColor: '#FF007F',
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.35,
       shadowRadius: 14,
       elevation: 10,
-      marginBottom: verticalScale(10),
+      marginBottom: 10,
     },
     primaryBtn: {
-      height: verticalScale(50),
-      borderRadius: scale(16),
+      height: 50,
+      borderRadius: 16,
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
     },
     primaryBtnText: {
       color: '#FFFFFF',
-      fontSize: fs(15.5),
+      fontSize: 16,
       fontWeight: '700',
       letterSpacing: 0.2,
     },
     secondaryBtn: {
-      height: verticalScale(50),
-      borderRadius: scale(16),
+      height: 50,
+      borderRadius: 16,
       borderWidth: 1.5,
       borderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(0, 0, 0, 0.15)',
       backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.85)',
-      marginBottom: verticalScale(8),
+      marginBottom: 6,
     },
     secondaryBtnInner: {
       flex: 1,
@@ -1137,16 +1108,16 @@ const getStyles = (theme, isDark) =>
     },
     secondaryBtnText: {
       color: isDark ? '#FFFFFF' : '#111827',
-      fontSize: fs(15.5),
+      fontSize: 16,
       fontWeight: '700',
       letterSpacing: 0.2,
     },
     termsNotice: {
-      fontSize: fs(10.5),
+      fontSize: 11,
       color: isDark ? '#64748B' : '#9CA3AF',
       textAlign: 'center',
-      marginTop: verticalScale(4),
-      lineHeight: verticalScale(15),
+      marginTop: 4,
+      lineHeight: 16,
     },
     termsLink: {
       color: '#FF007F',

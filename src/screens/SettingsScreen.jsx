@@ -460,8 +460,18 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ─── 6. Legal & Privacy ─────────────────────────────────────────── */}
+        {/* ─── 6. Support & Legal ─────────────────────────────────────────── */}
         <View style={styles.sectionCard}>
+          <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('SupportChat')} activeOpacity={0.7}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="headset-outline" size={18} color="#FF007F" style={{ marginRight: 10 }} />
+              <Text style={[styles.menuRowTxt, { fontWeight: '700' }]}>24/7 Customer Support & Help</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
           <TouchableOpacity style={styles.menuRow} onPress={() => setPrivacyModalVisible(true)} activeOpacity={0.7}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Ionicons name="document-text-outline" size={18} color={theme.textPrimary} style={{ marginRight: 10 }} />

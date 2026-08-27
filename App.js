@@ -1,6 +1,6 @@
 // App.js
 import React, { useEffect } from 'react';
-import { Text, TextInput } from 'react-native';
+import { Platform, Text, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Standardize mobile OS font scale cap across entire application
@@ -44,12 +44,14 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Prevent screenshots and screen recording across the entire application
-    ScreenCapture.preventScreenCaptureAsync().catch(err => console.warn('Screen capture prevention error:', err));
+    // Prevent screenshots and screen recording on mobile platforms
+    if (Platform.OS !== 'web') {
+      ScreenCapture.preventScreenCaptureAsync().catch(err => console.warn('Screen capture prevention error:', err));
+    }
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, width: '100%', height: '100%' }}>
       <SafeAreaProvider>
         <AuthProvider>
           <ThemeProvider>

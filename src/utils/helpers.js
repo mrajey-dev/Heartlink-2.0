@@ -57,6 +57,24 @@ export const getVerifiedBadgeInfo = (item) => {
     rawPlan.includes('access') ||
     rawPlan.includes('gold');
 
+  const isSupport =
+    userObj.is_support === true ||
+    item.is_support === true ||
+    userObj.id === 'support' ||
+    item.id === 'support' ||
+    rawPlan.includes('official') ||
+    rawPlan.includes('support');
+
+  if (isSupport) {
+    return {
+      isVerified: true,
+      iconName: 'shield-checkmark',
+      iconLibrary: 'Ionicons',
+      color: '#00E5FF',
+      planName: 'HeartLink Support',
+    };
+  }
+
   // Tier badges for users who purchased paid plans:
   if (isPremiumPlan) {
     return {
@@ -247,5 +265,42 @@ export const calculateMatchPercentage = (user1, user2) => {
 
   const overall = Math.round(interestsScore * 0.35 + lifestyleScore * 0.35 + valuesScore * 0.30);
   return Math.min(98, Math.max(68, overall));
+};
+
+/**
+ * Parses message body to extract embedded image URLs ([image]URL[/image] or direct image URLs)
+ * and returns clean text plus imageUrl.
+ */
+export const parseMessageContent = (rawText) => {
+  if (!rawText) return { text: '', imageUrl: null };
+  const str = String(rawText);
+  const imageRegex = /\[image\](.*?)\[\/image\]/is;
+  const match = str.match(imageRegex);
+  if (match) {
+    const imageUrl = match[1]?.trim();
+    const cleanText = str.replace(imageRegex, '').trim();
+    return { text: cleanText, imageUrl };
+  }
+  // Check if string is a direct image URL (e.g. from backend or upload)
+  if (/^https?:\/\/.*\.(jpeg|jpg|png|webp|gif)(\?.*)?$/i.test(str.trim())) {
+    return { text: '', imageUrl: str.trim() };
+  }
+  return { text: str, imageUrl: null };
+};
+
+/**
+ * Formats a message snippet for conversation list preview
+ */
+export const formatMessagePreview = (rawText) => {
+  if (!rawText) return '';
+  const str = String(rawText);
+  if (/\[image\](.*?)\[\/image\]/is.test(str)) {
+    const cleanText = str.replace(/\[image\](.*?)\[\/image\]/is, '').trim();
+    return cleanText ? `📷 Photo: ${cleanText}` : '📷 Photo';
+  }
+  if (/^https?:\/\/.*\.(jpeg|jpg|png|webp|gif)(\?.*)?$/i.test(str.trim())) {
+    return '📷 Photo';
+  }
+  return str;
 };
 

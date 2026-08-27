@@ -1,6 +1,5 @@
-// src/navigation/MainTabNavigator.jsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,16 +13,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { apiGetRequests, apiGetConversations, apiGetUnreadCounts } from '../services/api';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 
-const { width } = Dimensions.get('window');
-const TAB_BAR_WIDTH = width - 32; // left: 16, right: 16
 const TAB_COUNT = 5;
-
-// Subtract 2 * 6px padding horizontal from container
-const TAB_WIDTH = (TAB_BAR_WIDTH - 12) / TAB_COUNT;
-
-// Sliding indicator line configurations (34px width)
 const INDICATOR_WIDTH = 34;
-const INDICATOR_OFFSET = (TAB_WIDTH - INDICATOR_WIDTH) / 2;
 
 const Tab = createBottomTabNavigator();
 
@@ -38,8 +29,14 @@ const ICONS = {
 function CustomTabBar({ state, descriptors, navigation }) {
   const insets = useSafeAreaInsets();
   const { isDark, theme } = useTheme();
+  const { width } = useWindowDimensions();
   const styles = useMemo(() => getStyles(theme), [theme]);
-  const slideAnim = useRef(new Animated.Value(state.index * TAB_WIDTH + INDICATOR_OFFSET)).current;
+
+  const tabBarWidth = Math.min(width - 32, 500);
+  const tabWidth = (tabBarWidth - 12) / TAB_COUNT;
+  const indicatorOffset = (tabWidth - INDICATOR_WIDTH) / 2;
+
+  const slideAnim = useRef(new Animated.Value(state.index * tabWidth + indicatorOffset)).current;
 
   const [requestCount, setRequestCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -75,12 +72,12 @@ function CustomTabBar({ state, descriptors, navigation }) {
   useEffect(() => {
     fetchBadgeCounts();
     Animated.spring(slideAnim, {
-      toValue: state.index * TAB_WIDTH + INDICATOR_OFFSET,
-      useNativeDriver: true,
+      toValue: state.index * tabWidth + indicatorOffset,
+      useNativeDriver: Platform.OS !== 'web',
       tension: 68,
       friction: 12,
     }).start();
-  }, [state.index]);
+  }, [state.index, tabWidth, indicatorOffset]);
 
   const dynamicBottom = Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 24 : 14);
 

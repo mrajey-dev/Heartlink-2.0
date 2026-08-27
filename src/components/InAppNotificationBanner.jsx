@@ -94,12 +94,13 @@ export default function InAppNotificationBanner({ visible, data, onDismiss }) {
     }
   };
 
-  if (!visible && opacity._value === 0) return null;
+  if (!visible) return null;
 
   const isChat = data?.type === 'chat';
 
   return (
     <Animated.View
+      pointerEvents="box-none"
       style={[
         styles.container,
         {

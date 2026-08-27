@@ -36,9 +36,11 @@ import {
   apiGetMessages,
   apiDeleteMessage,
   apiClearChat,
+  apiUploadImage,
 } from '../services/api';
-import { ensureArray, formatImageUrl } from '../utils/helpers';
+import { ensureArray, formatImageUrl, parseMessageContent } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
+import { useAuth } from '../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -149,6 +151,7 @@ const MessageBubble = React.memo(function MessageBubble({
   onReplyMessage,
   onScrollToReplyOriginal,
   isHighlighted,
+  onImagePress,
 }) {
   const isMe = item.sender === 'me';
   const fade = useRef(new Animated.Value(0)).current;
@@ -363,7 +366,29 @@ const MessageBubble = React.memo(function MessageBubble({
                     </View>
                   </TouchableOpacity>
                 )}
-                <Text style={styles.bubbleTextMe}>{item.text}</Text>
+
+                {/* Render attached image if present */}
+                {Boolean(item.imageUrl) && (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => onImagePress && onImagePress(item.imageUrl)}
+                    style={styles.bubbleImageContainer}
+                  >
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.bubbleImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.bubbleImageExpandBadge}>
+                      <Ionicons name="expand-outline" size={13} color="#FFF" />
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {Boolean(item.text) && (
+                  <Text style={styles.bubbleTextMe}>{item.text}</Text>
+                )}
+
                 <View style={styles.timeRowMe}>
                   <Text style={styles.bubbleTimeMe}>{item.time}</Text>
                   <Ionicons
@@ -398,7 +423,29 @@ const MessageBubble = React.memo(function MessageBubble({
                     </View>
                   </TouchableOpacity>
                 )}
-                <Text style={styles.bubbleTextOther}>{item.text}</Text>
+
+                {/* Render attached image if present */}
+                {Boolean(item.imageUrl) && (
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => onImagePress && onImagePress(item.imageUrl)}
+                    style={styles.bubbleImageContainer}
+                  >
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.bubbleImage}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.bubbleImageExpandBadge}>
+                      <Ionicons name="expand-outline" size={13} color="#FFF" />
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {Boolean(item.text) && (
+                  <Text style={styles.bubbleTextOther}>{item.text}</Text>
+                )}
+
                 <Text style={styles.bubbleTimeOther}>{item.time}</Text>
               </View>
             )}
@@ -458,7 +505,50 @@ export default function ChatDetailScreen() {
   // Custom toast notification state
   const [toastText, setToastText] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [viewingImage, setViewingImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
+
+  const handlePickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        triggerCustomToast('Photo library permission is required to send images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        setSelectedImage(result.assets[0].uri);
+        setTimeout(() => scrollToBottom(true), 100);
+      }
+    } catch (err) {
+      console.warn('Pick image error:', err);
+    }
+  };
+
+  const handleTakePhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        triggerCustomToast('Camera permission is required to take photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets && result.assets[0]?.uri) {
+        setSelectedImage(result.assets[0].uri);
+        setTimeout(() => scrollToBottom(true), 100);
+      }
+    } catch (err) {
+      console.warn('Take photo error:', err);
+    }
+  };
 
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -585,16 +675,38 @@ export default function ChatDetailScreen() {
     return () => anim && anim.stop();
   }, [isOtherTyping, scrollToBottom]);
 
-  // ============= WEBSOCKET METHODS =============
+  const { user: currentUser } = useAuth();
 
   const targetId = useMemo(() => {
     return route.params?.userId || route.params?.user?.id || activeUser?.id;
   }, [route.params, activeUser]);
 
+  const isCurrentUserSupport = useMemo(() => {
+    return currentUser?.id === 16 || currentUser?.id === '16';
+  }, [currentUser]);
+
+  const isTargetSupport = useMemo(() => {
+    return (
+      targetId === 16 ||
+      targetId === '16' ||
+      targetId === 'support' ||
+      activeUser?.id === 16 ||
+      activeUser?.id === '16' ||
+      activeUser?.id === 'support' ||
+      activeUser?.is_support === true
+    );
+  }, [targetId, activeUser]);
+
+  const isSupportChat = isTargetSupport && !isCurrentUserSupport;
+  const resolvedTargetId = isTargetSupport ? 16 : targetId;
+
   const fetchHistory = useCallback(
     async (isFirst = false) => {
       if (isFirst) setIsLoading(true);
-      if (!targetId) {
+
+      const actualId = isTargetSupport ? 16 : targetId;
+
+      if (!actualId) {
         if (isFirst) {
           setMessages(SAMPLE_MESSAGES);
           prevMessageCountRef.current = SAMPLE_MESSAGES.length;
@@ -606,14 +718,17 @@ export default function ChatDetailScreen() {
       }
 
       try {
-        const response = await apiGetMessages(targetId);
+        const response = await apiGetMessages(actualId);
         if (response?.is_blocked_by_me) {
           setIsBlocked(true);
         }
 
-        if (response?.free_messages_left !== undefined) {
+        if (response?.free_messages_left !== undefined && !isSupportChat && !isCurrentUserSupport) {
           setFreeMessagesLeft(response.free_messages_left);
+        } else if (isSupportChat || isCurrentUserSupport) {
+          setFreeMessagesLeft(null);
         }
+
         if (response?.is_male !== undefined) {
           setIsMaleUser(Boolean(response.is_male));
         }
@@ -632,25 +747,23 @@ export default function ChatDetailScreen() {
           setActiveUser((prev) => ({
             ...prev,
             id: recipientObj.id || prev.id,
-            name: recipientObj.name || prev.name,
-            display_name: recipientObj.display_name || recipientObj.name || prev.display_name || prev.name,
-            is_verified: recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.is_verified),
-            isVerified: recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.isVerified),
-            subscription_plan: recipientObj.subscription_plan || prev.subscription_plan,
-            age: recipientObj.age || prev.age || 24,
-            job: recipientObj.job || prev.job || 'Member',
-            bio: recipientObj.bio || prev.bio || 'Connected on HeartLink.',
-            city: recipientObj.city || prev.city || 'Nearby',
-            location: recipientObj.city ? `${recipientObj.city}${recipientObj.state ? ', ' + recipientObj.state : ''}` : ((prev.location && prev.location !== 'Nearby') ? prev.location : 'Nearby'),
-            distance: prev.distance || 'Recently matched',
-            compatibility: recipientObj.compatibility_score || prev.compatibility || 90,
+            name: isSupportChat ? 'HeartLink Support' : (recipientObj.name || prev.name),
+            display_name: isSupportChat ? 'HeartLink Support' : (recipientObj.display_name || recipientObj.name || prev.display_name || prev.name),
+            is_verified: isSupportChat ? true : (recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.is_verified)),
+            isVerified: isSupportChat ? true : (recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.isVerified)),
+            is_support: isSupportChat || Boolean(recipientObj.is_support),
+            subscription_plan: isSupportChat ? 'Official Support' : (recipientObj.subscription_plan || prev.subscription_plan),
+            age: isSupportChat ? null : (recipientObj.age || prev.age || 24),
+            job: isSupportChat ? 'Customer Support & Safety Team' : (recipientObj.job || prev.job || 'Member'),
+            bio: isSupportChat ? 'Official 24/7 HeartLink Support. Available round-the-clock to help you with account verification, subscriptions, profile safety, date planner queries, and technical assistance.' : (recipientObj.bio || prev.bio || 'Connected on HeartLink.'),
+            city: isSupportChat ? 'Official Support' : (recipientObj.city || prev.city || 'Nearby'),
+            location: isSupportChat ? 'HeartLink Official HQ' : (recipientObj.city ? `${recipientObj.city}${recipientObj.state ? ', ' + recipientObj.state : ''}` : ((prev.location && prev.location !== 'Nearby') ? prev.location : 'Nearby')),
+            distance: isSupportChat ? 'Online 24/7' : (prev.distance || 'Recently matched'),
+            compatibility: isSupportChat ? 100 : (recipientObj.compatibility_score || prev.compatibility || 90),
             image: formatImageUrl(rawAvatar) || prev.image,
             images: formattedPhotos.length > 0 ? formattedPhotos : [formatImageUrl(rawAvatar) || prev.image],
-            interests: ensureArray(recipientObj.interests, prev.interests || ['Travel', 'Music', 'Photography']),
-            online:
-              recipientObj.is_online !== undefined
-                ? Boolean(recipientObj.is_online)
-                : (recipientObj.online !== undefined ? recipientObj.online : prev.online),
+            interests: isSupportChat ? ['Customer Care', 'Safety & Security', 'Verification Help', '24/7 Support'] : ensureArray(recipientObj.interests, prev.interests || ['Travel', 'Music', 'Photography']),
+            online: isSupportChat ? true : (recipientObj.is_online !== undefined ? Boolean(recipientObj.is_online) : (recipientObj.online !== undefined ? recipientObj.online : prev.online)),
             user: recipientObj,
           }));
         }
@@ -665,6 +778,9 @@ export default function ChatDetailScreen() {
         if (Array.isArray(messagesData) && messagesData.length > 0) {
           let lastDateHeader = null;
           const formatted = messagesData.map((m) => {
+            const rawContent = m.message || m.text || m.content || '';
+            const { text: cleanText, imageUrl } = parseMessageContent(rawContent);
+
             const dateObj = m.created_at ? new Date(m.created_at) : new Date();
             const dateHeader = formatMessageDateHeader(dateObj);
             let showDateHeader = false;
@@ -686,8 +802,9 @@ export default function ChatDetailScreen() {
 
             return {
               id: m.id?.toString() || Date.now().toString(),
-              text: m.message || m.text || m.content || '',
-              sender: m.sender_id == targetId ? 'other' : 'me',
+              text: cleanText,
+              imageUrl: imageUrl || m.image_url || null,
+              sender: m.sender_id == actualId ? 'other' : 'me',
               time: m.created_at
                 ? new Date(m.created_at).toLocaleTimeString([], {
                   hour: '2-digit',
@@ -724,10 +841,25 @@ export default function ChatDetailScreen() {
           prevMessageCountRef.current = formatted.length;
           prevLastMessageIdRef.current = newLastId;
         } else if (isFirst) {
-          setMessages(SAMPLE_MESSAGES);
-          prevMessageCountRef.current = SAMPLE_MESSAGES.length;
-          prevLastMessageIdRef.current =
-            SAMPLE_MESSAGES[SAMPLE_MESSAGES.length - 1]?.id ?? null;
+          if (isSupportChat) {
+            const initialSupportMsg = {
+              id: 'support-welcome-1',
+              text: '👋 Welcome to HeartLink Customer Support! How can we assist you today? Feel free to ask about verification, subscriptions, profile safety, or report any issue.',
+              sender: 'other',
+              time: 'Now',
+              dateHeader: 'Today',
+              isRead: true,
+              created_at: new Date().toISOString(),
+            };
+            setMessages([initialSupportMsg]);
+            prevMessageCountRef.current = 1;
+            prevLastMessageIdRef.current = initialSupportMsg.id;
+          } else {
+            setMessages(SAMPLE_MESSAGES);
+            prevMessageCountRef.current = SAMPLE_MESSAGES.length;
+            prevLastMessageIdRef.current =
+              SAMPLE_MESSAGES[SAMPLE_MESSAGES.length - 1]?.id ?? null;
+          }
         }
       } catch (error) {
         console.log('Error fetching messages:', error);
@@ -743,7 +875,7 @@ export default function ChatDetailScreen() {
         }
       }
     },
-    [targetId, scrollToBottom]
+    [targetId, isTargetSupport, isSupportChat, isCurrentUserSupport, scrollToBottom]
   );
 
   // Connect Echo WebSockets & 2-Second Fast Polling on mount
@@ -756,7 +888,7 @@ export default function ChatDetailScreen() {
     }, 2000);
 
     let echoSub = null;
-    const currentUserId = activeUser?.id || activeUser?.user?.id;
+    const currentUserId = resolvedTargetId || activeUser?.id || activeUser?.user?.id;
 
     getEcho().then((echo) => {
       if (echo && currentUserId && typeof echo.private === 'function') {
@@ -784,7 +916,7 @@ export default function ChatDetailScreen() {
         try { echoSub.stopListening('.message.sent'); } catch (err) { }
       }
     };
-  }, [fetchHistory, activeUser?.id]);
+  }, [fetchHistory, resolvedTargetId, activeUser?.id]);
 
   // Delete message handler
   const handleDeleteSingleMessage = useCallback(async (msgId) => {
@@ -804,10 +936,11 @@ export default function ChatDetailScreen() {
     try {
       setMessages([]);
       triggerCustomToast('Chat cleared');
-      if (targetId) {
-        await apiClearChat(targetId);
-        eventEmitter.emit(EVENTS.CHAT_UPDATED);
+      const actualId = isTargetSupport ? 16 : targetId;
+      if (actualId) {
+        await apiClearChat(actualId);
       }
+      eventEmitter.emit(EVENTS.CHAT_UPDATED);
     } catch (e) {
       console.log('Error clearing chat:', e);
     }
@@ -860,14 +993,16 @@ export default function ChatDetailScreen() {
   const send = async () => {
     if (isBlocked) return;
     const textToSend = input.trim();
-    if (!textToSend || isSending) return;
+    const imageUri = selectedImage;
+    if (!textToSend && !imageUri) return;
+    if (isSending) return;
 
     if (textToSend.length > 2000) {
       triggerCustomToast('Message limit is 2000 characters');
       return;
     }
 
-    if (isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
+    if (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
       triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
       return;
     }
@@ -900,6 +1035,7 @@ export default function ChatDetailScreen() {
     const newMessage = {
       id: tempId,
       text: textToSend,
+      imageUrl: imageUri || null,
       sender: 'me',
       time: now.toLocaleTimeString([], {
         hour: '2-digit',
@@ -914,13 +1050,14 @@ export default function ChatDetailScreen() {
     };
 
     setReplyingTo(null);
+    setInput('');
+    setSelectedImage(null);
     setMessages((p) => {
       const next = [...p, newMessage];
       prevMessageCountRef.current = next.length;
       prevLastMessageIdRef.current = newMessage.id;
       return next;
     });
-    setInput('');
 
     // Force scroll to bottom immediately after adding message
     isNearBottomRef.current = true;
@@ -930,20 +1067,32 @@ export default function ChatDetailScreen() {
       scrollToBottom(true);
     });
 
-    if (targetId) {
+    const actualId = isTargetSupport ? 16 : targetId;
+
+    if (actualId) {
       try {
-        // Send via API
-        const res = await apiSendMessage(targetId, textToSend, extraData);
-        if (res?.free_messages_left !== undefined) {
+        let finalPayloadText = textToSend;
+        if (imageUri) {
+          const uploadedUrl = await apiUploadImage(imageUri);
+          if (uploadedUrl) {
+            finalPayloadText = textToSend ? `[image]${uploadedUrl}[/image] ${textToSend}` : `[image]${uploadedUrl}[/image]`;
+          } else {
+            if (!textToSend) throw new Error('Image upload failed');
+          }
+        }
+
+        // Send via API directly to User 16 or targeted user in backend DB
+        const res = await apiSendMessage(actualId, finalPayloadText, extraData);
+        if (res?.free_messages_left !== undefined && !isSupportChat && !isCurrentUserSupport) {
           setFreeMessagesLeft(res.free_messages_left);
         }
 
         eventEmitter.emit(EVENTS.CHAT_UPDATED);
         eventEmitter.emit(EVENTS.MESSAGE_SENT, {
           title: `Message Sent to ${activeUser?.display_name || activeUser?.name || 'User'}`,
-          message: textToSend,
+          message: finalPayloadText,
           avatar: activeUser?.avatar || activeUser?.image,
-          userId: targetId,
+          userId: actualId,
         });
 
         // Update with server response
@@ -955,25 +1104,28 @@ export default function ChatDetailScreen() {
                 : m
             )
           );
+        } else if (res?.data && res.data.id) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === tempId
+                ? { ...m, id: res.data.id.toString(), pending: false }
+                : m
+            )
+          );
         }
 
-        // Fetch new messages as fallback
         await fetchHistory(false);
-
-        requestAnimationFrame(() => {
-          if (isNearBottomRef.current) {
-            scrollToBottom(true);
-          }
-        });
+        scrollToBottom(true);
       } catch (error) {
         console.log('Error sending message:', error);
-        // Remove failed message or show retry option
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        triggerCustomToast('Failed to send message. Please try again.');
+        triggerCustomToast('Failed to send image or message');
+      } finally {
+        setIsSending(false);
       }
+    } else {
+      setIsSending(false);
     }
-
-    setIsSending(false);
   };
 
   // Handle input change
@@ -1153,6 +1305,7 @@ export default function ChatDetailScreen() {
           onCloseReactionMenu={() => setActiveReactionMsgId(null)}
           onScrollToReplyOriginal={handleScrollToReplyOriginal}
           isHighlighted={highlightedMsgId === item.id}
+          onImagePress={(imgUrl) => setViewingImage(imgUrl)}
           onReplyMessage={(msg) =>
             setReplyingTo({
               id: msg.id,
@@ -1224,7 +1377,17 @@ export default function ChatDetailScreen() {
                 onPress={openProfile}
                 activeOpacity={0.75}
               >
-                <Image source={{ uri: activeUser.image }} style={styles.headerAvatar} />
+                {isSupportChat ? (
+                  <View style={styles.headerSupportAvatarBox}>
+                    <LinearGradient
+                      colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Ionicons name="headset" size={20} color="#fff" />
+                  </View>
+                ) : (
+                  <Image source={{ uri: activeUser.image }} style={styles.headerAvatar} />
+                )}
 
                 <View style={styles.headerInfo}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1235,7 +1398,11 @@ export default function ChatDetailScreen() {
                     <Text style={[styles.onlineText, { color: '#30D158', fontWeight: '700' }]}>
                       typing...
                     </Text>
-                  ) : null}
+                  ) : (isSupportChat ? (
+                    <Text style={[styles.onlineText, { color: '#00E5FF', fontWeight: '600' }]}>
+                      24/7 Official Support • Active
+                    </Text>
+                  ) : null)}
                 </View>
               </TouchableOpacity>
 
@@ -1257,58 +1424,99 @@ export default function ChatDetailScreen() {
             activeOpacity={1}
             onPress={() => setShowMenu(false)}
           >
-            <View style={styles.dropdownCard}>
-              <TouchableOpacity
-                style={styles.dropdownOption}
-                onPress={() => {
-                  setShowMenu(false);
-                  setShowClearChatModal(true);
-                }}
-              >
-                <Ionicons name="trash-bin-outline" size={18} color="#FF375F" />
-                <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>Clear Chat</Text>
-              </TouchableOpacity>
-
-              <View style={styles.dropdownDivider} />
-
-              <TouchableOpacity
-                style={styles.dropdownOption}
-                onPress={() => {
-                  setShowMenu(false);
-                  setShowReportModal(true);
-                }}
-              >
-                <Ionicons name="flag-outline" size={18} color={theme.textPrimary} />
-                <Text style={styles.dropdownOptionText}>Report User</Text>
-              </TouchableOpacity>
-
-              <View style={styles.dropdownDivider} />
-
-              {isBlocked ? (
-                <TouchableOpacity
-                  style={styles.dropdownOption}
-                  onPress={handleConfirmUnblock}
-                >
-                  <Ionicons name="lock-open-outline" size={18} color="#30D158" />
-                  <Text style={[styles.dropdownOptionText, { color: '#30D158' }]}>
-                    Unblock User
-                  </Text>
-                </TouchableOpacity>
-              ) : (
+            {isSupportChat ? (
+              <View style={styles.dropdownCard}>
                 <TouchableOpacity
                   style={styles.dropdownOption}
                   onPress={() => {
                     setShowMenu(false);
-                    setShowBlockModal(true);
+                    setShowClearChatModal(true);
                   }}
                 >
-                  <Ionicons name="ban-outline" size={18} color="#FF375F" />
-                  <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>
-                    Block User
-                  </Text>
+                  <Ionicons name="trash-bin-outline" size={18} color="#FF375F" />
+                  <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>Clear Chat</Text>
                 </TouchableOpacity>
-              )}
-            </View>
+
+                <View style={styles.dropdownDivider} />
+
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    triggerCustomToast('HeartLink Support: support@heartlink.app');
+                  }}
+                >
+                  <Ionicons name="mail-outline" size={18} color={theme.textPrimary} />
+                  <Text style={styles.dropdownOptionText}>Email Support</Text>
+                </TouchableOpacity>
+
+                <View style={styles.dropdownDivider} />
+
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    openProfile();
+                  }}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color={theme.textPrimary} />
+                  <Text style={styles.dropdownOptionText}>Support & Help Info</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.dropdownCard}>
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    setShowClearChatModal(true);
+                  }}
+                >
+                  <Ionicons name="trash-bin-outline" size={18} color="#FF375F" />
+                  <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>Clear Chat</Text>
+                </TouchableOpacity>
+
+                <View style={styles.dropdownDivider} />
+
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    setShowReportModal(true);
+                  }}
+                >
+                  <Ionicons name="flag-outline" size={18} color={theme.textPrimary} />
+                  <Text style={styles.dropdownOptionText}>Report User</Text>
+                </TouchableOpacity>
+
+                <View style={styles.dropdownDivider} />
+
+                {isBlocked ? (
+                  <TouchableOpacity
+                    style={styles.dropdownOption}
+                    onPress={handleConfirmUnblock}
+                  >
+                    <Ionicons name="lock-open-outline" size={18} color="#30D158" />
+                    <Text style={[styles.dropdownOptionText, { color: '#30D158' }]}>
+                      Unblock User
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.dropdownOption}
+                    onPress={() => {
+                      setShowMenu(false);
+                      setShowBlockModal(true);
+                    }}
+                  >
+                    <Ionicons name="ban-outline" size={18} color="#FF375F" />
+                    <Text style={[styles.dropdownOptionText, { color: '#FF375F' }]}>
+                      Block User
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </TouchableOpacity>
         )}
 
@@ -1415,7 +1623,7 @@ export default function ChatDetailScreen() {
         <View style={styles.inputContainer}>
           <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
             {/* Male 5 free messages limit indicator banner */}
-            {isMaleUser && !isPremiumUser && freeMessagesLeft !== null && (
+            {!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft !== null && (
               <View style={[styles.freeBanner, freeMessagesLeft === 0 && styles.freeBannerExhausted]}>
                 <Ionicons
                   name={freeMessagesLeft === 0 ? 'lock-closed' : 'sparkles'}
@@ -1471,12 +1679,50 @@ export default function ChatDetailScreen() {
                     </TouchableOpacity>
                   </View>
                 )}
+
+                {/* Attached Image Preview Bar */}
+                {selectedImage && (
+                  <View style={styles.imagePreviewBar}>
+                    <View style={styles.imagePreviewWrap}>
+                      <Image source={{ uri: selectedImage }} style={styles.previewThumb} />
+                      <TouchableOpacity
+                        style={styles.removeImageBtn}
+                        onPress={() => setSelectedImage(null)}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="close" size={14} color="#FFF" />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={styles.previewTitle}>Image attached</Text>
+                      <Text style={styles.previewSub}>Tap send to submit photo</Text>
+                    </View>
+                  </View>
+                )}
+
                 <View style={styles.inputRow}>
+                  {/* Photo & Camera Attachment Buttons */}
+                  <TouchableOpacity
+                    style={styles.mediaBtn}
+                    onPress={handlePickImage}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="image-outline" size={22} color="#FF007F" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.mediaBtn}
+                    onPress={handleTakePhoto}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="camera-outline" size={22} color={theme.textPrimary} />
+                  </TouchableOpacity>
+
                   <View style={styles.inputWrap}>
                     <TextInput
                       ref={inputRef}
                       style={styles.input}
-                      placeholder="Type a message…"
+                      placeholder={selectedImage ? "Add an optional message…" : "Type a message…"}
                       placeholderTextColor={theme.textFaint}
                       value={input}
                       onChangeText={handleInputChange}
@@ -1491,14 +1737,14 @@ export default function ChatDetailScreen() {
                     onPressOut={onSendPressOut}
                     activeOpacity={0.9}
                     style={styles.sendBtn}
-                    disabled={isSending || !input.trim() || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)}
+                    disabled={isSending || (!input.trim() && !selectedImage) || (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0)}
                   >
                     <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
                       <LinearGradient
                         colors={theme.gradientAccent}
                         style={[
                           styles.sendGrad,
-                          (!input.trim() || isSending || (isMaleUser && !isPremiumUser && freeMessagesLeft === 0)) && styles.sendGradDisabled,
+                          ((!input.trim() && !selectedImage) || isSending || (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0)) && styles.sendGradDisabled,
                         ]}
                       >
                         {isSending ? (
@@ -1680,6 +1926,31 @@ export default function ChatDetailScreen() {
       </Modal>
 
 
+
+      {/* Full-Screen Image Viewer Modal */}
+      <Modal visible={Boolean(viewingImage)} transparent animationType="fade" onRequestClose={() => setViewingImage(null)}>
+        <View style={styles.imageViewerOverlay}>
+          <SafeAreaView style={styles.imageViewerHeader} edges={['top']}>
+            <TouchableOpacity
+              style={styles.imageViewerCloseBtn}
+              onPress={() => setViewingImage(null)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close" size={26} color="#FFF" />
+            </TouchableOpacity>
+          </SafeAreaView>
+
+          <View style={styles.imageViewerBody}>
+            {viewingImage && (
+              <Image
+                source={{ uri: viewingImage }}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Custom Tailored Notification Toast */}
       {toastVisible && (
@@ -2521,5 +2792,119 @@ const getStyles = (theme) =>
       marginLeft: 8,
     },
 
+    headerSupportAvatarBox: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      marginRight: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+      overflow: 'hidden',
+      backgroundColor: '#FF007F',
+    },
 
+    // Image Bubble & Full-Screen Viewer Styles
+    bubbleImageContainer: {
+      borderRadius: 14,
+      overflow: 'hidden',
+      marginBottom: 6,
+      position: 'relative',
+      backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    bubbleImage: {
+      width: width * 0.62,
+      height: width * 0.62 * 0.75,
+      borderRadius: 14,
+    },
+    bubbleImageExpandBadge: {
+      position: 'absolute',
+      right: 8,
+      bottom: 8,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      borderRadius: 12,
+      padding: 4,
+    },
+    imageViewerOverlay: {
+      flex: 1,
+      backgroundColor: '#000000',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerHeader: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 100,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+    },
+    imageViewerCloseBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: 'rgba(255,255,255,0.2)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    imageViewerBody: {
+      width: width,
+      height: height * 0.8,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    fullScreenImage: {
+      width: width,
+      height: '100%',
+    },
+
+    // Attached Image Preview Bar
+    imagePreviewBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? '#1C1236' : '#FFF0F7',
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? 'rgba(255, 0, 127, 0.3)' : 'rgba(255, 0, 127, 0.2)',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+    },
+    imagePreviewWrap: {
+      position: 'relative',
+    },
+    previewThumb: {
+      width: 48,
+      height: 48,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#FF007F',
+    },
+    removeImageBtn: {
+      position: 'absolute',
+      top: -4,
+      right: -4,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: '#FF375F',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    previewTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#FF007F',
+    },
+    previewSub: {
+      fontSize: 11,
+      color: theme.textSec,
+    },
+    mediaBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
   });

@@ -9,7 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiCreateRazorpayOrder, apiVerifyRazorpayPayment } from '../services/api';
-import RazorpayCheckout from 'react-native-razorpay';
+import { openRazorpayCheckout } from '../utils/razorpayService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
@@ -132,10 +132,7 @@ export default function AadhaarVerificationModal({
         }
       };
 
-      // Removed NativeModules bypass. This will throw an error in Expo Go,
-      // but will work in a custom dev client (e.g. npx expo run:android)
-
-      RazorpayCheckout.open(razorpayOptions)
+      openRazorpayCheckout(razorpayOptions)
         .then(async (data) => {
           try {
             const verificationData = {

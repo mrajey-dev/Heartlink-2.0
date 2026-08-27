@@ -15,7 +15,7 @@ import {
   apiCreateRazorpayOrder,
   apiVerifyRazorpayPayment
 } from '../services/api';
-import RazorpayCheckout from 'react-native-razorpay';
+import { openRazorpayCheckout } from '../utils/razorpayService';
 
 const { width } = Dimensions.get('window');
 
@@ -163,7 +163,7 @@ export default function PaymentGatewayModal({
 
       console.log('[Payment] Opening Razorpay with amount:', amountInRupees * 100, 'paise (₹' + amountInRupees + ')');
 
-      RazorpayCheckout.open(razorpayOptions)
+      openRazorpayCheckout(razorpayOptions)
         .then(async (data) => {
           console.log('[Payment] Razorpay success:', data);
 
