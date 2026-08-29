@@ -32,9 +32,10 @@ class DiscoverController extends Controller
         $blockedIds = \App\Models\UserBlock::where('blocker_id', $user->id)
             ->pluck('blocked_user_id');
 
-        $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->unique();
+        $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->push(16)->unique();
 
         $query = User::where('id', '!=', $user->id)
+            ->where('id', '!=', 16)
             ->whereNotIn('id', $excludeIds);
 
         // Enforce strict opposite gender filtering:
@@ -161,11 +162,10 @@ class DiscoverController extends Controller
             ->flatMap(fn($m) => [$m->user_1_id, $m->user_2_id])
             ->filter(fn($id) => $id !== $user->id)
             ->unique();
-        $blockedIds = \App\Models\UserBlock::where('blocker_id', $user->id)->pluck('blocked_user_id');
-
-        $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->unique();
+        $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->push(16)->unique();
 
         $query = User::where('id', '!=', $user->id)
+            ->where('id', '!=', 16)
             ->whereNotIn('id', $excludeIds);
 
         // Enforce strict opposite gender

@@ -202,7 +202,9 @@ export default function DiscoverScreen() {
       const fRes = await apiGetDiscoveryFeed().catch(() => null);
 
       if (fRes?.profiles && Array.isArray(fRes.profiles)) {
-        const formatted = fRes.profiles.map(formatApiProfile);
+        const formatted = fRes.profiles
+          .filter(p => p.id !== 16 && p.id !== '16' && !p.is_support)
+          .map(formatApiProfile);
         setDbProfiles(formatted);
       }
     } catch (err) {
@@ -235,8 +237,9 @@ export default function DiscoverScreen() {
     const targetGenders = isMaleUser ? ['female', 'woman'] : ['male', 'man'];
 
     if (dbProfiles.length > 0) {
-      const filtered = dbProfiles.filter(p => !p.gender || targetGenders.includes(p.gender.toLowerCase()));
-      return filtered.length > 0 ? filtered : dbProfiles;
+      const nonSupport = dbProfiles.filter(p => p.id !== 16 && p.id !== '16' && !p.is_support);
+      const filtered = nonSupport.filter(p => !p.gender || targetGenders.includes(p.gender.toLowerCase()));
+      return filtered.length > 0 ? filtered : nonSupport;
     }
 
     return [];

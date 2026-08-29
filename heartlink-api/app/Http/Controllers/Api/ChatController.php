@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Models\Message;
 use App\Models\UserReport;
 use App\Models\UserBlock;
@@ -48,45 +49,44 @@ class ChatController extends Controller
         ->orderBy('created_at', 'asc')
         ->get();
 
+        // Mark incoming messages as read
         Message::where('sender_id', $otherUserId)
             ->where('receiver_id', $authId)
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
-        \App\Models\Notification::where('user_id', $authId)
-            ->where('from_user_id', $otherUserId)
-            ->where('is_read', false)
-            ->update(['is_read' => true]);
-
-        $otherUser = \App\Models\User::with('photos')->find($otherUserId);
-
-        // Check persistent male free message counter (unlimited if user bought ANY subscription plan)
-        $genderLower = strtolower(trim($user->gender ?? ''));
-        $isMale = ($genderLower === 'male' || $genderLower === 'm');
-        $isSubscribed = !empty($user->subscription_plan) && !in_array(strtolower(trim($user->subscription_plan)), ['none', 'free', '']);
-        $hasActiveSub = \App\Models\UserSubscription::where('user_id', $authId)->where('status', 'active')->where('expires_at', '>', now())->exists();
-        $isPremium = (bool) $user->is_premium || $isSubscribed || $hasActiveSub;
-
-        $freeMessagesLeft = null;
-        $totalSent = 0;
-
-        if ($isMale && !$isPremium) {
-            $counter = ChatMessageCounter::firstOrCreate([
-                'sender_id'   => $authId,
-                'receiver_id' => (int) $otherUserId,
-            ]);
-            $totalSent = (int) $counter->sent_count;
-            $freeMessagesLeft = max(0, 5 - $totalSent);
+        // Auto-fetch recipient user details so the chat header & modal can display live info
+        $recipient = User::where('id', $otherUserId)->with('photos')->first();
+        $recipientData = null;
+        if ($recipient) {
+            $photos = $recipient->photos->pluck('photo_url')->toArray();
+            if ($recipient->avatar && !in_array($recipient->avatar, $photos)) {
+                array_unshift($photos, $recipient->avatar);
+            }
+            $recipientData = [
+                'id'                => $recipient->id,
+                'name'              => $recipient->name,
+                'display_name'      => $recipient->display_name ?? $recipient->name,
+                'avatar'            => $recipient->avatar,
+                'photos'            => $photos,
+                'bio'               => $recipient->bio ?? '',
+                'age'               => $recipient->age,
+                'job'               => $recipient->job ?? $recipient->occupation ?? 'Member',
+                'occupation'        => $recipient->occupation ?? $recipient->job ?? 'Member',
+                'city'              => $recipient->city ?? 'Nearby',
+                'state'             => $recipient->state ?? '',
+                'is_verified'       => (bool) $recipient->is_verified,
+                'is_online'         => (bool) $recipient->is_online,
+                'is_support'        => (int) $recipient->id === 16 || !empty($recipient->is_support),
+                'subscription_plan' => $recipient->subscription_plan ?? null,
+                'interests'         => $recipient->interests ?? [],
+            ];
         }
 
         return response()->json([
             'messages'           => $messages,
             'is_blocked_by_me'   => $isBlockedByMe,
-            'other_user'         => $otherUser,
-            'is_male'            => $isMale,
-            'is_premium'         => $isPremium,
-            'free_messages_left' => $freeMessagesLeft,
-            'sent_count'         => $totalSent,
+            'recipient'          => $recipientData,
             'free_messages_limit'=> 5,
         ]);
     }
@@ -102,55 +102,118 @@ class ChatController extends Controller
             ->filter()
             ->values();
 
-        $matches = UserMatch::where(function ($q) use ($authId) {
+        // 1. Get all partner IDs who have exchanged messages with auth user (does NOT require matching)
+        $messagePartnerIds = Message::where(function ($q) use ($authId) {
+                $q->where('sender_id', $authId)->where('deleted_by_sender', false);
+            })
+            ->orWhere(function ($q) use ($authId) {
+                $q->where('receiver_id', $authId)->where('deleted_by_receiver', false);
+            })
+            ->selectRaw('CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END AS partner_id', [$authId])
+            ->pluck('partner_id')
+            ->unique();
+
+        // 2. Get partner IDs from user_matches
+        $matchPartnerIds = UserMatch::where(function ($q) use ($authId) {
                 $q->where('user_1_id', $authId)->orWhere('user_2_id', $authId);
             })
-            ->whereNotIn('user_1_id', $blockedIds)
-            ->whereNotIn('user_2_id', $blockedIds)
-            ->with(['user1.photos', 'user2.photos'])
-            ->get();
+            ->selectRaw('CASE WHEN user_1_id = ? THEN user_2_id ELSE user_1_id END AS partner_id', [$authId])
+            ->pluck('partner_id')
+            ->unique();
 
-        $conversations = $matches->map(function ($match) use ($authId, $blockedIds) {
-            $otherUser = $match->user_1_id === $authId ? $match->user2 : $match->user1;
+        $allPartnerIds = $messagePartnerIds
+            ->merge($matchPartnerIds)
+            ->reject(function ($id) use ($authId, $blockedIds) {
+                return (int) $id === (int) $authId || $blockedIds->contains($id);
+            });
 
-            if (!$otherUser || $blockedIds->contains($otherUser->id)) return null;
+        // For every regular user (male or female), ALWAYS show HeartLink Support without needing to match
+        if ((int) $authId !== 16) {
+            $allPartnerIds->push(16);
+        }
 
-            $lastMsg = Message::where(function ($q) use ($authId, $otherUser) {
+        // If user 16 (HeartLink Support), show ALL users (male + female) regardless of messages or match
+        if ((int) $authId === 16) {
+            $allUserIds = User::where('id', '!=', 16)->pluck('id');
+            $allPartnerIds = $allPartnerIds->merge($allUserIds);
+        }
+
+        $allPartnerIds = $allPartnerIds->unique()->values();
+
+        $users = User::whereIn('id', $allPartnerIds)
+            ->with('photos')
+            ->get()
+            ->keyBy('id');
+
+        $conversations = $allPartnerIds->map(function ($partnerId) use ($authId, $users) {
+            $partnerId = (int) $partnerId;
+            $otherUser = $users->get($partnerId);
+
+            if (!$otherUser) {
+                if ($partnerId === 16) {
+                    $otherUser = (object) [
+                        'id'                => 16,
+                        'name'              => 'HeartLink Support',
+                        'display_name'      => 'HeartLink Support',
+                        'avatar'            => null,
+                        'is_online'         => true,
+                        'is_verified'       => true,
+                        'is_support'        => true,
+                        'subscription_plan' => 'Official Support',
+                        'photos'            => collect(),
+                    ];
+                } else {
+                    return null;
+                }
+            }
+
+            $lastMsg = Message::where(function ($q) use ($authId, $partnerId) {
                 $q->where('sender_id', $authId)
-                  ->where('receiver_id', $otherUser->id)
+                  ->where('receiver_id', $partnerId)
                   ->where('deleted_by_sender', false);
-            })->orWhere(function ($q) use ($authId, $otherUser) {
-                $q->where('sender_id', $otherUser->id)
+            })->orWhere(function ($q) use ($authId, $partnerId) {
+                $q->where('sender_id', $partnerId)
                   ->where('receiver_id', $authId)
                   ->where('deleted_by_receiver', false);
             })
             ->orderBy('created_at', 'desc')
             ->first();
 
-            // Only show in chat conversations list if a message has actually been sent
-            if (!$lastMsg) {
+            // For regular matches without messages, don't show empty item unless it's Support (id: 16)
+            if (!$lastMsg && $partnerId !== 16 && (int) $authId !== 16) {
                 return null;
             }
 
-            $unreadCount = Message::where('sender_id', $otherUser->id)
+            $unreadCount = Message::where('sender_id', $partnerId)
                 ->where('receiver_id', $authId)
                 ->where('is_read', false)
                 ->where('deleted_by_receiver', false)
                 ->count();
 
-            $isMe = ($lastMsg->sender_id === $authId);
-            $msgText = $isMe ? 'You: ' . $lastMsg->message : $lastMsg->message;
+            $isMe = $lastMsg ? ($lastMsg->sender_id === (int) $authId) : false;
+            $msgText = $lastMsg
+                ? ($isMe ? 'You: ' . $lastMsg->message : $lastMsg->message)
+                : ((int) $authId === 16 ? 'No messages yet' : "We're here to help! Tap to message our support team.");
+
+            $lastTime = $lastMsg ? $lastMsg->created_at->diffForHumans() : '24/7';
+            $lastTimestamp = $lastMsg ? $lastMsg->created_at->timestamp : 0;
+
+            $photosCol = isset($otherUser->photos) ? $otherUser->photos : collect();
+            $avatarUrl = $otherUser->avatar ?: ($photosCol->first() ? $photosCol->first()->photo_url : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400');
 
             return [
-                'id'             => $otherUser->id,
-                'match_id'       => $match->id,
-                'name'           => $otherUser->name,
-                'avatar'         => $otherUser->avatar ?: ($otherUser->photos->first()->photo_url ?? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400'),
-                'online'         => (bool) $otherUser->is_online,
+                'id'             => (int) $otherUser->id,
+                'name'           => $otherUser->name ?? 'User',
+                'display_name'   => $otherUser->display_name ?? ($otherUser->name ?? 'User'),
+                'avatar'         => $avatarUrl,
+                'online'         => (bool) ($otherUser->is_online ?? true),
+                'is_verified'    => (bool) ($otherUser->is_verified ?? false),
+                'is_support'     => $partnerId === 16 || !empty($otherUser->is_support),
+                'subscription_plan' => $otherUser->subscription_plan ?? null,
                 'last_msg'       => $msgText,
-                'last_time'      => $lastMsg->created_at->diffForHumans(),
-                'last_timestamp' => $lastMsg->created_at->timestamp,
-                'last_sender_id' => $lastMsg->sender_id,
+                'last_time'      => $lastTime,
+                'last_timestamp' => $lastTimestamp,
+                'last_sender_id' => $lastMsg ? $lastMsg->sender_id : null,
                 'is_me'          => $isMe,
                 'unread_count'   => $unreadCount,
                 'user'           => $otherUser,
@@ -195,7 +258,7 @@ class ChatController extends Controller
         $hasActiveSub = \App\Models\UserSubscription::where('user_id', $senderId)->where('status', 'active')->where('expires_at', '>', now())->exists();
         $isPremium = (bool) $user->is_premium || $isSubscribed || $hasActiveSub;
 
-        if ($isMale && !$isPremium) {
+        if ($isMale && !$isPremium && (int)$receiverId !== 16 && (int)$senderId !== 16) {
             $counter = ChatMessageCounter::firstOrCreate([
                 'sender_id'   => $senderId,
                 'receiver_id' => $receiverId,
@@ -257,8 +320,7 @@ class ChatController extends Controller
             ]
         );
 
-        // Increment persistent counter for male users so deleting messages or clearing chat NEVER resets counter!
-        if ($isMale && !$isPremium) {
+        if ($isMale && !$isPremium && (int)$receiverId !== 16 && (int)$senderId !== 16) {
             $counter = ChatMessageCounter::firstOrCreate([
                 'sender_id'   => $senderId,
                 'receiver_id' => $receiverId,
