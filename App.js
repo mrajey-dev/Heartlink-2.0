@@ -47,6 +47,22 @@ export default function App() {
     // Prevent screenshots and screen recording on mobile platforms
     if (Platform.OS !== 'web') {
       ScreenCapture.preventScreenCaptureAsync().catch(err => console.warn('Screen capture prevention error:', err));
+    } else if (typeof document !== 'undefined') {
+      // Global fix for web browser scrolling: ensure html, body, and root allow standard overflow scrolling
+      const existing = document.getElementById('heartlink-web-scroll-fix');
+      if (!existing) {
+        const style = document.createElement('style');
+        style.id = 'heartlink-web-scroll-fix';
+        style.textContent = `
+          html, body, #root {
+            height: 100%;
+            width: 100%;
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch;
+          }
+        `;
+        document.head.appendChild(style);
+      }
     }
   }, []);
 

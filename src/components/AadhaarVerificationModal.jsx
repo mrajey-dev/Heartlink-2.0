@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ActivityIndicator, ScrollView, Alert, Linking, NativeModules
+  ActivityIndicator, ScrollView, Alert, Linking, NativeModules, Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -80,36 +80,7 @@ export default function AadhaarVerificationModal({
         throw new Error('No order ID received from server');
       }
       
-      const razorpayKeyId = orderResponse?.key_id || 'YOUR_RAZORPAY_KEY_ID';
-
-      // Check if backend provides a checkout URL (Fallback for Expo Go / Web)
-      if (orderResponse?.checkout_url) {
-        console.log('[Payment] Using server-side checkout URL');
-        Alert.alert(
-          'Redirecting to Payment',
-          'You will be redirected to the secure payment page.',
-          [
-            {
-              text: 'Continue to Payment',
-              onPress: () => {
-                Linking.openURL(orderResponse.checkout_url).catch(() => {
-                  Alert.alert('Error', 'Unable to open payment page');
-                });
-                setPaying(false);
-                setStep('awaiting_payment'); // Show the waiting screen with a manual 'I have paid' button
-              }
-            },
-            {
-              text: 'Cancel',
-              onPress: () => {
-                setPaying(false);
-                setStep('alert');
-              }
-            }
-          ]
-        );
-        return;
-      }
+      const razorpayKeyId = orderResponse?.key_id || orderResponse?.keyId || 'rzp_live_SsJLwM19hIvB6A';
 
       const razorpayOptions = {
         description: 'Profile Identity Verification',
@@ -160,11 +131,23 @@ export default function AadhaarVerificationModal({
           }
         })
         .catch((error) => {
+          if (error.code === 'PAYMENT_CANCELED') {
+            setPaying(false);
+            setStep('alert');
+            return;
+          }
+
+          if (orderResponse?.checkout_url && Platform.OS !== 'web') {
+            console.log('[Payment] Falling back to checkout URL on native...');
+            Linking.openURL(orderResponse.checkout_url).catch(() => {});
+            setPaying(false);
+            setStep('awaiting_payment');
+            return;
+          }
+
           setPaying(false);
           setStep('alert');
-          if (error.code !== 'PAYMENT_CANCELED') {
-            Alert.alert('Payment Failed', error.description || error.message || 'An error occurred during payment processing.');
-          }
+          Alert.alert('Payment Failed', error.description || error.message || 'An error occurred during payment processing.');
         });
 
     } catch (error) {

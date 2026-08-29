@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity,
   ActivityIndicator, Dimensions, ScrollView, StatusBar,
-  Alert, Linking
+  Alert, Linking, Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -111,35 +111,10 @@ export default function PaymentGatewayModal({
       }
 
       setOrderId(responseOrderId);
-      const razorpayKeyId = orderResponse?.key_id || 'YOUR_RAZORPAY_KEY_ID';
+      const razorpayKeyId = orderResponse?.key_id || orderResponse?.keyId || 'rzp_live_SsJLwM19hIvB6A';
       setRazorpayKey(razorpayKeyId);
 
-      // Check if backend provides a checkout URL
-      if (orderResponse?.checkout_url) {
-        console.log('[Payment] Using server-side checkout URL');
-        Alert.alert(
-          'Redirecting to Payment',
-          'You will be redirected to the secure payment page.',
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                Linking.openURL(orderResponse.checkout_url).catch(() => {
-                  Alert.alert('Error', 'Unable to open payment page');
-                });
-                setProcessing(false);
-              }
-            },
-            {
-              text: 'Cancel',
-              onPress: () => setProcessing(false)
-            }
-          ]
-        );
-        return;
-      }
-
-      // Step 2: Open Razorpay Checkout
+      // Step 2: Open Razorpay Checkout Directly (Web & Native)
       const razorpayOptions = {
         description: `${planName} - ${durObj.label} Plan`,
         image: 'https://heartlink.app/logo.png',
@@ -266,13 +241,24 @@ export default function PaymentGatewayModal({
         .catch((error) => {
           console.log('[Payment] Razorpay error:', error);
           if (error.code === 'PAYMENT_CANCELED') {
-            Alert.alert('Payment Cancelled', 'You cancelled the payment process.');
-          } else {
-            Alert.alert(
-              'Payment Failed',
-              error.description || error.message || 'An error occurred during payment processing.'
-            );
+            setProcessing(false);
+            return;
           }
+
+          // If native Razorpay module is missing (e.g. running in Expo Go client on mobile)
+          if (orderResponse?.checkout_url && Platform.OS !== 'web') {
+            console.log('[Payment] Falling back to checkout URL on native...');
+            Linking.openURL(orderResponse.checkout_url).catch(() => {
+              Alert.alert('Payment Error', 'Unable to open browser checkout page.');
+            });
+            setProcessing(false);
+            return;
+          }
+
+          Alert.alert(
+            'Payment Failed',
+            error.description || error.message || 'An error occurred during payment processing.'
+          );
           setProcessing(false);
         });
 
@@ -294,19 +280,25 @@ export default function PaymentGatewayModal({
     <Modal visible={visible} transparent statusBarTranslucent={true} animationType="fade" onRequestClose={onClose}>
       <View style={[styles.backdrop, { paddingTop: insets.top + 8, paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
+        {/* Backdrop touchable overlay to dismiss modal */}
         <TouchableOpacity
-          style={styles.backdropTouch}
+          style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={onClose}
-        >
-          <View style={[
-            styles.card,
-            {
-              backgroundColor: isDark ? '#1C1433' : '#FFFFFF',
-              borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
-            }
-          ]}>
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollWrap}>
+        />
+        <View style={[
+          styles.card,
+          {
+            backgroundColor: isDark ? '#1C1433' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.08)',
+          }
+        ]}>
+          <ScrollView
+            showsVerticalScrollIndicator={true}
+            contentContainerStyle={styles.scrollWrap}
+            style={styles.modalScrollView}
+            bounces={true}
+          >
 
               {/* Header */}
               <View style={styles.headerRow}>
@@ -400,8 +392,7 @@ export default function PaymentGatewayModal({
 
             </ScrollView>
           </View>
-        </TouchableOpacity>
-      </View>
+        </View>
     </Modal>
   );
 }
@@ -413,12 +404,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 9999,
-  },
-  backdropTouch: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   card: {
     width: '90%',
@@ -432,9 +417,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 25,
     elevation: 20,
+    zIndex: 10,
+  },
+  modalScrollView: {
+    flexShrink: 1,
+    width: '100%',
   },
   scrollWrap: {
-    paddingBottom: 10,
+    paddingBottom: 16,
   },
   headerRow: {
     flexDirection: 'row',

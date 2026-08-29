@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   StatusBar, Dimensions, Platform, Animated,
-  ActivityIndicator, Linking,
+  ActivityIndicator, Linking, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,19 +14,21 @@ import CustomAlertModal from '../components/CustomAlertModal';
 import PaymentGatewayModal from '../components/PaymentGatewayModal';
 import { apiSubscribePlan, apiGetSubscriptionPlans } from '../services/api';
 
-const { width, height } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.92;
-const CARD_SPACING = (width - CARD_WIDTH) / 2;
-
-// Helper to check if device is small
-const isSmallDevice = height < 700;
-
 export default function PlansScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
-  const styles = useMemo(() => getStyles(theme), [theme]);
+
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const CARD_WIDTH = Math.min(windowWidth * 0.92, 440);
+  const CARD_SPACING = Math.max((windowWidth - CARD_WIDTH) / 2, 16);
+  const isSmallDevice = windowHeight < 720;
+
+  const styles = useMemo(
+    () => getStyles(theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight),
+    [theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight]
+  );
 
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
@@ -140,6 +142,24 @@ export default function PlansScreen() {
   useEffect(() => {
     fetchPlans();
   }, [route.params]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && flatListRef.current) {
+      const node = flatListRef.current.getScrollableNode
+        ? flatListRef.current.getScrollableNode()
+        : null;
+      if (node) {
+        const onWheel = (e) => {
+          if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && Math.abs(e.deltaY) > 20) {
+            node.scrollBy({ left: e.deltaY > 0 ? CARD_WIDTH : -CARD_WIDTH, behavior: 'smooth' });
+            e.preventDefault();
+          }
+        };
+        node.addEventListener('wheel', onWheel, { passive: false });
+        return () => node.removeEventListener('wheel', onWheel);
+      }
+    }
+  }, [CARD_WIDTH, plans]);
 
   const handleSelectDuration = (cardId, durationId) => {
     setCardDurations(prev => ({ ...prev, [cardId]: durationId }));
@@ -306,25 +326,22 @@ export default function PlansScreen() {
                 )}
               </View>
 
-              <ScrollView
-                style={[styles.featuresScrollView, { maxHeight: isSmallDevice ? 140 : 190 }]}
-                nestedScrollEnabled={true}
-                showsVerticalScrollIndicator={true}
-                contentContainerStyle={styles.featuresListContainer}
-              >
-                {(card.features || []).map((feat, fIdx) => {
-                  const featIcon = typeof feat === 'object' ? (feat.icon || feat.icon_name || 'checkmark-circle-outline') : 'checkmark-circle-outline';
-                  const featTitle = typeof feat === 'object' ? feat.title : String(feat);
-                  return (
-                    <View key={fIdx} style={[styles.featureRow, isSmallDevice && styles.smallFeatureRow]}>
-                      <View style={[styles.featureIconBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
-                        <Ionicons name={featIcon} size={isSmallDevice ? 13 : 15} color={accentCol} />
+              <View style={styles.featuresScrollView}>
+                <View style={styles.featuresListContainer}>
+                  {(card.features || []).map((feat, fIdx) => {
+                    const featIcon = typeof feat === 'object' ? (feat.icon || feat.icon_name || 'checkmark-circle-outline') : 'checkmark-circle-outline';
+                    const featTitle = typeof feat === 'object' ? feat.title : String(feat);
+                    return (
+                      <View key={fIdx} style={[styles.featureRow, isSmallDevice && styles.smallFeatureRow]}>
+                        <View style={[styles.featureIconBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }]}>
+                          <Ionicons name={featIcon} size={isSmallDevice ? 13 : 15} color={accentCol} />
+                        </View>
+                        <Text style={[styles.featureTitle, isSmallDevice && styles.smallFeatureTitle]}>{featTitle}</Text>
                       </View>
-                      <Text style={[styles.featureTitle, isSmallDevice && styles.smallFeatureTitle]}>{featTitle}</Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
+                    );
+                  })}
+                </View>
+              </View>
             </View>
 
             {/* Add extra bottom padding for CTA */}
@@ -447,40 +464,81 @@ export default function PlansScreen() {
                 />
               </View>
 
-              {/* Page Dots Indicator */}
-              <View style={[styles.paginationRow, isSmallDevice && styles.smallPaginationRow]}>
-                {plans.map((card, i) => {
-                  const inputRange = [
-                    (i - 1) * CARD_WIDTH,
-                    i * CARD_WIDTH,
-                    (i + 1) * CARD_WIDTH,
-                  ];
+              {/* Pagination Controls Row with Prev/Next Buttons & Clickable Dots */}
+              <View style={styles.paginationControlsRow}>
+                <TouchableOpacity
+                  style={[styles.navArrowBtn, activeIndex === 0 && styles.navArrowDisabled]}
+                  onPress={() => {
+                    if (activeIndex > 0) {
+                      flatListRef.current?.scrollToIndex({ index: activeIndex - 1, animated: true });
+                      setActiveIndex(activeIndex - 1);
+                    }
+                  }}
+                  disabled={activeIndex === 0}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-back" size={18} color={activeIndex === 0 ? theme.textFaint : theme.textPrimary} />
+                </TouchableOpacity>
 
-                  const dotWidth = scrollX.interpolate({
-                    inputRange,
-                    outputRange: [7, 24, 7],
-                    extrapolate: 'clamp',
-                  });
+                <View style={[styles.paginationRow, isSmallDevice && styles.smallPaginationRow]}>
+                  {plans.map((card, i) => {
+                    const inputRange = [
+                      (i - 1) * CARD_WIDTH,
+                      i * CARD_WIDTH,
+                      (i + 1) * CARD_WIDTH,
+                    ];
 
-                  const opacity = scrollX.interpolate({
-                    inputRange,
-                    outputRange: [0.35, 1.0, 0.35],
-                    extrapolate: 'clamp',
-                  });
+                    const dotWidth = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [7, 24, 7],
+                      extrapolate: 'clamp',
+                    });
 
-                  const dotColor = card.accentColor || card.accent_color || '#FF007F';
+                    const opacity = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.35, 1.0, 0.35],
+                      extrapolate: 'clamp',
+                    });
 
-                  return (
-                    <Animated.View
-                      key={card.id || i}
-                      style={[
-                        styles.dot,
-                        { width: dotWidth, opacity, backgroundColor: dotColor },
-                        isSmallDevice && styles.smallDot,
-                      ]}
-                    />
-                  );
-                })}
+                    const dotColor = card.accentColor || card.accent_color || '#FF007F';
+
+                    return (
+                      <TouchableOpacity
+                        key={card.id || i}
+                        onPress={() => {
+                          flatListRef.current?.scrollToIndex({ index: i, animated: true });
+                          setActiveIndex(i);
+                        }}
+                        hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                        activeOpacity={0.75}
+                      >
+                        <Animated.View
+                          style={[
+                            styles.dot,
+                            { width: dotWidth, opacity, backgroundColor: dotColor },
+                            isSmallDevice && styles.smallDot,
+                          ]}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.navArrowBtn, activeIndex >= plans.length - 1 && styles.navArrowDisabled]}
+                  onPress={() => {
+                    if (activeIndex < plans.length - 1) {
+                      flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
+                      setActiveIndex(activeIndex + 1);
+                    }
+                  }}
+                  disabled={activeIndex >= plans.length - 1}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="chevron-forward" size={18} color={activeIndex >= plans.length - 1 ? theme.textFaint : theme.textPrimary} />
+                </TouchableOpacity>
               </View>
             </>
           )}
@@ -530,7 +588,7 @@ export default function PlansScreen() {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
+const getStyles = (theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight) => StyleSheet.create({
   flex: { flex: 1 },
   root: { flex: 1, position: 'relative' },
   rootScrollContent: {
@@ -539,7 +597,7 @@ const getStyles = (theme) => StyleSheet.create({
 
   glowBlobFuchsia: {
     position: 'absolute',
-    top: height * 0.1,
+    top: (windowHeight || 800) * 0.1,
     right: -70,
     width: 260,
     height: 260,
@@ -550,7 +608,7 @@ const getStyles = (theme) => StyleSheet.create({
   },
   glowBlobCyan: {
     position: 'absolute',
-    bottom: height * 0.15,
+    bottom: (windowHeight || 800) * 0.15,
     left: -70,
     width: 240,
     height: 240,
@@ -668,7 +726,7 @@ const getStyles = (theme) => StyleSheet.create({
   // Card Outer & Inner
   cardWrapper: {
     width: CARD_WIDTH,
-    height: isSmallDevice ? 520 : Math.max(height * 0.76, 560),
+    height: isSmallDevice ? Math.min(windowHeight * 0.72, 540) : Math.min(windowHeight * 0.76, 620),
     paddingHorizontal: 4,
     paddingVertical: 6,
     shadowColor: '#000',
@@ -981,13 +1039,33 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 11.5,
   },
 
-  // Pagination Dots
+  // Pagination Controls & Dots
+  paginationControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 12,
+  },
+  navArrowBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  navArrowDisabled: {
+    opacity: 0.25,
+  },
   paginationRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   smallPaginationRow: {
     paddingVertical: 4,

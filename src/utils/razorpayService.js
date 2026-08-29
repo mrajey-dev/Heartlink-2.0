@@ -28,34 +28,54 @@ export const openRazorpayCheckout = async (options) => {
     }
 
     return new Promise((resolve, reject) => {
-      const webOptions = {
-        ...options,
-        handler: (response) => {
-          resolve({
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_signature: response.razorpay_signature,
-          });
-        },
-        modal: {
-          ...(options.modal || {}),
-          ondismiss: () => {
-            reject({ code: 'PAYMENT_CANCELED', description: 'Payment cancelled by user' });
+      try {
+        const webOptions = {
+          key: options.key,
+          order_id: options.order_id,
+          amount: options.amount,
+          currency: options.currency || 'INR',
+          name: options.name || 'HeartLink',
+          description: options.description || '',
+          image: options.image || undefined,
+          prefill: options.prefill || {},
+          theme: options.theme || { color: '#FF007F' },
+          handler: (response) => {
+            resolve({
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            });
           },
-        },
-      };
+          modal: {
+            ...(options.modal || {}),
+            ondismiss: () => {
+              reject({ code: 'PAYMENT_CANCELED', description: 'Payment cancelled by user' });
+            },
+          },
+        };
 
-      const rzp = new window.Razorpay(webOptions);
-      rzp.on('payment.failed', (response) => {
-        reject(response.error || new Error('Payment failed'));
-      });
-      rzp.open();
+        const rzp = new window.Razorpay(webOptions);
+        rzp.on('payment.failed', (response) => {
+          reject(response.error || new Error('Payment failed'));
+        });
+        rzp.open();
+      } catch (err) {
+        reject(err);
+      }
     });
   } else {
     // Native platforms (iOS / Android)
-    const RazorpayModule = require('react-native-razorpay');
-    const RazorpayCheckout = RazorpayModule.default || RazorpayModule;
-    return RazorpayCheckout.open(options);
+    try {
+      const RazorpayModule = require('react-native-razorpay');
+      const RazorpayCheckout = RazorpayModule.default || RazorpayModule;
+      if (!RazorpayCheckout || !RazorpayCheckout.open) {
+        throw new Error('Native Razorpay module not available');
+      }
+      return await RazorpayCheckout.open(options);
+    } catch (err) {
+      console.warn('[Razorpay] Native checkout error:', err?.message || err);
+      throw err;
+    }
   }
 };
 

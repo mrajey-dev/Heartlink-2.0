@@ -16,8 +16,8 @@ class PaymentController extends Controller
     public function __construct()
     {
         $this->razorpay = new Api(
-            config('services.razorpay.key'),
-            config('services.razorpay.secret')
+            config('services.razorpay.key') ?: env('RAZORPAY_KEY_ID', 'rzp_live_SsJLwM19hIvB6A'),
+            config('services.razorpay.secret') ?: env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m')
         );
     }
     
@@ -99,7 +99,7 @@ class PaymentController extends Controller
             'orderId' => $order->id,
             'amount' => $order->amount, // Returns in paise
             'currency' => $order->currency,
-            'key_id' => config('services.razorpay.key'),
+            'key_id' => config('services.razorpay.key') ?: env('RAZORPAY_KEY_ID', 'rzp_live_SsJLwM19hIvB6A'),
             'checkout_url' => $checkoutUrl
         ]);
         
