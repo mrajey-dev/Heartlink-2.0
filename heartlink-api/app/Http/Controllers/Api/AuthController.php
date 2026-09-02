@@ -233,6 +233,7 @@ class AuthController extends Controller
             'age_max'           => 'sometimes|integer',
             'interests'         => 'sometimes|nullable|array',
             'photos'            => 'sometimes|nullable|array',
+            'is_screenshot_allowed' => 'sometimes|boolean',
         ]);
 
         if ($user->is_verified) {

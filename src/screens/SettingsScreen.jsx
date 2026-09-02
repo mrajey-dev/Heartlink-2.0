@@ -133,21 +133,101 @@ export default function SettingsScreen() {
     const plan = user.subscription_plan || user.activeSubscription?.plan_name || user.active_subscription?.plan_name || user.plan;
     if (!plan || typeof plan !== 'string') return null;
     const lower = plan.trim().toLowerCase();
-    if (!lower || lower === 'free' || lower === 'null' || lower === 'none') return null;
+    if (!lower || lower === 'free' || lower === 'null' || lower === 'none' || lower === 'basic_free') return null;
     return plan;
   }, [user]);
+
+  // Dynamic Plan Theme: Golden for Premium, Blue for Basic, Purple for Plus
+  const planTheme = useMemo(() => {
+    if (!activePlanName) return null;
+    const lower = activePlanName.toLowerCase();
+
+    // 1. Premium Plan -> Radiant Metallic Gold
+    if (lower.includes('premium')) {
+      return {
+        key: 'premium',
+        name: 'HeartLink Premium',
+        gradient: ['#D97706', '#B45309', '#78350F'], // Smooth Radiant Gold
+        accent: '#F59E0B',
+        shadowColor: '#D97706',
+        borderColor: 'rgba(251, 191, 36, 0.45)',
+        icon: 'diamond',
+        iconBg: 'rgba(255, 255, 255, 0.22)',
+        perks: ['Unlimited Likes', '10x Matches', 'Golden Tick'],
+      };
+    }
+
+    // 2. Plus Plan -> Royal Purple
+    if (lower.includes('plus') || lower.includes('plue')) {
+      return {
+        key: 'plus',
+        name: 'HeartLink Plus',
+        gradient: ['#9333EA', '#7E22CE', '#3B0764'], // Smooth Royal Purple
+        accent: '#A855F7',
+        shadowColor: '#9333EA',
+        borderColor: 'rgba(192, 132, 252, 0.45)',
+        icon: 'star',
+        iconBg: 'rgba(255, 255, 255, 0.22)',
+        perks: ['Unlimited Likes', 'See Who Liked You', 'Passport'],
+      };
+    }
+
+    // 3. Basic Plan -> Oceanic Sapphire Blue
+    if (lower.includes('basic')) {
+      return {
+        key: 'basic',
+        name: 'HeartLink Basic',
+        gradient: ['#0284C7', '#0369A1', '#075985'], // Smooth Oceanic Blue
+        accent: '#0284C7',
+        shadowColor: '#0284C7',
+        borderColor: 'rgba(56, 189, 248, 0.45)',
+        icon: 'flash',
+        iconBg: 'rgba(255, 255, 255, 0.22)',
+        perks: ['Verified Blue Tick', 'Rewind Swipes', 'Daily Boosts'],
+      };
+    }
+
+    // Default Fallback
+    return {
+      key: 'active',
+      name: activePlanName,
+      gradient: ['#E11D48', '#BE123C', '#881337'], // Deep Rose
+      accent: '#FF007F',
+      shadowColor: '#FF007F',
+      borderColor: 'rgba(255, 0, 127, 0.45)',
+      icon: 'sparkles',
+      iconBg: 'rgba(255, 255, 255, 0.22)',
+      perks: ['Full Access', 'Verified Status', 'Active Perks'],
+    };
+  }, [activePlanName]);
 
   // Subscription expiry date extraction from backend DB user object
   const expiryDate = useMemo(() => {
     if (!user) return null;
     const activeSub = user.active_subscription || user.activeSubscription || user.subscription;
-    const raw = activeSub?.expires_at || user.expires_at || null;
-    if (!raw) return null;
-    const safeStr = typeof raw === 'string' ? raw.replace(' ', 'T') : raw;
-    const date = new Date(safeStr);
-    if (isNaN(date.getTime())) return null;
-    return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
-  }, [user]);
+    const raw = activeSub?.expires_at || user.expires_at || user.subscription_expires_at || null;
+
+    if (raw) {
+      const safeStr = typeof raw === 'string' ? raw.replace(' ', 'T') : raw;
+      const date = new Date(safeStr);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    }
+
+    // Fallback: If user has an active subscription plan, calculate 30 days from activation/update
+    if (activePlanName) {
+      const baseRaw = user.updated_at || user.created_at || new Date();
+      const safeBase = typeof baseRaw === 'string' ? baseRaw.replace(' ', 'T') : baseRaw;
+      const d = new Date(safeBase);
+      const validBase = isNaN(d.getTime()) ? new Date() : d;
+      const expDate = new Date(validBase);
+      expDate.setDate(expDate.getDate() + 30);
+      return expDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    return null;
+  }, [user, activePlanName]);
 
   const loadBlockedUsers = async () => {
     setLoadingBlocked(true);
@@ -214,7 +294,12 @@ export default function SettingsScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeaderRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Ionicons name="diamond-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
+              <Ionicons 
+                name={activePlanName ? (planTheme?.icon || 'diamond') : 'diamond-outline'} 
+                size={18} 
+                color={activePlanName ? planTheme.accent : '#FF007F'} 
+                style={{ marginRight: 8 }} 
+              />
               <Text style={styles.sectionTitle}>Subscription & Status</Text>
             </View>
             <TouchableOpacity
@@ -227,16 +312,50 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          {activePlanName ? (
-            <View style={styles.subActiveBox}>
-              <LinearGradient colors={['#FF007F', '#8B5CF6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.subActiveGrad}>
-                <Ionicons name="sparkles" size={20} color="#FFF" style={{ marginRight: 10 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.subActiveName}>{activePlanName}</Text>
-                  <Text style={styles.subActiveStatus}>Active Subscription • {expiryDate ? `Expires ${expiryDate}` : 'Unlimited Access'}</Text>
+          {activePlanName && planTheme ? (
+            <TouchableOpacity 
+              style={[styles.cleanPlanCard, { shadowColor: planTheme.shadowColor, borderColor: planTheme.borderColor }]}
+              onPress={() => navigation.navigate('Plans')}
+              activeOpacity={0.9}
+            >
+              <LinearGradient
+                colors={planTheme.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cleanPlanGrad}
+              >
+                {/* Main Row: Icon + Title + Expiry + Active Pill */}
+                <View style={styles.cleanMainRow}>
+                  <View style={styles.cleanLeftCol}>
+                    <View style={[styles.cleanIconCircle, { backgroundColor: planTheme.iconBg }]}>
+                      <Ionicons name={planTheme.icon} size={22} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.cleanTextWrap}>
+                      <Text style={styles.cleanPlanTitle}>{activePlanName}</Text>
+                      <Text style={styles.cleanExpiryTxt}>
+                        Expires: <Text style={styles.cleanExpiryDate}>{expiryDate || '30 Days From Activation'}</Text>
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.cleanActivePill}>
+                    <View style={styles.cleanGreenDot} />
+                    <Text style={styles.cleanActiveTxt}>Active</Text>
+                    <Ionicons name="chevron-forward" size={11} color="#FFFFFF" style={{ marginLeft: 2, opacity: 0.7 }} />
+                  </View>
+                </View>
+
+                {/* Sub Perks Row */}
+                <View style={styles.cleanPerksRow}>
+                  {planTheme.perks.map((perk, i) => (
+                    <View key={i} style={styles.cleanPerkItem}>
+                      <Ionicons name="checkmark-circle" size={12} color="#FFFFFF" style={{ marginRight: 4, opacity: 0.9 }} />
+                      <Text style={styles.cleanPerkTxt}>{perk}</Text>
+                    </View>
+                  ))}
                 </View>
               </LinearGradient>
-            </View>
+            </TouchableOpacity>
           ) : (
             <View style={styles.subFreeBox}>
               <View style={{ flex: 1 }}>
@@ -884,6 +1003,142 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FF007F',
+  },
+
+  // Clean, Modern Subscription Card Styles
+  cleanPlanCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    marginTop: 2,
+  },
+  cleanPlanGrad: {
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 15,
+  },
+  cleanMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cleanLeftCol: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 8,
+  },
+  cleanIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  cleanTextWrap: {
+    flex: 1,
+  },
+  cleanPlanTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  cleanExpiryTxt: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 2.5,
+  },
+  cleanExpiryDate: {
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  cleanActivePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+  },
+  cleanGreenDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#4ADE80',
+    marginRight: 5,
+  },
+  cleanActiveTxt: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  cleanPerksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  cleanPerkItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cleanPerkTxt: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.92)',
+  },
+  subFreeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.03)',
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+    marginTop: 4,
+    gap: 12,
+  },
+  subFreeTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  subFreeSub: {
+    fontSize: 11.5,
+    color: theme.textSec,
+    marginTop: 2,
+    lineHeight: 15,
+  },
+  upgradeBtn: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  upgradeBtnGrad: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  upgradeBtnTxt: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   row: {

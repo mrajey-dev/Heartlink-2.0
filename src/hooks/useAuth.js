@@ -12,20 +12,41 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Screen capture permission based on user ID:
-  // User ID 16 -> can take screenshots of app (allowScreenCaptureAsync)
-  // Different user ID -> screenshot shows blank image (preventScreenCaptureAsync)
+  // Screen capture permission based on user is_screenshot_allowed field:
+  // Evaluates boolean, numeric (1/0), and string values from MySQL/PHP/AsyncStorage
+  const isScreenshotAllowed = React.useMemo(() => {
+    if (!user) return false;
+    const rawVal = user.is_screenshot_allowed !== undefined 
+      ? user.is_screenshot_allowed 
+      : (user.allow_screenshot !== undefined ? user.allow_screenshot : null);
+
+    if (rawVal !== null && rawVal !== undefined) {
+      if (rawVal === true || rawVal === 1 || rawVal === '1' || String(rawVal).toLowerCase() === 'true') {
+        return true;
+      }
+      if (rawVal === false || rawVal === 0 || rawVal === '0' || String(rawVal).toLowerCase() === 'false') {
+        return false;
+      }
+    }
+
+    // Default: Support Admin account (user ID 16) is allowed if not explicitly set to false
+    if (String(user.id) === '16' || user.id === 16) {
+      return true;
+    }
+
+    return false;
+  }, [user?.id, user?.is_screenshot_allowed, user?.allow_screenshot]);
+
   useEffect(() => {
     const configureScreenCapture = async () => {
       if (Platform.OS === 'web') return;
       try {
-        const isAllowed = user && (String(user.id) === '16' || user.id === 16 || user.is_screenshot_allowed === true || user.allow_screenshot === true);
-        if (isAllowed) {
+        if (isScreenshotAllowed) {
           await ScreenCapture.allowScreenCaptureAsync();
-          console.log('[ScreenCapture] Screenshots ALLOWED for user ID:', user?.id);
+          console.log('[ScreenCapture] Screenshots ALLOWED for user ID:', user?.id, 'is_screenshot_allowed:', user?.is_screenshot_allowed);
         } else {
           await ScreenCapture.preventScreenCaptureAsync();
-          console.log('[ScreenCapture] Screenshots PREVENTED (blank image) for user ID:', user?.id);
+          console.log('[ScreenCapture] Screenshots PREVENTED (blank image) for user ID:', user?.id, 'is_screenshot_allowed:', user?.is_screenshot_allowed);
         }
       } catch (err) {
         console.warn('[ScreenCapture] Warning setting capture mode:', err?.message);
@@ -33,7 +54,7 @@ export function AuthProvider({ children }) {
     };
 
     configureScreenCapture();
-  }, [user?.id, user?.is_screenshot_allowed, user?.allow_screenshot]);
+  }, [isScreenshotAllowed, user?.id]);
 
   // Restore saved authentication session on app startup and sync backend DB user record
   useEffect(() => {
@@ -63,15 +84,15 @@ export function AuthProvider({ children }) {
               // Backend may return photos as DB objects [{id, photo_url, user_id}] or strings or null
               const rawBackendPhotos = Array.isArray(freshUser.photos)
                 ? freshUser.photos
-                    .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
-                    .filter(Boolean)
+                  .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                  .filter(Boolean)
                 : [];
 
               // Local photos stored during registration or previous add-photo
               const localPhotos = Array.isArray(localUser?.photos)
                 ? localUser.photos
-                    .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
-                    .filter(Boolean)
+                  .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                  .filter(Boolean)
                 : [];
               const localImages = Array.isArray(localUser?.images)
                 ? localUser.images.filter(p => typeof p === 'string' && p.startsWith('http'))

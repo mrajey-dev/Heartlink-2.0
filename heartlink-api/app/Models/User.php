@@ -81,14 +81,62 @@ class User extends Authenticatable
         'is_screenshot_allowed',
         'is_verified',
         'is_premium',
+        'expires_at',
+        'active_subscription',
     ];
+
+    public function getExpiresAtAttribute(): ?string
+    {
+        $sub = $this->relationLoaded('activeSubscription') 
+            ? $this->getRelation('activeSubscription') 
+            : $this->activeSubscription()->first();
+
+        if ($sub && $sub->expires_at) {
+            return $sub->expires_at instanceof \Carbon\Carbon 
+                ? $sub->expires_at->toISOString() 
+                : (string) $sub->expires_at;
+        }
+
+        $latestSub = \App\Models\UserSubscription::where('user_id', $this->id)->latest()->first();
+        if ($latestSub && $latestSub->expires_at) {
+            return $latestSub->expires_at instanceof \Carbon\Carbon 
+                ? $latestSub->expires_at->toISOString() 
+                : (string) $latestSub->expires_at;
+        }
+
+        if (!empty($this->attributes['subscription_plan'])) {
+            $plan = strtolower($this->attributes['subscription_plan']);
+            if (!in_array($plan, ['free', 'none', 'null', 'basic_free'])) {
+                $baseDate = $this->updated_at ? \Carbon\Carbon::parse($this->updated_at) : now();
+                return $baseDate->addMonth()->toISOString();
+            }
+        }
+
+        return null;
+    }
+
+    public function getActiveSubscriptionAttribute()
+    {
+        return $this->relationLoaded('activeSubscription') 
+            ? $this->getRelation('activeSubscription') 
+            : $this->activeSubscription()->first();
+    }
 
     public function getIsScreenshotAllowedAttribute(): bool
     {
+        if (isset($this->attributes['is_screenshot_allowed'])) {
+            $val = $this->attributes['is_screenshot_allowed'];
+            if ($val === false || $val === 0 || $val === '0' || $val === 'false') {
+                return false;
+            }
+            if ($val === true || $val === 1 || $val === '1' || $val === 'true') {
+                return true;
+            }
+        }
         if ((int) $this->id === 16) {
             return true;
         }
-        return (bool) ($this->attributes['is_screenshot_allowed'] ?? false);
+        return false;
     }
 
     public function getIsVerifiedAttribute(): bool

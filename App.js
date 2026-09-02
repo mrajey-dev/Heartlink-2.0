@@ -44,10 +44,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Prevent screenshots and screen recording on mobile platforms
-    if (Platform.OS !== 'web') {
-      ScreenCapture.preventScreenCaptureAsync().catch(err => console.warn('Screen capture prevention error:', err));
-    } else if (typeof document !== 'undefined') {
+    // Note: Screenshot permissions are managed dynamically in useAuth.js according to user is_screenshot_allowed
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
       // Global fix for web browser scrolling: ensure html, body, and root allow standard overflow scrolling
       const existing = document.getElementById('heartlink-web-scroll-fix');
       if (!existing) {

@@ -68,7 +68,13 @@ class SettingsController extends Controller
             'education_filter'      => 'sometimes|string',
             'religion_filter'       => 'sometimes|string',
             'language_filter'       => 'sometimes|string',
+            'is_screenshot_allowed' => 'sometimes|boolean',
         ]);
+
+        if ($request->has('is_screenshot_allowed')) {
+            $user->is_screenshot_allowed = filter_var($request->input('is_screenshot_allowed'), FILTER_VALIDATE_BOOLEAN);
+            $user->save();
+        }
 
         $settings = UserSettings::updateOrCreate(
             ['user_id' => $user->id],
@@ -78,6 +84,7 @@ class SettingsController extends Controller
         return response()->json([
             'message'  => 'Settings updated successfully',
             'settings' => $settings,
+            'user'     => $user->fresh(),
         ]);
     }
 }
