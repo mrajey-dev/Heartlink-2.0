@@ -16,6 +16,7 @@ import { createUserProfile } from "../services/userService";
 import { apiUploadImage } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from '../theme/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlertModal from '../components/CustomAlertModal';
 import SearchableDropdownModal from '../components/common/SearchableDropdownModal';
 import {
@@ -727,6 +728,7 @@ function StepHeader({ icon, title, sub }) {
 export default function RegisterScreen() {
 
   const { login } = useAuth();
+  const { setLightTheme } = useTheme();
   const navigation = useNavigation();
 
   const [step, setStep] = useState(0);
@@ -889,6 +891,8 @@ export default function RegisterScreen() {
             };
 
             console.log('[Register] user stored with photos count:', mergedUser.photos?.length, mergedUser.photos);
+            AsyncStorage.setItem('user-theme', 'light').catch(() => {});
+            setLightTheme?.();
             login(mergedUser, res.access_token || null);
           });
         })
