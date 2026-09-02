@@ -10,6 +10,7 @@ import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 import { apiGetUserCount } from '../services/api';
 
 const { width } = Dimensions.get('window');
@@ -22,8 +23,10 @@ const INVITE_TEMPLATES = [
     icon: 'planet-outline',
     badge: 'POPULAR ✨',
     color: ['#FF007F', '#8B5CF6'],
-    message: (count, goal) =>
-      `✨ Join me on HeartLink! Match your vibe frequency & help us reach ${goal.toLocaleString()} members to unlock the Orbital Vibe Radar 🛰️💫 Currently at ${count.toLocaleString()} members!\n\nDownload HeartLink now: https://heartlink.app/invite`,
+    message: (count, goal, isAdmin) =>
+      isAdmin
+        ? `✨ Join me on HeartLink! Match your vibe frequency & help us reach ${goal.toLocaleString()} members to unlock the Orbital Vibe Radar 🛰️💫 Currently at ${count.toLocaleString()} members!\n\nDownload HeartLink now: https://heartlink.app/invite`
+        : `✨ Join me on HeartLink! Match your vibe frequency & help us unlock the Orbital Vibe Radar 🛰️💫\n\nDownload HeartLink now: https://heartlink.app/invite`,
   },
   {
     id: 'vip',
@@ -31,8 +34,10 @@ const INVITE_TEMPLATES = [
     icon: 'sparkles-outline',
     badge: 'EXCLUSIVE 🚀',
     color: ['#8B5CF6', '#3B82F6'],
-    message: (count, goal) =>
-      `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar at ${goal.toLocaleString()} members (${count.toLocaleString()} joined already)! 🔥\n\nClaim your spot: https://heartlink.app/invite`,
+    message: (count, goal, isAdmin) =>
+      isAdmin
+        ? `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar at ${goal.toLocaleString()} members (${count.toLocaleString()} joined already)! 🔥\n\nClaim your spot: https://heartlink.app/invite`
+        : `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar for our community! 🔥\n\nClaim your spot: https://heartlink.app/invite`,
   },
   {
     id: 'romantic',
@@ -40,8 +45,10 @@ const INVITE_TEMPLATES = [
     icon: 'heart-outline',
     badge: 'TRENDING 💖',
     color: ['#FF2E93', '#FF6B6B'],
-    message: (count, goal) =>
-      `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock Orbital Radar for everyone (${count.toLocaleString()}/${goal.toLocaleString()})! 🔮\n\nJoin the vibe movement: https://heartlink.app/invite`,
+    message: (count, goal, isAdmin) =>
+      isAdmin
+        ? `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock Orbital Radar for everyone (${count.toLocaleString()}/${goal.toLocaleString()})! 🔮\n\nJoin the vibe movement: https://heartlink.app/invite`
+        : `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock the Orbital Vibe Radar! 🔮\n\nJoin the vibe movement: https://heartlink.app/invite`,
   },
   {
     id: 'nightowl',
@@ -49,14 +56,20 @@ const INVITE_TEMPLATES = [
     icon: 'moon-outline',
     badge: 'AESTHETIC 🎧',
     color: ['#6366F1', '#A855F7'],
-    message: (count, goal) =>
-      `🎧 Late night beats & aesthetic connections! Join HeartLink today and help us hit ${goal.toLocaleString()} members to launch Orbital Vibe Radar 🌌 (${count.toLocaleString()} & counting!)\n\nJoin here: https://heartlink.app/invite`,
+    message: (count, goal, isAdmin) =>
+      isAdmin
+        ? `🎧 Late night beats & aesthetic connections! Join HeartLink today and help us hit ${goal.toLocaleString()} members to launch Orbital Vibe Radar 🌌 (${count.toLocaleString()} & counting!)\n\nJoin here: https://heartlink.app/invite`
+        : `🎧 Late night beats & aesthetic connections! Join HeartLink today and connect with people who share your midnight frequency 🌌\n\nJoin here: https://heartlink.app/invite`,
   },
 ];
 
 export default function VibesScreen({ navigation }) {
   const { theme, isDark } = useTheme();
+  const { user } = useAuth();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+
+  // Only User ID = 16 (HeartLink Support / Admin) sees the Real Time user count section
+  const isSupportOrAdmin = user?.id === 16 || user?.id === '16';
 
   const [userCount, setUserCount] = useState(0);
   const [targetGoal, setTargetGoal] = useState(5000);
@@ -74,10 +87,15 @@ export default function VibesScreen({ navigation }) {
   }, [selectedTemplateId]);
 
   const currentInviteText = useMemo(() => {
-    return activeTemplate.message(userCount, targetGoal);
-  }, [activeTemplate, userCount, targetGoal]);
+    return activeTemplate.message(userCount, targetGoal, isSupportOrAdmin);
+  }, [activeTemplate, userCount, targetGoal, isSupportOrAdmin]);
 
   const fetchUserCount = async () => {
+    if (!isSupportOrAdmin) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const res = await apiGetUserCount();
       if (res && typeof res.user_count === 'number') {
@@ -101,14 +119,20 @@ export default function VibesScreen({ navigation }) {
   };
 
   useEffect(() => {
-    fetchUserCount();
+    if (isSupportOrAdmin) {
+      fetchUserCount();
+    } else {
+      setLoading(false);
+    }
 
     const unsubscribe = navigation.addListener('focus', () => {
-      fetchUserCount();
+      if (isSupportOrAdmin) {
+        fetchUserCount();
+      }
     });
 
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, isSupportOrAdmin]);
 
   useEffect(() => {
     Animated.loop(
@@ -164,7 +188,7 @@ export default function VibesScreen({ navigation }) {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Orbital Vibes</Text>
-            <Text style={styles.sub}>Community Unlock Counter</Text>
+            <Text style={styles.sub}>{isSupportOrAdmin ? 'Community Unlock Counter' : 'Exclusive Matching Feature'}</Text>
           </View>
           <View style={styles.lockStatusBadge}>
             <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.lockBadgeGrad}>
@@ -179,14 +203,16 @@ export default function VibesScreen({ navigation }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => {
-                setRefreshing(true);
-                fetchUserCount();
-              }}
-              tintColor="#FF007F"
-            />
+            isSupportOrAdmin ? (
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => {
+                  setRefreshing(true);
+                  fetchUserCount();
+                }}
+                tintColor="#FF007F"
+              />
+            ) : undefined
           }
         >
           {/* Main Cosmic Lock Graphic */}
@@ -207,63 +233,69 @@ export default function VibesScreen({ navigation }) {
           <View style={styles.messageWrap}>
             <Text style={styles.headingTitle}>Vibes Feature Coming Soon!</Text>
             <Text style={styles.headingSub}>
-              This feature will be launched soon. We are waiting for <Text style={styles.highlightTxt}>5,000 users</Text> to join the HeartLink community before unlocking the Orbital Vibe Radar!
+              {isSupportOrAdmin ? (
+                <>This feature will be launched soon. We are waiting for <Text style={styles.highlightTxt}>5,000 users</Text> to join the HeartLink community before unlocking the Orbital Vibe Radar!</>
+              ) : (
+                <>Orbital Vibe Radar matches members on aesthetic frequencies, deep compatibility, and shared lifestyle vibes. This exclusive feature is unlocking soon!</>
+              )}
             </Text>
           </View>
 
-          {/* Real-time Progress Card */}
-          <View style={styles.progressCard}>
-            <View style={[StyleSheet.absoluteFill, { borderRadius: 26, overflow: 'hidden' }]}>
-              <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-              <LinearGradient colors={isDark ? ['rgba(255, 255, 255, 0.05)', 'rgba(255, 0, 127, 0.08)'] : ['rgba(255, 255, 255, 0.9)', 'rgba(255, 0, 127, 0.04)']} style={StyleSheet.absoluteFill} />
-            </View>
-
-            <View style={styles.cardHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={styles.liveIndicatorDot} />
-                <Text style={styles.cardHeaderTitle}>REAL-TIME USER COUNT</Text>
+          {/* Real-time Progress Card — ONLY visible to Admin/Support (user id = 16) */}
+          {isSupportOrAdmin && (
+            <View style={styles.progressCard}>
+              <View style={[StyleSheet.absoluteFill, { borderRadius: 26, overflow: 'hidden' }]}>
+                <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={isDark ? ['rgba(255, 255, 255, 0.05)', 'rgba(255, 0, 127, 0.08)'] : ['rgba(255, 255, 255, 0.9)', 'rgba(255, 0, 127, 0.04)']} style={StyleSheet.absoluteFill} />
               </View>
-              <View style={styles.percentBadge}>
-                <Text style={styles.percentBadgeTxt}>{progressPercent}%</Text>
+
+              <View style={styles.cardHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={styles.liveIndicatorDot} />
+                  <Text style={styles.cardHeaderTitle}>REAL-TIME USER COUNT</Text>
+                </View>
+                <View style={styles.percentBadge}>
+                  <Text style={styles.percentBadgeTxt}>{progressPercent}%</Text>
+                </View>
+              </View>
+
+              {/* Big Stat Display */}
+              {loading ? (
+                <View style={{ paddingVertical: 20 }}>
+                  <ActivityIndicator size="large" color="#FF007F" />
+                </View>
+              ) : (
+                <View style={styles.statRow}>
+                  <Text style={styles.currentCountTxt}>{userCount.toLocaleString()}</Text>
+                  <Text style={styles.targetGoalTxt}> / {targetGoal.toLocaleString()} Users</Text>
+                </View>
+              )}
+
+              {/* Animated Progress Bar */}
+              <View style={styles.progressBarTrack}>
+                <Animated.View
+                  style={[
+                    styles.progressBarFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                >
+                  <LinearGradient colors={['#FF007F', '#A855F7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                </Animated.View>
+              </View>
+
+              <View style={styles.cardFooterRow}>
+                <Ionicons name="people-outline" size={14} color={theme.textSec} style={{ marginRight: 6 }} />
+                <Text style={styles.cardFooterTxt}>
+                  {userCount < targetGoal ? `${(targetGoal - userCount).toLocaleString()} more members needed` : 'Goal reached! Launching feature...'}
+                </Text>
               </View>
             </View>
-
-            {/* Big Stat Display */}
-            {loading ? (
-              <View style={{ paddingVertical: 20 }}>
-                <ActivityIndicator size="large" color="#FF007F" />
-              </View>
-            ) : (
-              <View style={styles.statRow}>
-                <Text style={styles.currentCountTxt}>{userCount.toLocaleString()}</Text>
-                <Text style={styles.targetGoalTxt}> / {targetGoal.toLocaleString()} Users</Text>
-              </View>
-            )}
-
-            {/* Animated Progress Bar */}
-            <View style={styles.progressBarTrack}>
-              <Animated.View
-                style={[
-                  styles.progressBarFill,
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              >
-                <LinearGradient colors={['#FF007F', '#A855F7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
-              </Animated.View>
-            </View>
-
-            <View style={styles.cardFooterRow}>
-              <Ionicons name="people-outline" size={14} color={theme.textSec} style={{ marginRight: 6 }} />
-              <Text style={styles.cardFooterTxt}>
-                {userCount < targetGoal ? `${(targetGoal - userCount).toLocaleString()} more members needed` : 'Goal reached! Launching feature...'}
-              </Text>
-            </View>
-          </View>
+          )}
 
           {/* Interactive Invite Message Showcase Section */}
           <View style={styles.inviteSection}>

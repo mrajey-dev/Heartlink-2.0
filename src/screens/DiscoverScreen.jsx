@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import {
   View, Text, StyleSheet, TouchableOpacity, Pressable,
   Animated, Dimensions, Image, ActivityIndicator,
-  StatusBar, Platform, Easing, BackHandler,
+  StatusBar, Platform, Easing, BackHandler, PanResponder,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -126,6 +126,25 @@ export default function DiscoverScreen() {
   const rotate = card1Pos.x.interpolate({
     inputRange: [-width * 0.8, 0, width * 0.8],
     outputRange: ['-12deg', '0deg', '12deg'],
+    extrapolate: 'clamp',
+  });
+
+  // Stamp opacities for real-time swipe hints
+  const likeStampOpacity = card1Pos.x.interpolate({
+    inputRange: [25, 90],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
+  const nopeStampOpacity = card1Pos.x.interpolate({
+    inputRange: [-90, -25],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const detailsHintOpacity = card1Pos.y.interpolate({
+    inputRange: [-75, -25],
+    outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
@@ -681,6 +700,80 @@ export default function DiscoverScreen() {
     swipeCard('left', 'pass');
   };
 
+  const swipeCardRef = useRef(swipeCard);
+  swipeCardRef.current = swipeCard;
+  const openDetailRef = useRef(openDetail);
+  openDetailRef.current = openDetail;
+  const isAnimatingRef = useRef(isAnimating);
+  isAnimatingRef.current = isAnimating;
+
+  // Touch and drag gesture handler: allows moving the profile card anywhere on touch
+  // and opening profile details when swiped upward
+  const panResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        if (isAnimatingRef.current || showDetailRef.current) return false;
+        return Math.abs(gestureState.dx) > 7 || Math.abs(gestureState.dy) > 7;
+      },
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        if (isAnimatingRef.current || showDetailRef.current) return false;
+        return Math.abs(gestureState.dx) > 7 || Math.abs(gestureState.dy) > 7;
+      },
+      onPanResponderGrant: () => {
+        card1Pos.stopAnimation();
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        card1Pos.setValue({ x: gestureState.dx, y: gestureState.dy });
+      },
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dx, dy, vx } = gestureState;
+
+        // 1. SWIPE UP -> Show User Details
+        if (dy < -65 && Math.abs(dy) > Math.abs(dx) * 0.75) {
+          Animated.spring(card1Pos, {
+            toValue: { x: 0, y: 0 },
+            friction: 7,
+            tension: 45,
+            useNativeDriver: false,
+          }).start();
+          openDetailRef.current();
+          return;
+        }
+
+        // 2. SWIPE RIGHT -> LIKE
+        if (dx > 110 || (dx > 50 && vx > 0.4)) {
+          swipeCardRef.current('right', 'like');
+          return;
+        }
+
+        // 3. SWIPE LEFT -> PASS
+        if (dx < -110 || (dx < -50 && vx < -0.4)) {
+          swipeCardRef.current('left', 'pass');
+          return;
+        }
+
+        // 4. Released without meeting threshold -> Spring back to center smoothly
+        Animated.spring(card1Pos, {
+          toValue: { x: 0, y: 0 },
+          friction: 6,
+          tension: 40,
+          useNativeDriver: false,
+        }).start();
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(card1Pos, {
+          toValue: { x: 0, y: 0 },
+          friction: 6,
+          tension: 40,
+          useNativeDriver: false,
+        }).start();
+      },
+    });
+  }, [card1Pos]);
+
   return (
     <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
@@ -823,6 +916,7 @@ export default function DiscoverScreen() {
           ) : (
             /* Single focused Card - Action Buttons for profile swiping */
             <Animated.View
+              {...panResponder.panHandlers}
               style={[
                 styles.card,
                 styles.cardActive,
@@ -846,6 +940,20 @@ export default function DiscoverScreen() {
 
               <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
+
+              {/* Dynamic Action Stamps */}
+              <Animated.View style={[styles.stampContainer, styles.likeStamp, { opacity: likeStampOpacity }]} pointerEvents="none">
+                <Text style={styles.likeStampText}>LIKE</Text>
+              </Animated.View>
+
+              <Animated.View style={[styles.stampContainer, styles.nopeStamp, { opacity: nopeStampOpacity }]} pointerEvents="none">
+                <Text style={styles.nopeStampText}>NOPE</Text>
+              </Animated.View>
+
+              <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
+                <Ionicons name="chevron-up" size={17} color="#00E5FF" style={{ marginRight: 4 }} />
+                <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
+              </Animated.View>
 
               {/* Top-Right Match Percentage Badge */}
               <View style={styles.cardMatchBadge} pointerEvents="none">
@@ -1418,6 +1526,60 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 10.5,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+
+  // Dynamic Gestures & Action Stamps
+  stampContainer: {
+    position: 'absolute',
+    top: 40,
+    zIndex: 25,
+    borderWidth: 3,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
+  likeStamp: {
+    left: 24,
+    borderColor: '#30D158',
+    transform: [{ rotate: '-14deg' }],
+  },
+  likeStampText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#30D158',
+    letterSpacing: 2,
+  },
+  nopeStamp: {
+    right: 24,
+    borderColor: '#FF375F',
+    transform: [{ rotate: '14deg' }],
+  },
+  nopeStampText: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FF375F',
+    letterSpacing: 2,
+  },
+  detailsHintContainer: {
+    position: 'absolute',
+    top: 32,
+    alignSelf: 'center',
+    zIndex: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(10, 10, 25, 0.75)',
+    borderColor: '#00E5FF',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  detailsHintText: {
+    fontSize: 11.5,
+    fontWeight: '900',
+    color: '#00E5FF',
+    letterSpacing: 1,
   },
 
   cardTextOverlayBottomLeft: {

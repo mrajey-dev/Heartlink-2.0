@@ -208,7 +208,9 @@ class ChatController extends Controller
                 ? ($isMe ? 'You: ' . $lastMsg->message : $lastMsg->message)
                 : ((int) $authId === 16 ? 'No messages yet' : "We're here to help! Tap to message our support team.");
 
-            $lastTime = $lastMsg ? $lastMsg->created_at->diffForHumans() : '24/7';
+            $lastTime = ($partnerId === 16 || !empty($otherUser->is_support))
+                ? ''
+                : ($lastMsg ? $lastMsg->created_at->diffForHumans() : '');
             $lastTimestamp = $lastMsg ? $lastMsg->created_at->timestamp : 0;
 
             $photosCol = isset($otherUser->photos) ? $otherUser->photos : collect();

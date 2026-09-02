@@ -90,11 +90,16 @@ export default function ChatScreen() {
         const user16Conv = apiList.find(c => c.id === 16 || c.id === '16');
         const regularList = apiList.filter(c => c.id !== 16 && c.id !== '16');
 
+        let supportTime = user16Conv?.time || '';
+        if (typeof supportTime === 'string' && (supportTime.toLowerCase().includes('minute') || supportTime.toLowerCase().includes('ago'))) {
+          supportTime = '';
+        }
+
         const supportChat = {
           id: 16,
           name: 'HeartLink Support',
           display_name: 'HeartLink Support',
-          time: user16Conv?.time || '24/7',
+          time: supportTime,
           unread: user16Conv?.unread || 0,
           online: true,
           is_verified: true,
@@ -192,8 +197,10 @@ export default function ChatScreen() {
                 </View>
               </View>
               <View style={styles.pinnedRow}>
-                <Ionicons name="pin" size={12} color={theme.accent || '#FF007F'} style={{ marginRight: 3 }} />
-                <Text style={[styles.chatTime, { color: theme.accent || '#FF007F', fontWeight: '700' }]}>{item.time}</Text>
+                <Ionicons name="pin" size={12} color={theme.accent || '#FF007F'} style={Boolean(item.time && !item.time.toLowerCase().includes('minute') && !item.time.toLowerCase().includes('ago')) ? { marginRight: 3 } : null} />
+                {Boolean(item.time && !item.time.toLowerCase().includes('minute') && !item.time.toLowerCase().includes('ago')) && (
+                  <Text style={[styles.chatTime, { color: theme.accent || '#FF007F', fontWeight: '700' }]}>{item.time}</Text>
+                )}
               </View>
             </View>
             <View style={styles.chatRow}>
@@ -376,14 +383,14 @@ const getStyles = (theme) => StyleSheet.create({
     overflow: 'hidden',
   },
   supportCard: {
-    backgroundColor: theme.isDark ? 'rgba(255, 0, 127, 0.08)' : '#FFF7FC',
-    borderColor: theme.isDark ? 'rgba(255, 0, 127, 0.35)' : 'rgba(255, 0, 127, 0.25)',
-    borderWidth: 1.2,
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 3,
+    backgroundColor: theme.isDark ? '#191130' : '#FFFFFF',
+    borderColor: theme.isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: theme.isDark ? 0.2 : 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   avatarWrap: { position: 'relative', marginRight: 14 },
   avatar: { width: 54, height: 54, borderRadius: 27 },
@@ -393,10 +400,6 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
   },
   supportOnlineDot: {
     position: 'absolute',
@@ -414,18 +417,17 @@ const getStyles = (theme) => StyleSheet.create({
     fontWeight: '900',
   },
   officialBadge: {
-    backgroundColor: 'rgba(0, 229, 255, 0.15)',
-    borderColor: 'rgba(0, 229, 255, 0.5)',
-    borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
+    backgroundColor: theme.isDark ? 'rgba(0, 229, 255, 0.14)' : 'rgba(0, 180, 216, 0.12)',
+    borderWidth: 0,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     marginLeft: 6,
   },
   officialBadgeText: {
-    color: '#00E5FF',
+    color: theme.isDark ? '#00E5FF' : '#0096C7',
     fontSize: 9,
-    fontWeight: '900',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   pinnedRow: {
