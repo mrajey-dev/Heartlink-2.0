@@ -35,10 +35,10 @@ class ExpoPushService
 
             $token = trim($user->expo_push_token);
 
-            // Basic token format check
+            // If token is a native FCM device token (does not start with Expo), use Firebase Cloud Messaging v1 directly
             if (!str_starts_with($token, 'ExponentPushToken') && !str_starts_with($token, 'ExpoPushToken')) {
-                Log::warning("[ExpoPushService] Invalid token format for user ID {$user->id}: {$token}");
-                return false;
+                Log::info("[ExpoPushService] Token is a direct FCM token. Delegating to FirebasePushService for user {$user->id}");
+                return FirebasePushService::sendToFcmToken($token, $title, $body, $data);
             }
 
             $payload = [
@@ -51,7 +51,7 @@ class ExpoPushService
                 'channelId' => 'default',
             ];
 
-            Log::info("[ExpoPushService] Sending push notification to user {$user->id} ({$token}): {$title}");
+            Log::info("[ExpoPushService] Sending push notification via Expo Push API to user {$user->id} ({$token}): {$title}");
 
             $response = Http::withHeaders([
                 'Accept'          => 'application/json',

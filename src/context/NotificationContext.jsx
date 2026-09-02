@@ -47,27 +47,25 @@ export const NotificationProvider = ({ children }) => {
     setBannerData(data);
     setBannerVisible(true);
 
-    // 2. Trigger native phone notification in standalone/development builds
-    if (!isExpoGo) {
-      const targetScreen =
-        data?.type === 'chat' || data?.type === 'message'
-          ? 'ChatDetail'
-          : (data?.type === 'request' || data?.type === 'date_proposal' || data?.type === 'notification'
-            ? 'Notifications'
-            : 'HomeTabs');
+    // 2. Trigger native phone notification
+    const targetScreen =
+      data?.type === 'chat' || data?.type === 'message'
+        ? 'ChatDetail'
+        : (data?.type === 'request' || data?.type === 'date_proposal' || data?.type === 'notification'
+          ? 'Notifications'
+          : 'HomeTabs');
 
-      displayPhoneNotification({
-        title: data?.title || 'HeartLink',
-        body: data?.message || '',
-        data: {
-          screen: targetScreen,
-          params: {
-            userId: data?.userId,
-            user: data?.user,
-          },
+    displayPhoneNotification({
+      title: data?.title || 'HeartLink',
+      body: data?.message || '',
+      data: {
+        screen: targetScreen,
+        params: {
+          userId: data?.userId,
+          user: data?.user,
         },
-      });
-    }
+      },
+    });
   }, []);
 
   const dismissNotification = useCallback(() => {

@@ -37,6 +37,7 @@ Route::prefix('v1')->group(function () {
     // Protected API Routes (Sanctum Auth)
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/user/push-token',    [AuthController::class, 'savePushToken']);
+        Route::post('/user/test-push',     [AuthController::class, 'testPushNotification']);
 
         // Auth & Profile
         Route::get('/user/profile',      [AuthController::class, 'profile']);

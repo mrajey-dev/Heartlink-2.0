@@ -828,4 +828,35 @@ public function savePushToken(Request $request)
             'target_goal' => 5000,
         ]);
     }
+
+    /**
+     * Trigger a test push notification to the logged-in user
+     */
+    public function testPushNotification(Request $request)
+    {
+        $user = $request->user();
+
+        if (empty($user->expo_push_token)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'User does not have a registered push token. Please open the app on a physical device first.',
+            ], 400);
+        }
+
+        $title = $request->input('title', 'HeartLink Test');
+        $body  = $request->input('body', 'Firebase Cloud Messaging notification is working perfectly!');
+
+        $delivered = \App\Services\ExpoPushService::sendToUser(
+            $user,
+            $title,
+            $body,
+            ['screen' => 'Notifications', 'type' => 'test_push']
+        );
+
+        return response()->json([
+            'status'          => $delivered ? 'success' : 'failed',
+            'message'         => $delivered ? 'Test notification dispatched successfully' : 'Failed to dispatch notification. Check logs.',
+            'expo_push_token' => $user->expo_push_token,
+        ]);
+    }
 }

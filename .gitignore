@@ -40,3 +40,4 @@ yarn-error.*
 /ios
 /android
 heartlink-api.zip
+*firebase-service-account*.json

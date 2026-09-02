@@ -329,6 +329,10 @@ export const apiSavePushToken = (pushToken) => apiFetch('/user/push-token', {
   method: 'POST',
   body: { push_token: pushToken },
 });
+export const apiTestPushNotification = (title, body) => apiFetch('/user/test-push', {
+  method: 'POST',
+  body: { title, body },
+});
 
 // ─── Chat & Moderation API ───────────────────────────────────────────
 export const apiGetConversations = () => apiFetch('/chats');
