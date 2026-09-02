@@ -14,8 +14,8 @@ use App\Http\Controllers\PaymentController;
 
 
 Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/payment/create-order', [PaymentController::class, 'createOrder']);
-    Route::post('/payment/verify-payment', [PaymentController::class, 'verifyPayment']);
+    Route::post('/payment/create-order', [SubscriptionController::class, 'createRazorpayOrder']);
+    Route::post('/payment/verify-payment', [SubscriptionController::class, 'verifyRazorpayPayment']);
 });
 
 Route::get('/ping', function () {

@@ -57,6 +57,9 @@ export const getVerifiedBadgeInfo = (item) => {
     rawPlan.includes('access') ||
     rawPlan.includes('gold');
 
+  const isBasicPlan =
+    rawPlan.includes('basic');
+
   const isSupport =
     userObj.is_support === true ||
     item.is_support === true ||
@@ -92,8 +95,17 @@ export const getVerifiedBadgeInfo = (item) => {
       color: '#9D4EDD',
       planName: 'Plus',
     };
+  } else if (isBasicPlan) {
+    // Official Blue Verified Tick for HeartLink Basic Plan subscribers!
+    return {
+      isVerified: true,
+      iconName: 'check-decagram',
+      iconLibrary: 'MaterialCommunityIcons',
+      color: '#0095F6',
+      planName: 'HeartLink Basic',
+    };
   } else if (isVerified) {
-    // Only Aadhaar verified (Free/Basic user who completed Aadhaar identity verification):
+    // Only Aadhaar verified (Free user who completed Aadhaar identity verification):
     // Use official Blue Shield Checkmark badge!
     return {
       isVerified: true,

@@ -113,12 +113,19 @@ class MatchController extends Controller
             $q->where('proposer_id', $otherId)->where('partner_id', $userId);
         })->delete();
 
-        // 5. Mark all messages between both users as read
+        // 5. Delete all messages between both users in both directions
         \App\Models\Message::where(function ($q) use ($userId, $otherId) {
             $q->where('sender_id', $userId)->where('receiver_id', $otherId);
         })->orWhere(function ($q) use ($userId, $otherId) {
             $q->where('sender_id', $otherId)->where('receiver_id', $userId);
-        })->update(['is_read' => true]);
+        })->delete();
+
+        // 6. Delete chat message counters between both users in both directions
+        \Illuminate\Support\Facades\DB::table('chat_message_counters')->where(function ($q) use ($userId, $otherId) {
+            $q->where('sender_id', $userId)->where('receiver_id', $otherId);
+        })->orWhere(function ($q) use ($userId, $otherId) {
+            $q->where('sender_id', $otherId)->where('receiver_id', $userId);
+        })->delete();
 
         return response()->json([
             'message' => 'Unmatched and deleted successfully',

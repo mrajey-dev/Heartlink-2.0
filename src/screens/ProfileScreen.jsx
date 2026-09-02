@@ -52,8 +52,6 @@ export default function ProfileScreen() {
   const styles = useMemo(() => getStyles(theme, safeTopSpacing), [theme, safeTopSpacing]);
   const [photoIdx, setPhotoIdx] = useState(0);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [heroLoading, setHeroLoading] = useState(false);
-  const [thumbLoadingMap, setThumbLoadingMap] = useState({});
   const [isFullScreenViewerOpen, setIsFullScreenViewerOpen] = useState(false);
   const [mainPhotoSuccessAlertVisible, setMainPhotoSuccessAlertVisible] = useState(false);
   const [settingMainPhoto, setSettingMainPhoto] = useState(false);
@@ -782,7 +780,6 @@ export default function ProfileScreen() {
 
               {allPhotos.map((item, index) => {
                 const isCurrentAvatar = item === profileUser.avatar || index === 0;
-                const isThumbLoading = !!thumbLoadingMap[index];
                 return (
                   <TouchableOpacity
                     key={index}
@@ -798,14 +795,8 @@ export default function ProfileScreen() {
                     <Image
                       source={{ uri: item }}
                       style={styles.galleryThumbImg}
-                      onLoadStart={() => setThumbLoadingMap(prev => ({ ...prev, [index]: true }))}
-                      onLoadEnd={() => setThumbLoadingMap(prev => ({ ...prev, [index]: false }))}
+                      resizeMode="cover"
                     />
-                    {isThumbLoading && (
-                      <View style={styles.thumbLoadingOverlay}>
-                        <ActivityIndicator size="small" color="#FF007F" />
-                      </View>
-                    )}
                     {isCurrentAvatar ? (
                       <View style={styles.avatarBadgeOverlay}>
                         <Ionicons name="star" size={10} color="#FFF" style={{ marginRight: 3 }} />
@@ -858,11 +849,10 @@ export default function ProfileScreen() {
           <Animated.Image
             source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
             style={[styles.heroImg, { height: heroImgHeight }]}
-            onLoadStart={() => setHeroLoading(true)}
-            onLoadEnd={() => setHeroLoading(false)}
+            resizeMode="cover"
           />
         </View>
-        {(heroLoading || uploadingPhoto) && (
+        {uploadingPhoto && (
           <View style={styles.heroLoadingOverlay}>
             <ActivityIndicator size="large" color="#FF007F" />
           </View>
@@ -1288,11 +1278,10 @@ export default function ProfileScreen() {
           <Animated.Image
             source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
             style={[styles.heroImg, { height: heroImgHeight }]}
-            onLoadStart={() => setHeroLoading(true)}
-            onLoadEnd={() => setHeroLoading(false)}
+            resizeMode="cover"
           />
         </View>
-        {(heroLoading || uploadingPhoto) && (
+        {uploadingPhoto && (
           <View style={styles.heroLoadingOverlay}>
             <ActivityIndicator size="large" color="#FF007F" />
           </View>
@@ -1511,7 +1500,8 @@ export default function ProfileScreen() {
           >
             <Image
               source={{ uri: allPhotos[photoIdx] || allPhotos[0] }}
-              style={{ width: width, height: height * 0.85, resizeMode: 'contain', backgroundColor: '#000000' }}
+              style={{ width: width, height: height * 0.85, backgroundColor: '#000000' }}
+              resizeMode="contain"
             />
           </TouchableOpacity>
 
@@ -1856,7 +1846,6 @@ const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
     left: 0,
     right: 0,
     width: '100%',
-    resizeMode: 'cover',
   },
   heroTopGrad: {
     position: 'absolute',
@@ -2108,7 +2097,6 @@ const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
   galleryThumbImg: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   thumbDeleteBtn: {
     position: 'absolute',

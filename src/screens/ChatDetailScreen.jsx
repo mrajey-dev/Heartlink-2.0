@@ -32,6 +32,7 @@ import {
   apiReactMessage,
   apiBlockUser,
   apiUnblockUser,
+  apiUnmatchUser,
   apiReportUser,
   apiGetMessages,
   apiDeleteMessage,
@@ -475,6 +476,8 @@ export default function ChatDetailScreen() {
   const [showMenu, setShowMenu] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showUnmatchModal, setShowUnmatchModal] = useState(false);
+  const [isMatched, setIsMatched] = useState(true);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showClearChatModal, setShowClearChatModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
@@ -721,6 +724,10 @@ export default function ChatDetailScreen() {
         const response = await apiGetMessages(actualId);
         if (response?.is_blocked_by_me) {
           setIsBlocked(true);
+        }
+
+        if (response?.is_matched !== undefined && !isSupportChat && !isCurrentUserSupport) {
+          setIsMatched(Boolean(response.is_matched));
         }
 
         if (response?.free_messages_left !== undefined && !isSupportChat && !isCurrentUserSupport) {
@@ -1201,6 +1208,25 @@ export default function ChatDetailScreen() {
     }
   };
 
+  const handleConfirmUnmatch = async () => {
+    setShowUnmatchModal(false);
+    if (activeUser && activeUser.id) {
+      triggerCustomToast(`${activeUser.name} has been unmatched.`);
+      try {
+        await apiUnmatchUser(activeUser.id);
+      } catch (err) {
+        console.log('Unmatch API error:', err);
+      }
+      eventEmitter.emit(EVENTS.MATCH_UPDATED);
+      eventEmitter.emit(EVENTS.CHAT_UPDATED);
+      setTimeout(() => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        }
+      }, 400);
+    }
+  };
+
   const handleConfirmReport = () => {
     setShowReportModal(false);
     triggerCustomToast(`Report submitted for ${activeUser.name}. Thank you!`);
@@ -1491,6 +1517,25 @@ export default function ChatDetailScreen() {
 
                 <View style={styles.dropdownDivider} />
 
+                {!isSupportChat && !isCurrentUserSupport && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.dropdownOption}
+                      onPress={() => {
+                        setShowMenu(false);
+                        setShowUnmatchModal(true);
+                      }}
+                    >
+                      <Ionicons name="heart-dislike-outline" size={18} color="#FF9500" />
+                      <Text style={[styles.dropdownOptionText, { color: '#FF9500' }]}>
+                        Unmatch
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.dropdownDivider} />
+                  </>
+                )}
+
                 {isBlocked ? (
                   <TouchableOpacity
                     style={styles.dropdownOption}
@@ -1647,7 +1692,14 @@ export default function ChatDetailScreen() {
               </View>
             )}
 
-            {isBlocked ? (
+            {!isMatched && !isSupportChat && !isCurrentUserSupport ? (
+              <View style={styles.blockedBannerRow}>
+                <Ionicons name="heart-dislike" size={18} color="#FF9500" style={{ marginRight: 6 }} />
+                <Text style={styles.blockedBannerText}>
+                  You are no longer matched with this user.
+                </Text>
+              </View>
+            ) : isBlocked ? (
               <View style={styles.blockedBannerRow}>
                 <Text style={styles.blockedBannerText}>
                   You blocked this user.
@@ -1810,6 +1862,45 @@ export default function ChatDetailScreen() {
               >
                 <LinearGradient colors={['#FF375F', '#D00040']} style={styles.alertBtnGrad}>
                   <Text style={styles.alertConfirmTxt}>Clear Chat</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Unmatch Confirmation Modal */}
+      <Modal
+        visible={showUnmatchModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowUnmatchModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.customAlertCard}>
+            <View style={[styles.alertIconCircleDanger, { backgroundColor: 'rgba(255, 149, 0, 0.15)' }]}>
+              <Ionicons name="heart-dislike" size={30} color="#FF9500" />
+            </View>
+            <Text style={styles.alertTitle}>Unmatch User</Text>
+            <Text style={styles.alertText}>
+              Are you sure you want to unmatch with {activeUser.name}? You will no longer see each other in Matches or Chat, and their profile will reappear in Discover.
+            </Text>
+
+            <View style={styles.alertButtonsRow}>
+              <TouchableOpacity
+                style={styles.alertCancelBtn}
+                onPress={() => setShowUnmatchModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.alertCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.alertConfirmBtnDanger}
+                onPress={handleConfirmUnmatch}
+                activeOpacity={0.8}
+              >
+                <LinearGradient colors={['#FF9500', '#FF3B30']} style={styles.alertBtnGrad}>
+                  <Text style={styles.alertConfirmTxt}>Unmatch</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>

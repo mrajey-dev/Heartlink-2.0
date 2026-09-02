@@ -375,6 +375,8 @@ export default function RequestsScreen() {
     try {
       await apiUnmatchUser(targetUserId);
       eventEmitter.emit(EVENTS.REQUEST_UPDATED);
+      eventEmitter.emit(EVENTS.MATCH_UPDATED);
+      eventEmitter.emit(EVENTS.CHAT_UPDATED);
     } catch (e) {
       console.warn('Unmatch error:', e?.message);
     }

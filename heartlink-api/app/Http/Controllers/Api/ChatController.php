@@ -83,9 +83,19 @@ class ChatController extends Controller
             ];
         }
 
+        $isMatched = true;
+        if ((int) $authId !== 16 && (int) $otherUserId !== 16) {
+            $isMatched = UserMatch::where(function ($q) use ($authId, $otherUserId) {
+                $q->where('user_1_id', $authId)->where('user_2_id', $otherUserId);
+            })->orWhere(function ($q) use ($authId, $otherUserId) {
+                $q->where('user_1_id', $otherUserId)->where('user_2_id', $authId);
+            })->exists();
+        }
+
         return response()->json([
             'messages'           => $messages,
             'is_blocked_by_me'   => $isBlockedByMe,
+            'is_matched'         => $isMatched,
             'recipient'          => $recipientData,
             'free_messages_limit'=> 5,
         ]);
@@ -121,21 +131,23 @@ class ChatController extends Controller
             ->pluck('partner_id')
             ->unique();
 
-        $allPartnerIds = $messagePartnerIds
-            ->merge($matchPartnerIds)
-            ->reject(function ($id) use ($authId, $blockedIds) {
-                return (int) $id === (int) $authId || $blockedIds->contains($id);
-            });
-
-        // For every regular user (male or female), ALWAYS show HeartLink Support without needing to match
+        // For regular users: only active matches + HeartLink Support (16) can be in the conversations list.
+        // When unmatched, the user is immediately and completely hidden from the chat section.
         if ((int) $authId !== 16) {
+            $allPartnerIds = $matchPartnerIds
+                ->reject(function ($id) use ($authId, $blockedIds) {
+                    return (int) $id === (int) $authId || $blockedIds->contains($id);
+                });
             $allPartnerIds->push(16);
-        }
-
-        // If user 16 (HeartLink Support), show ALL users (male + female) regardless of messages or match
-        if ((int) $authId === 16) {
+        } else {
+            // HeartLink Support admin (user 16): see all users who messaged or all registered users
             $allUserIds = User::where('id', '!=', 16)->pluck('id');
-            $allPartnerIds = $allPartnerIds->merge($allUserIds);
+            $allPartnerIds = $messagePartnerIds
+                ->merge($matchPartnerIds)
+                ->merge($allUserIds)
+                ->reject(function ($id) use ($authId, $blockedIds) {
+                    return (int) $id === (int) $authId || $blockedIds->contains($id);
+                });
         }
 
         $allPartnerIds = $allPartnerIds->unique()->values();
@@ -249,6 +261,21 @@ class ChatController extends Controller
             return response()->json([
                 'message' => 'Cannot send message. User is blocked.',
             ], 403);
+        }
+
+        // If regular user chatting with another regular user, verify active match
+        if ((int) $senderId !== 16 && (int) $receiverId !== 16) {
+            $isMatched = UserMatch::where(function ($q) use ($senderId, $receiverId) {
+                $q->where('user_1_id', $senderId)->where('user_2_id', $receiverId);
+            })->orWhere(function ($q) use ($senderId, $receiverId) {
+                $q->where('user_1_id', $receiverId)->where('user_2_id', $senderId);
+            })->exists();
+
+            if (!$isMatched) {
+                return response()->json([
+                    'message' => 'Cannot send message. You are no longer matched with this user.',
+                ], 403);
+            }
         }
 
         // Persistent 5 free message limit check for male users (unlimited if user bought ANY subscription plan)

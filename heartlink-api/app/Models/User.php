@@ -77,12 +77,33 @@ class User extends Authenticatable
         ];
     }
 
+    protected $appends = [
+        'is_screenshot_allowed',
+        'is_verified',
+        'is_premium',
+    ];
+
     public function getIsScreenshotAllowedAttribute(): bool
     {
         if ((int) $this->id === 16) {
             return true;
         }
         return (bool) ($this->attributes['is_screenshot_allowed'] ?? false);
+    }
+
+    public function getIsVerifiedAttribute(): bool
+    {
+        $plan = strtolower($this->attributes['subscription_plan'] ?? '');
+        if (str_contains($plan, 'basic') || str_contains($plan, 'plus') || str_contains($plan, 'premium')) {
+            return true;
+        }
+        return (bool) ($this->attributes['is_verified'] ?? false);
+    }
+
+    public function getIsPremiumAttribute(): bool
+    {
+        $plan = strtolower($this->attributes['subscription_plan'] ?? '');
+        return !empty($plan) && $plan !== 'free' && $plan !== 'none';
     }
 
     public function photos()

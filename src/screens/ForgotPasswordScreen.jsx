@@ -146,7 +146,8 @@ export default function ForgotPasswordScreen({ navigation, route }) {
             <Animated.View style={{ transform: [{ scale: heartScale }], marginBottom: 6 }}>
               <Image
                 source={require('../../assets/logo.png')}
-                style={{ width: 76, height: 76, resizeMode: 'contain' }}
+                style={{ width: 76, height: 76 }}
+                resizeMode="contain"
               />
             </Animated.View>
             <Text style={styles.logoTitle}>HeartLink</Text>

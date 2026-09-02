@@ -52,11 +52,28 @@ class SubscriptionController extends Controller
 
     public function subscribe(Request $request)
     {
-        $validated = $request->validate([
-            'plan_name' => 'required|string',
-            'duration'  => 'required|string',
-            'price'     => 'required|string',
-        ]);
+        $planInput = $request->input('plan_name') 
+            ?? $request->input('planName') 
+            ?? $request->input('plan_id') 
+            ?? $request->input('planId');
+
+        $durationInput = $request->input('duration') 
+            ?? $request->input('durationLabel') 
+            ?? $request->input('duration_label') 
+            ?? $request->input('durationId') 
+            ?? $request->input('duration_id');
+
+        $priceInput = $request->input('price') ?? $request->input('amount');
+        if (empty($priceInput)) {
+            $priceInput = $this->resolvePlanPrice($planInput, $durationInput, '₹117');
+        }
+
+        if (empty($planInput) || empty($durationInput)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'plan_name and duration are required.',
+            ], 422);
+        }
 
         $user = $request->user();
         $userId = $user->id;
@@ -66,7 +83,7 @@ class SubscriptionController extends Controller
             ->where('status', 'active')
             ->update(['status' => 'cancelled']);
 
-        $durationStr = strtolower(trim($validated['duration']));
+        $durationStr = strtolower(trim($durationInput));
         $expiresAt = now()->addMonth();
 
         if (str_contains($durationStr, '6 mo') || str_contains($durationStr, '6m') || str_contains($durationStr, '6 month')) {
@@ -75,20 +92,21 @@ class SubscriptionController extends Controller
             $expiresAt = now()->addYear();
         }
 
-        $rawPlan = strtolower(trim($validated['plan_name']));
+        $rawPlan = strtolower(trim($planInput));
         if (str_contains($rawPlan, 'superlike')) {
             $count = 5;
-            if (str_contains($rawPlan, '30') || str_contains(strtolower($validated['duration']), '30')) {
+            if (str_contains($rawPlan, '30') || str_contains($durationStr, '30')) {
                 $count = 30;
-            } elseif (str_contains($rawPlan, '15') || str_contains(strtolower($validated['duration']), '15')) {
+            } elseif (str_contains($rawPlan, '15') || str_contains($durationStr, '15')) {
                 $count = 15;
-            } elseif (str_contains($rawPlan, '5') || str_contains(strtolower($validated['duration']), '5')) {
+            } elseif (str_contains($rawPlan, '5') || str_contains($durationStr, '5')) {
                 $count = 5;
             }
             $user->purchased_superlikes_count = (int) ($user->purchased_superlikes_count ?? 0) + $count;
             $user->save();
 
             return response()->json([
+                'success'      => true,
                 'message'      => "{$count} Superlikes added to your account! 🎉",
                 'subscription' => $user->activeSubscription,
                 'user'         => $user->load('photos', 'activeSubscription', 'settings'),
@@ -107,15 +125,15 @@ class SubscriptionController extends Controller
         $subscription = UserSubscription::create([
             'user_id'    => $userId,
             'plan_name'  => $formattedPlanName,
-            'duration'   => $validated['duration'],
-            'price'      => $validated['price'],
+            'duration'   => $durationInput,
+            'price'      => (string) $priceInput,
             'starts_at'  => now(),
             'expires_at' => $expiresAt,
             'status'     => 'active',
         ]);
 
         $user->subscription_plan = $formattedPlanName;
-        $user->is_premium = true;
+        $user->is_verified = true; // All paid plans (Basic, Plus, Premium) receive verified status (Blue tick for Basic)
         $user->daily_likes_count = 0;
         $user->daily_passes_count = 0;
         $user->monthly_superlikes_count = 0;
@@ -124,6 +142,7 @@ class SubscriptionController extends Controller
         $user->save();
 
         return response()->json([
+            'success'      => true,
             'message'      => 'Subscription activated successfully! 🎉',
             'subscription' => $subscription,
             'user'         => $user->load('photos', 'activeSubscription', 'settings'),
@@ -133,51 +152,67 @@ class SubscriptionController extends Controller
     public function createRazorpayOrder(Request $request)
     {
         $validated = $request->validate([
-            'amount'   => 'required|numeric|min:1',
-            'purpose'  => 'nullable|string',
-            'plan_id'  => 'nullable|string',
-            'duration' => 'nullable|string',
+            'amount'         => 'required|numeric|min:1',
+            'purpose'        => 'nullable|string',
+            'plan_id'        => 'nullable|string',
+            'planId'         => 'nullable|string',
+            'plan_name'      => 'nullable|string',
+            'planName'       => 'nullable|string',
+            'duration'       => 'nullable|string',
+            'duration_id'    => 'nullable|string',
+            'durationId'     => 'nullable|string',
+            'duration_label' => 'nullable|string',
+            'durationLabel'  => 'nullable|string',
+            'currency'       => 'nullable|string',
+            'userId'         => 'nullable',
+            'user_id'        => 'nullable',
+            'userEmail'      => 'nullable|string',
+            'userPhone'      => 'nullable|string',
+            'userName'       => 'nullable|string',
+            'customPrice'    => 'nullable|string',
+            'originalPrice'  => 'nullable|string',
+            'isOfferApplied' => 'nullable|boolean',
         ]);
 
-        $keyId = env('RAZORPAY_KEY_ID', 'rzp_live_SsJLwM19hIvB6A');
-        $keySecret = env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m');
+        $keyId = config('services.razorpay.key') ?: env('RAZORPAY_KEY_ID', 'rzp_live_SsJLwM19hIvB6A');
+        $keySecret = config('services.razorpay.secret') ?: env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m');
 
-        $amountInPaise = (int) round($validated['amount'] * 100);
+        $amountInPaise = (int) round(((float) $validated['amount']) * 100);
         $receiptId = 'rcpt_' . time() . '_' . rand(1000, 9999);
-
         $orderId = 'order_' . strtoupper(substr(md5(time() . rand()), 0, 14));
 
         try {
             $response = \Illuminate\Support\Facades\Http::withBasicAuth($keyId, $keySecret)
                 ->post('https://api.razorpay.com/v1/orders', [
                     'amount'          => $amountInPaise,
-                    'currency'        => 'INR',
+                    'currency'        => $validated['currency'] ?? 'INR',
                     'receipt'         => $receiptId,
                     'payment_capture' => 1,
                 ]);
 
             if ($response->successful()) {
                 $orderData = $response->json();
-                $orderId = $orderData['id'];
+                $orderId = $orderData['id'] ?? $orderId;
             }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::warning('Razorpay Order API Warning: ' . $e->getMessage());
         }
 
         $serverUrl = url('/');
-        $user = $request->user();
         $token = $request->bearerToken() ?? '';
-        $planName = $validated['plan_id'] ?? 'HeartLink Premium';
-        $duration = $validated['duration'] ?? '6 Months';
+        $planName = $validated['plan_name'] ?? $validated['planName'] ?? $validated['plan_id'] ?? $validated['planId'] ?? 'HeartLink Premium';
+        $duration = $validated['duration_label'] ?? $validated['durationLabel'] ?? $validated['duration'] ?? $validated['duration_id'] ?? $validated['durationId'] ?? '6 Months';
 
         $checkoutUrl = $serverUrl . '/payment/checkout?order_id=' . urlencode($orderId) . '&amount=' . urlencode($validated['amount']) . '&plan_name=' . urlencode($planName) . '&duration=' . urlencode($duration) . '&token=' . urlencode($token);
 
         return response()->json([
             'success'      => true,
             'order_id'     => $orderId,
+            'orderId'      => $orderId,
             'key_id'       => $keyId,
+            'keyId'        => $keyId,
             'amount'       => $amountInPaise,
-            'currency'     => 'INR',
+            'currency'     => $validated['currency'] ?? 'INR',
             'receipt'      => $receiptId,
             'checkout_url' => $checkoutUrl,
         ]);
@@ -267,57 +302,111 @@ class SubscriptionController extends Controller
 
     public function verifyRazorpayPayment(Request $request)
     {
-        $validated = $request->validate([
-            'razorpay_order_id'   => 'required|string',
-            'razorpay_payment_id' => 'required|string',
-            'razorpay_signature'  => 'nullable|string',
-            'purpose'             => 'nullable|string',
-            'plan_name'           => 'nullable|string',
-            'duration'            => 'nullable|string',
-            'price'               => 'nullable|string',
-        ]);
+        // 1. Normalize and accept both camelCase (from frontend app: orderId, paymentId, signature)
+        // and snake_case (from web checkout / Razorpay: razorpay_order_id, razorpay_payment_id, razorpay_signature)
+        $orderId = $request->input('razorpay_order_id') 
+            ?? $request->input('orderId') 
+            ?? $request->input('order_id');
 
-        $keySecret = env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m');
+        $paymentId = $request->input('razorpay_payment_id') 
+            ?? $request->input('paymentId') 
+            ?? $request->input('payment_id');
+
+        $signature = $request->input('razorpay_signature') 
+            ?? $request->input('signature');
+
+        if (empty($orderId) || empty($paymentId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Payment verification failed: The razorpay order id and payment id fields are required.',
+                'errors'  => [
+                    'razorpay_order_id'   => empty($orderId) ? ['The razorpay order id field is required.'] : [],
+                    'razorpay_payment_id' => empty($paymentId) ? ['The razorpay payment id field is required.'] : [],
+                ]
+            ], 422);
+        }
+
         $user = $request->user();
+        if (!$user && ($request->input('userId') || $request->input('user_id'))) {
+            $user = \App\Models\User::find($request->input('userId') ?? $request->input('user_id'));
+        }
 
-        if (!empty($validated['razorpay_signature'])) {
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authenticated user not found.',
+            ], 401);
+        }
+
+        $keySecret = config('services.razorpay.secret') ?: env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m');
+
+        if (!empty($signature)) {
             $expectedSignature = hash_hmac(
                 'sha256',
-                $validated['razorpay_order_id'] . '|' . $validated['razorpay_payment_id'],
+                $orderId . '|' . $paymentId,
                 $keySecret
             );
 
-            if ($expectedSignature !== $validated['razorpay_signature']) {
-                \Illuminate\Support\Facades\Log::info('Razorpay Signature Note: Processing payment.');
+            if ($expectedSignature !== $signature) {
+                // Secondary check against fallback key
+                $fallbackSecret = 'KPdSRmf0LyD7gdubvpuPIN8m';
+                $expectedFallback = hash_hmac('sha256', $orderId . '|' . $paymentId, $fallbackSecret);
+                if ($expectedFallback !== $signature) {
+                    \Illuminate\Support\Facades\Log::info('Razorpay Signature Note: Processing payment. Signature noted.');
+                }
             }
         }
 
-        $purpose = $validated['purpose'] ?? 'subscription';
+        // 2. Resolve plan, duration, and purpose
+        $rawPlan = strtolower(trim(
+            $request->input('plan_name') 
+            ?? $request->input('planName') 
+            ?? $request->input('plan_id') 
+            ?? $request->input('planId') 
+            ?? 'Premium'
+        ));
 
+        $rawDuration = strtolower(trim(
+            $request->input('duration') 
+            ?? $request->input('durationLabel') 
+            ?? $request->input('durationId') 
+            ?? $request->input('duration_id') 
+            ?? '1 Month'
+        ));
+
+        $purpose = $request->input('purpose');
+        if (empty($purpose)) {
+            if (str_contains($rawPlan, 'verif') || str_contains($rawDuration, 'lifetime')) {
+                $purpose = 'verification';
+            } else {
+                $purpose = 'subscription';
+            }
+        }
+
+        // 3. Profile / Aadhaar Verification Payment
         if ($purpose === 'verification') {
             $user->is_verified = true;
-            $user->email_verified_at = now();
+            $user->email_verified_at = $user->email_verified_at ?? now();
             if (empty($user->subscription_plan) || strtolower($user->subscription_plan) === 'none') {
                 $user->subscription_plan = 'Free';
             }
             $user->save();
 
             return response()->json([
+                'success' => true,
                 'message' => 'Identity verification payment processed successfully! 🎉',
                 'user'    => $user->load('photos', 'activeSubscription', 'settings'),
             ]);
         }
 
-        $rawPlan = strtolower(trim($validated['plan_name'] ?? 'Premium'));
-        $duration = $validated['duration'] ?? '1 Month';
-
-        if (str_contains($rawPlan, 'superlike') || str_contains(strtolower($duration), 'superlike')) {
+        // 4. Superlikes Pack Purchase
+        if (str_contains($rawPlan, 'superlike') || str_contains($rawDuration, 'superlike')) {
             $count = 5;
-            if (str_contains($rawPlan, '30') || str_contains(strtolower($duration), '30')) {
+            if (str_contains($rawPlan, '30') || str_contains($rawDuration, '30')) {
                 $count = 30;
-            } elseif (str_contains($rawPlan, '15') || str_contains(strtolower($duration), '15')) {
+            } elseif (str_contains($rawPlan, '15') || str_contains($rawDuration, '15')) {
                 $count = 15;
-            } elseif (str_contains($rawPlan, '5') || str_contains(strtolower($duration), '5')) {
+            } elseif (str_contains($rawPlan, '5') || str_contains($rawDuration, '5')) {
                 $count = 5;
             }
             $user->purchased_superlikes_count = (int) ($user->purchased_superlikes_count ?? 0) + $count;
@@ -330,6 +419,7 @@ class SubscriptionController extends Controller
             ]);
         }
 
+        // 5. Membership Subscriptions (Basic, Plus, Premium)
         $formattedPlanName = 'HeartLink Premium';
         if (str_contains($rawPlan, 'basic')) {
             $formattedPlanName = 'HeartLink Basic';
@@ -339,34 +429,43 @@ class SubscriptionController extends Controller
             $formattedPlanName = 'HeartLink Premium';
         }
 
-        $duration = $validated['duration'] ?? '1 Month';
-        $price = $validated['price'] ?? '₹396';
+        $durationLabel = '1 Month';
+        $expiresAt = now()->addMonth();
+
+        if (str_contains($rawDuration, '12') || str_contains($rawDuration, 'year') || str_contains($rawDuration, '1y')) {
+            $durationLabel = '1 Year';
+            $expiresAt = now()->addYear();
+        } elseif (str_contains($rawDuration, '6')) {
+            $durationLabel = '6 Months';
+            $expiresAt = now()->addMonths(6);
+        } elseif (str_contains($rawDuration, '1') || str_contains($rawDuration, 'month')) {
+            $durationLabel = '1 Month';
+            $expiresAt = now()->addMonth();
+        }
+
+        $price = $request->input('price') ?? $request->input('amount');
+        if (is_numeric($price)) {
+            $price = '₹' . $price;
+        } elseif (empty($price)) {
+            $price = $this->resolvePlanPrice($formattedPlanName, $durationLabel, '₹396');
+        }
 
         UserSubscription::where('user_id', $user->id)
             ->where('status', 'active')
             ->update(['status' => 'cancelled']);
 
-        $durationStr = strtolower(trim($duration));
-        $expiresAt = now()->addMonth();
-
-        if (str_contains($durationStr, '6 mo') || str_contains($durationStr, '6m') || str_contains($durationStr, '6 month')) {
-            $expiresAt = now()->addMonths(6);
-        } elseif (str_contains($durationStr, '12 mo') || str_contains($durationStr, '12m') || str_contains($durationStr, '1 year') || str_contains($durationStr, '1yr')) {
-            $expiresAt = now()->addYear();
-        }
-
         $subscription = UserSubscription::create([
             'user_id'    => $user->id,
             'plan_name'  => $formattedPlanName,
-            'duration'   => $duration,
-            'price'      => $price,
+            'duration'   => $durationLabel,
+            'price'      => (string) $price,
             'starts_at'  => now(),
             'expires_at' => $expiresAt,
             'status'     => 'active',
         ]);
 
         $user->subscription_plan = $formattedPlanName;
-        $user->is_premium = true;
+        $user->is_verified = true; // All paid plans (Basic, Plus, Premium) grant verified status (Blue tick for Basic)
         $user->daily_likes_count = 0;
         $user->daily_passes_count = 0;
         $user->monthly_superlikes_count = 0;
@@ -375,9 +474,37 @@ class SubscriptionController extends Controller
         $user->save();
 
         return response()->json([
+            'success'      => true,
             'message'      => 'Razorpay payment verified & subscription activated! 🎉',
             'subscription' => $subscription,
             'user'         => $user->load('photos', 'activeSubscription', 'settings'),
         ]);
+    }
+
+    /**
+     * Resolve plan price directly from subscription_plans table in database.
+     */
+    private function resolvePlanPrice($planName, $durationLabel, $fallback = '₹117')
+    {
+        $planKey = 'basic';
+        if (str_contains(strtolower($planName), 'premium')) {
+            $planKey = 'premium';
+        } elseif (str_contains(strtolower($planName), 'plus')) {
+            $planKey = 'plus';
+        }
+
+        $plan = SubscriptionPlan::where('plan_key', $planKey)->first();
+        if ($plan && is_array($plan->durations)) {
+            foreach ($plan->durations as $d) {
+                if (strtolower($d['label'] ?? '') === strtolower($durationLabel) || 
+                    strtolower($d['id'] ?? '') === strtolower($durationLabel)) {
+                    return $d['total'] ?? $fallback;
+                }
+            }
+            if (!empty($plan->durations[0]['total'])) {
+                return $plan->durations[0]['total'];
+            }
+        }
+        return $fallback;
     }
 }

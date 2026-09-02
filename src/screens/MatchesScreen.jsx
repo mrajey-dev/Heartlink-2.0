@@ -135,7 +135,12 @@ export default function MatchesScreen() {
 
   const unmatch = (id) => {
     setMatches(p => p.filter(m => m.id !== id));
-    apiUnmatchUser(id).catch(() => { });
+    eventEmitter.emit(EVENTS.MATCH_UPDATED);
+    eventEmitter.emit(EVENTS.CHAT_UPDATED);
+    apiUnmatchUser(id).then(() => {
+      eventEmitter.emit(EVENTS.MATCH_UPDATED);
+      eventEmitter.emit(EVENTS.CHAT_UPDATED);
+    }).catch(() => { });
   };
 
   const startChat = (id, targetUser) => {

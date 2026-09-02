@@ -148,7 +148,8 @@ export default function LoginScreen({ navigation }) {
             <Animated.View style={{ transform: [{ scale: heartScale }], marginBottom: 6 }}>
               <Image
                 source={require('../../assets/logo.png')}
-                style={{ width: 84, height: 84, resizeMode: 'contain' }}
+                style={{ width: 84, height: 84 }}
+                resizeMode="contain"
               />
             </Animated.View>
             <Text style={styles.logoTitle}>HeartLink</Text>

@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
   // Different user ID -> screenshot shows blank image (preventScreenCaptureAsync)
   useEffect(() => {
     const configureScreenCapture = async () => {
+      if (Platform.OS === 'web') return;
       try {
         const isAllowed = user && (String(user.id) === '16' || user.id === 16 || user.is_screenshot_allowed === true || user.allow_screenshot === true);
         if (isAllowed) {
