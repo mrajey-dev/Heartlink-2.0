@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Easing,
   StatusBar, ScrollView, Dimensions, Share,
-  ActivityIndicator, RefreshControl, Platform,
+  ActivityIndicator, RefreshControl, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BlurView from '../components/SafeBlurView';
@@ -15,6 +15,8 @@ import { apiGetUserCount } from '../services/api';
 
 const { width } = Dimensions.get('window');
 
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app';
+
 // Attractive Invite Message Templates
 const INVITE_TEMPLATES = [
   {
@@ -25,8 +27,8 @@ const INVITE_TEMPLATES = [
     color: ['#FF007F', '#8B5CF6'],
     message: (count, goal, isAdmin) =>
       isAdmin
-        ? `✨ Join me on HeartLink! Match your vibe frequency & help us reach ${goal.toLocaleString()} members to unlock the Orbital Vibe Radar 🛰️💫 Currently at ${count.toLocaleString()} members!\n\nDownload HeartLink now: https://heartlink.app/invite`
-        : `✨ Join me on HeartLink! Match your vibe frequency & help us unlock the Orbital Vibe Radar 🛰️💫\n\nDownload HeartLink now: https://heartlink.app/invite`,
+        ? `✨ Join me on HeartLink! Match your vibe frequency & help us reach ${goal.toLocaleString()} members to unlock the Orbital Vibe Radar 🛰️💫 Currently at ${count.toLocaleString()} members!\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
+        : `✨ Join me on HeartLink! Match your vibe frequency & help us unlock the Orbital Vibe Radar 🛰️💫\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`,
   },
   {
     id: 'vip',
@@ -36,8 +38,8 @@ const INVITE_TEMPLATES = [
     color: ['#8B5CF6', '#3B82F6'],
     message: (count, goal, isAdmin) =>
       isAdmin
-        ? `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar at ${goal.toLocaleString()} members (${count.toLocaleString()} joined already)! 🔥\n\nClaim your spot: https://heartlink.app/invite`
-        : `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar for our community! 🔥\n\nClaim your spot: https://heartlink.app/invite`,
+        ? `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar at ${goal.toLocaleString()} members (${count.toLocaleString()} joined already)! 🔥\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
+        : `🚀 VIP Invitation: Be part of the pioneer community on HeartLink! We're unlocking the Orbital Vibe Radar for our community! 🔥\n\nClaim your spot: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`,
   },
   {
     id: 'romantic',
@@ -47,8 +49,8 @@ const INVITE_TEMPLATES = [
     color: ['#FF2E93', '#FF6B6B'],
     message: (count, goal, isAdmin) =>
       isAdmin
-        ? `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock Orbital Radar for everyone (${count.toLocaleString()}/${goal.toLocaleString()})! 🔮\n\nJoin the vibe movement: https://heartlink.app/invite`
-        : `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock the Orbital Vibe Radar! 🔮\n\nJoin the vibe movement: https://heartlink.app/invite`,
+        ? `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock Orbital Radar for everyone (${count.toLocaleString()}/${goal.toLocaleString()})! 🔮\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
+        : `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock the Orbital Vibe Radar! 🔮\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`,
   },
   {
     id: 'nightowl',
@@ -58,8 +60,8 @@ const INVITE_TEMPLATES = [
     color: ['#6366F1', '#A855F7'],
     message: (count, goal, isAdmin) =>
       isAdmin
-        ? `🎧 Late night beats & aesthetic connections! Join HeartLink today and help us hit ${goal.toLocaleString()} members to launch Orbital Vibe Radar 🌌 (${count.toLocaleString()} & counting!)\n\nJoin here: https://heartlink.app/invite`
-        : `🎧 Late night beats & aesthetic connections! Join HeartLink today and connect with people who share your midnight frequency 🌌\n\nJoin here: https://heartlink.app/invite`,
+        ? `🎧 Late night beats & aesthetic connections! Join HeartLink today and help us hit ${goal.toLocaleString()} members to launch Orbital Vibe Radar 🌌 (${count.toLocaleString()} & counting!)\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
+        : `🎧 Late night beats & aesthetic connections! Join HeartLink today and connect with people who share your midnight frequency 🌌\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`,
   },
 ];
 
@@ -388,6 +390,35 @@ export default function VibesScreen({ navigation }) {
               <Text style={styles.toastBannerTxt}>Invite message ready to share! ✨</Text>
             </Animated.View>
           )}
+
+          {/* Google Play Store Direct Download Card */}
+          <TouchableOpacity
+            style={styles.playStoreCard}
+            onPress={() => Linking.openURL(PLAY_STORE_URL).catch(() => { })}
+            activeOpacity={0.88}
+          >
+            <LinearGradient
+              colors={isDark ? ['#1A1235', '#241442'] : ['#FFFFFF', '#F5F3FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.playStoreCardInner}
+            >
+              <View style={styles.playStoreIconWrap}>
+                <Ionicons name="logo-google-playstore" size={26} color="#00E5FF" />
+              </View>
+              <View style={styles.playStoreTextCol}>
+                <Text style={[styles.playStoreTitle, { color: theme.textPrimary }]}>
+                  Download HeartLink on Google Play
+                </Text>
+                <Text style={[styles.playStoreSub, { color: theme.textSec }]}>
+                  Official verified Android app • Latest release
+                </Text>
+              </View>
+              <View style={styles.playStoreArrow}>
+                <Ionicons name="open-outline" size={18} color="#FF007F" />
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
           {/* Share / Invite CTA (Main Bottom) */}
           <TouchableOpacity style={styles.shareBtn} onPress={() => handleShare(currentInviteText)} activeOpacity={0.85}>
@@ -781,6 +812,57 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     color: '#FFF',
     fontSize: 15,
     fontWeight: '800',
+  },
+
+  // Play Store Download Card
+  playStoreCard: {
+    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255, 0, 127, 0.25)' : 'rgba(255, 0, 127, 0.18)',
+    elevation: 4,
+    shadowColor: '#FF007F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  playStoreCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  playStoreIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  playStoreTextCol: {
+    flex: 1,
+  },
+  playStoreTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+    letterSpacing: -0.2,
+  },
+  playStoreSub: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  playStoreArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
   },
 });
 
