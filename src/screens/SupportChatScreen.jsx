@@ -31,17 +31,10 @@ import { getEcho } from '../services/echo';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { generateSupportAutoReply } from '../utils/supportAutoReply';
+import { SUPPORT_CATEGORIES, SUPPORT_QUESTIONS } from '../utils/supportTopics';
 
 const { width, height } = Dimensions.get('window');
 const SUPPORT_USER_ID = 16;
-
-const QUICK_TOPICS = [
-  { id: 'verify', icon: 'shield-checkmark', label: 'Verification Help', text: 'How do I complete Aadhaar profile verification to get the Blue Shield badge?' },
-  { id: 'plans', icon: 'diamond', label: 'Plans & Premium', text: 'What benefits do I get with Plus and Premium subscriptions?' },
-  { id: 'safety', icon: 'alert-circle', label: 'Safety & Report', text: 'How do I report a suspicious or fake profile?' },
-  { id: 'matches', icon: 'sparkles', label: 'Match Tips', text: 'How can I get more matches and boost my profile visibility?' },
-  { id: 'billing', icon: 'card', label: 'Billing Support', text: 'I have a question regarding my subscription payment or billing.' },
-];
 
 const formatMessageDateHeader = (dateObj) => {
   if (!dateObj || isNaN(dateObj.getTime())) return null;
@@ -98,6 +91,13 @@ export default function SupportChatScreen() {
   const [toastText, setToastText] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
+  // New Expert & Categorized Questions States
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [isExpertMode, setIsExpertMode] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [showQuestionsModal, setShowQuestionsModal] = useState(false);
+  const [faqSearch, setFaqSearch] = useState('');
+
   const listRef = useRef(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const prevCountRef = useRef(0);
@@ -105,6 +105,50 @@ export default function SupportChatScreen() {
   const localSupportRepliesRef = useRef([]);
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
+
+  const filteredQuestions = useMemo(() => {
+    if (selectedCategory === 'all') return SUPPORT_QUESTIONS;
+    return SUPPORT_QUESTIONS.filter(q => q.categoryId === selectedCategory);
+  }, [selectedCategory]);
+
+  const modalFilteredQuestions = useMemo(() => {
+    if (!faqSearch.trim()) return SUPPORT_QUESTIONS;
+    const query = faqSearch.toLowerCase().trim();
+    return SUPPORT_QUESTIONS.filter(q =>
+      q.label.toLowerCase().includes(query) ||
+      q.question.toLowerCase().includes(query)
+    );
+  }, [faqSearch]);
+
+  const handleConfirmConsent = () => {
+    setShowConsentModal(false);
+    setIsExpertMode(true);
+
+    const user = currentUserRef.current;
+    const firstName = (user?.display_name || user?.name || '').trim().split(' ')[0] || 'there';
+
+    const connectNoticeMsg = {
+      id: `expert-notice-${Date.now()}`,
+      text: `👨‍💼 Live Support Specialist Connected\n\nHello ${firstName}! You have consented to connect with our live human support team. A specialist has joined this chat.\n\nYou can now type your message, describe your concern in detail, or attach screenshots below. How can we help you?`,
+      imageUrl: null,
+      sender: 'support',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      dateHeader: null,
+      isRead: true,
+      created_at: new Date().toISOString(),
+      isExpertNotification: true,
+    };
+
+    setMessages(prev => [...prev, connectNoticeMsg]);
+    localSupportRepliesRef.current = [...(localSupportRepliesRef.current || []), connectNoticeMsg];
+    const userId = currentUserRef.current?.id;
+    if (userId) {
+      AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localSupportRepliesRef.current)).catch(() => {});
+    }
+
+    scrollToBottom(true);
+    triggerToast('Live Expert Chat unlocked');
+  };
 
   const triggerToast = (msg) => {
     setToastText(msg);
@@ -645,23 +689,64 @@ export default function SupportChatScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Quick Help Topics Bar */}
-          <View style={styles.quickTopicsContainer}>
+          {/* Categorized Question Browser Bar */}
+          <View style={styles.faqBrowserContainer}>
+            {/* 1. Category Pills Scroll */}
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickTopicsScroll}
+              contentContainerStyle={styles.categoryPillsScroll}
               keyboardShouldPersistTaps="handled"
             >
-              {QUICK_TOPICS.map((topic) => (
+              {SUPPORT_CATEGORIES.map((cat) => {
+                const isActive = selectedCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    style={[styles.categoryPill, isActive && styles.categoryPillActive]}
+                    onPress={() => setSelectedCategory(cat.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={cat.icon}
+                      size={13}
+                      color={isActive ? '#FFF' : (theme.isDark ? '#E2E8F0' : '#4B5563')}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={[styles.categoryPillText, isActive && styles.categoryPillTextActive]}>
+                      {cat.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* 2. Questions Chips Scroll */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.questionChipsScroll}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Quick browse all button */}
+              <TouchableOpacity
+                style={styles.browseAllChip}
+                onPress={() => setShowQuestionsModal(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="search" size={13} color="#00E5FF" style={{ marginRight: 5 }} />
+                <Text style={styles.browseAllChipText}>Browse All FAQs ({SUPPORT_QUESTIONS.length})</Text>
+              </TouchableOpacity>
+
+              {filteredQuestions.map((q) => (
                 <TouchableOpacity
-                  key={topic.id}
-                  style={styles.quickTopicChip}
-                  onPress={() => sendSupportMessage(topic.text)}
+                  key={q.id}
+                  style={styles.questionChip}
+                  onPress={() => sendSupportMessage(q.question)}
                   activeOpacity={0.75}
                 >
-                  <Ionicons name={topic.icon} size={14} color="#FF007F" style={{ marginRight: 6 }} />
-                  <Text style={styles.quickTopicText}>{topic.label}</Text>
+                  <Ionicons name={q.icon} size={13} color="#FF007F" style={{ marginRight: 6 }} />
+                  <Text style={styles.questionChipText}>{q.label}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -729,60 +814,111 @@ export default function SupportChatScreen() {
             </View>
           )}
 
-          {/* Input Bar */}
-          <View style={styles.inputBarWrap}>
-            <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
-              <View style={styles.inputRow}>
-                {/* Media Attachment Buttons */}
+          {/* Bottom Bar: Manual Input ONLY if Expert Mode active, otherwise Talk to Expert CTA */}
+          {isExpertMode ? (
+            <View style={styles.inputBarWrap}>
+              {/* Live Expert Active Indicator Banner */}
+              <View style={styles.expertActiveBanner}>
+                <View style={styles.expertActiveLeft}>
+                  <View style={styles.expertOnlinePulse} />
+                  <Text style={styles.expertActiveTitle}>Live Expert Chat Active</Text>
+                </View>
                 <TouchableOpacity
-                  style={styles.mediaBtn}
-                  onPress={handlePickImage}
+                  style={styles.exitExpertPill}
+                  onPress={() => setIsExpertMode(false)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="image-outline" size={21} color="#FF007F" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.mediaBtn}
-                  onPress={handleTakePhoto}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons name="camera-outline" size={21} color={theme.textPrimary} />
-                </TouchableOpacity>
-
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={selectedImage ? "Add an optional message..." : "Type your question or issue here..."}
-                  placeholderTextColor={theme.textFaint || '#8E8E93'}
-                  value={input}
-                  onChangeText={setInput}
-                  multiline
-                  maxLength={2000}
-                  onFocus={() => {
-                    setTimeout(() => scrollToBottom(true), 120);
-                  }}
-                />
-
-                <TouchableOpacity
-                  style={[styles.sendButton, (!input.trim() && !selectedImage || isSending) && styles.sendButtonDisabled]}
-                  onPress={() => sendSupportMessage()}
-                  disabled={(!input.trim() && !selectedImage) || isSending}
-                  activeOpacity={0.8}
-                >
-                  <LinearGradient
-                    colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
-                    style={styles.sendButtonGrad}
-                  >
-                    {isSending ? (
-                      <ActivityIndicator size="small" color="#FFF" />
-                    ) : (
-                      <Ionicons name="send" size={16} color="#FFF" style={{ marginLeft: 2 }} />
-                    )}
-                  </LinearGradient>
+                  <Ionicons name="close-circle-outline" size={13} color="#FF007F" style={{ marginRight: 4 }} />
+                  <Text style={styles.exitExpertPillText}>Back to FAQs</Text>
                 </TouchableOpacity>
               </View>
-            </SafeAreaView>
-          </View>
+
+              <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
+                <View style={styles.inputRow}>
+                  {/* Media Attachment Buttons */}
+                  <TouchableOpacity
+                    style={styles.mediaBtn}
+                    onPress={handlePickImage}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="image-outline" size={21} color="#FF007F" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.mediaBtn}
+                    onPress={handleTakePhoto}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="camera-outline" size={21} color={theme.textPrimary} />
+                  </TouchableOpacity>
+
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder={selectedImage ? "Add an optional message..." : "Type message to our live expert..."}
+                    placeholderTextColor={theme.textFaint || '#8E8E93'}
+                    value={input}
+                    onChangeText={setInput}
+                    multiline
+                    maxLength={2000}
+                    onFocus={() => {
+                      setTimeout(() => scrollToBottom(true), 120);
+                    }}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.sendButton, (!input.trim() && !selectedImage || isSending) && styles.sendButtonDisabled]}
+                    onPress={() => sendSupportMessage()}
+                    disabled={(!input.trim() && !selectedImage) || isSending}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                      style={styles.sendButtonGrad}
+                    >
+                      {isSending ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
+                        <Ionicons name="send" size={16} color="#FFF" style={{ marginLeft: 2 }} />
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+            </View>
+          ) : (
+            /* Default Automated Mode Bottom Action Bar (Manual typing hidden) */
+            <View style={styles.expertCtaBarWrap}>
+              <SafeAreaView edges={['bottom']} style={styles.expertCtaSafeArea}>
+                <View style={styles.expertCtaContent}>
+                  <View style={styles.expertCtaTextWrap}>
+                    <View style={styles.expertAgentDotRow}>
+                      <View style={styles.expertOnlineDot} />
+                      <Text style={styles.expertCtaHeading}>Need personal assistance?</Text>
+                    </View>
+                    <Text style={styles.expertCtaSub}>
+                      Our support executives are online to assist you
+                    </Text>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.talkToExpertBtn}
+                    onPress={() => setShowConsentModal(true)}
+                    activeOpacity={0.85}
+                  >
+                    <LinearGradient
+                      colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                      style={styles.talkToExpertGrad}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="headset" size={15} color="#FFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.talkToExpertBtnText}>Talk to an Expert</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+            </View>
+          )}
         </KeyboardAvoidingView>
 
         {/* Clear Chat Modal */}
@@ -882,6 +1018,149 @@ export default function SupportChatScreen() {
               <TouchableOpacity style={styles.infoCloseBtn} onPress={() => setShowInfoModal(false)}>
                 <Text style={styles.infoCloseBtnTxt}>Got It</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Consent Modal for Live Human Expert Chat */}
+        <Modal
+          visible={showConsentModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowConsentModal(false)}
+        >
+          <View style={styles.modalBackdrop}>
+            <View style={styles.consentModalCard}>
+              <View style={styles.consentIconWrap}>
+                <LinearGradient
+                  colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                  style={styles.consentIconGrad}
+                >
+                  <Ionicons name="shield-checkmark" size={28} color="#FFF" />
+                </LinearGradient>
+              </View>
+
+              <Text style={styles.consentTitle}>Connect with Support Expert</Text>
+              <Text style={styles.consentSubtitle}>
+                Please review and consent to live agent assistance
+              </Text>
+
+              <View style={styles.consentBox}>
+                <View style={styles.consentItemRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#00E5FF" style={styles.consentItemIcon} />
+                  <Text style={styles.consentItemText}>
+                    <Text style={{ fontWeight: '700', color: theme.textPrimary }}>Context Sharing: </Text>
+                    You consent to share this support chat history and your user profile with our executive so they can resolve your issue accurately.
+                  </Text>
+                </View>
+
+                <View style={styles.consentItemRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#00E5FF" style={styles.consentItemIcon} />
+                  <Text style={styles.consentItemText}>
+                    <Text style={{ fontWeight: '700', color: theme.textPrimary }}>Priority Assistance: </Text>
+                    Ideal for manual Aadhaar KYC, payment discrepancies, safety disputes, or personalized help.
+                  </Text>
+                </View>
+
+                <View style={styles.consentItemRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#00E5FF" style={styles.consentItemIcon} />
+                  <Text style={styles.consentItemText}>
+                    <Text style={{ fontWeight: '700', color: theme.textPrimary }}>Guidelines: </Text>
+                    Respectful communication is strictly enforced in accordance with HeartLink Community Guidelines.
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.consentActionsRow}>
+                <TouchableOpacity
+                  style={styles.consentCancelBtn}
+                  onPress={() => setShowConsentModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.consentCancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.consentAgreeBtn}
+                  onPress={handleConfirmConsent}
+                  activeOpacity={0.85}
+                >
+                  <LinearGradient
+                    colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                    style={styles.consentAgreeGrad}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="chatbubbles" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.consentAgreeBtnText}>I Consent & Connect</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Browse All FAQs Modal */}
+        <Modal
+          visible={showQuestionsModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowQuestionsModal(false)}
+        >
+          <View style={styles.faqModalOverlay}>
+            <View style={styles.faqModalCard}>
+              <View style={styles.faqModalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="help-circle" size={22} color="#FF007F" style={{ marginRight: 8 }} />
+                  <Text style={styles.faqModalTitle}>HeartLink Help Center ({SUPPORT_QUESTIONS.length} Topics)</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowQuestionsModal(false)}>
+                  <Ionicons name="close-circle" size={24} color={theme.textFaint} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Search Bar in Modal */}
+              <View style={styles.faqSearchWrap}>
+                <Ionicons name="search" size={16} color={theme.textFaint} />
+                <TextInput
+                  style={styles.faqSearchInput}
+                  placeholder="Search questions (e.g. Aadhaar, Plans, Refund, Photos)..."
+                  placeholderTextColor={theme.textFaint}
+                  value={faqSearch}
+                  onChangeText={setFaqSearch}
+                  clearButtonMode="while-editing"
+                />
+              </View>
+
+              {/* Questions List */}
+              <FlatList
+                data={modalFilteredQuestions}
+                keyExtractor={(item) => item.id}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 30 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.faqItemCard}
+                    onPress={() => {
+                      setShowQuestionsModal(false);
+                      setFaqSearch('');
+                      sendSupportMessage(item.question);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.faqItemIconCircle}>
+                      <Ionicons name={item.icon} size={16} color="#FF007F" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.faqItemLabel}>{item.label}</Text>
+                      <Text style={styles.faqItemQuestion} numberOfLines={2}>
+                        {item.question}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={theme.textFaint} />
+                  </TouchableOpacity>
+                )}
+              />
             </View>
           </View>
         </Modal>
@@ -1499,6 +1778,348 @@ const getStyles = (theme) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: '#FFF',
+  },
+
+  // FAQ Categorized Browser Styles
+  faqBrowserContainer: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+  },
+  categoryPillsScroll: {
+    paddingHorizontal: 14,
+    gap: 6,
+    marginBottom: 8,
+  },
+  categoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  categoryPillActive: {
+    backgroundColor: '#FF007F',
+    borderColor: '#FF007F',
+  },
+  categoryPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.textSecondary,
+  },
+  categoryPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  questionChipsScroll: {
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  browseAllChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 229, 255, 0.12)',
+    borderColor: 'rgba(0, 229, 255, 0.35)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  browseAllChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#00E5FF',
+  },
+  questionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.isDark ? 'rgba(255, 0, 127, 0.12)' : '#FFF0F7',
+    borderColor: theme.isDark ? 'rgba(255, 0, 127, 0.3)' : 'rgba(255, 0, 127, 0.2)',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  questionChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+
+  // Live Expert Chat Bar (Non-Expert Default CTA)
+  expertCtaBarWrap: {
+    backgroundColor: theme.isDark ? '#140A28' : '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  expertCtaSafeArea: {
+    paddingBottom: Platform.OS === 'ios' ? 4 : 8,
+  },
+  expertCtaContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  expertCtaTextWrap: {
+    flex: 1,
+  },
+  expertAgentDotRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 2,
+  },
+  expertOnlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#30D158',
+    marginRight: 6,
+  },
+  expertCtaHeading: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  expertCtaSub: {
+    fontSize: 11,
+    color: theme.textFaint,
+    marginTop: 1,
+  },
+  talkToExpertBtn: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  talkToExpertGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  talkToExpertBtnText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#FFF',
+  },
+
+  // Expert Active Banner in Input Bar
+  expertActiveBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(48, 209, 88, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(48, 209, 88, 0.25)',
+  },
+  expertActiveLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  expertOnlinePulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#30D158',
+    marginRight: 6,
+  },
+  expertActiveTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#30D158',
+  },
+  exitExpertPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+  },
+  exitExpertPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF007F',
+  },
+
+  // Consent Modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  consentModalCard: {
+    backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 1,
+    borderColor: theme.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  consentIconWrap: {
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  consentIconGrad: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  consentTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  consentSubtitle: {
+    fontSize: 12,
+    color: theme.textSec,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  consentBox: {
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+    marginBottom: 18,
+  },
+  consentItemRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  consentItemIcon: {
+    marginRight: 8,
+    marginTop: 2,
+  },
+  consentItemText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    color: theme.textPrimary,
+  },
+  consentActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  consentCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.08)' : '#F0F0F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  consentCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
+  consentAgreeBtn: {
+    flex: 1.6,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  consentAgreeGrad: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  consentAgreeBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#FFF',
+  },
+
+  // FAQ Browse Modal
+  faqModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'flex-end',
+  },
+  faqModalCard: {
+    backgroundColor: theme.isDark ? '#180E2B' : '#FFFFFF',
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    padding: 20,
+    height: height * 0.78,
+  },
+  faqModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  faqModalTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: theme.textPrimary,
+  },
+  faqSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  faqSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: theme.textPrimary,
+  },
+  faqItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : '#F9F9F9',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  faqItemIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  faqItemLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: theme.textPrimary,
+  },
+  faqItemQuestion: {
+    fontSize: 11,
+    color: theme.textFaint,
+    marginTop: 2,
   },
 
   toastContainer: {
