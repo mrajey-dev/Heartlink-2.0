@@ -29,6 +29,8 @@ import { useAuth } from '../hooks/useAuth';
 import { apiGetMessages, apiSendMessage, apiClearChat, apiUploadImage } from '../services/api';
 import { getEcho } from '../services/echo';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { generateSupportAutoReply } from '../utils/supportAutoReply';
 
 const { width, height } = Dimensions.get('window');
 const SUPPORT_USER_ID = 16;
@@ -88,6 +90,7 @@ export default function SupportChatScreen() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isSupportTyping, setIsSupportTyping] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -99,6 +102,9 @@ export default function SupportChatScreen() {
   const toastAnim = useRef(new Animated.Value(0)).current;
   const prevCountRef = useRef(0);
   const prevLastIdRef = useRef(null);
+  const localSupportRepliesRef = useRef([]);
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
 
   const triggerToast = (msg) => {
     setToastText(msg);
@@ -117,7 +123,7 @@ export default function SupportChatScreen() {
     });
   }, []);
 
-  // Fetch real messages from database with user 16
+  // Fetch real messages from database with user 16 and merge with persistent support replies
   const fetchHistory = useCallback(async (isFirst = false) => {
     if (isFirst) setIsLoading(true);
     try {
@@ -127,19 +133,11 @@ export default function SupportChatScreen() {
       else if (response && response.messages) messagesData = response.messages;
       else if (Array.isArray(response)) messagesData = response;
 
+      let serverFormatted = [];
       if (Array.isArray(messagesData) && messagesData.length > 0) {
-        let lastDateHeader = null;
-        const formatted = messagesData.map((m) => {
+        serverFormatted = messagesData.map((m) => {
           const rawContent = m.message || m.text || m.content || '';
           const { text: cleanText, imageUrl } = parseMessageContent(rawContent);
-
-          const dateObj = m.created_at ? new Date(m.created_at) : new Date();
-          const dateHeader = formatMessageDateHeader(dateObj);
-          let showDateHeader = false;
-          if (dateHeader && dateHeader !== lastDateHeader) {
-            showDateHeader = true;
-            lastDateHeader = dateHeader;
-          }
 
           return {
             id: m.id?.toString() || Date.now().toString(),
@@ -149,26 +147,55 @@ export default function SupportChatScreen() {
             time: m.created_at
               ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
               : 'Now',
-            dateHeader: showDateHeader ? dateHeader : null,
+            dateHeader: null,
             isRead: Boolean(m.is_read),
-            created_at: m.created_at,
+            created_at: m.created_at || new Date().toISOString(),
           };
         });
+      }
 
-        setMessages(formatted);
+      // Merge server messages with any local auto-replies
+      const combined = [...serverFormatted];
+      const localReplies = localSupportRepliesRef.current || [];
+      for (const localMsg of localReplies) {
+        const exists = combined.some(m => m.id === localMsg.id || (m.sender === 'support' && m.text === localMsg.text));
+        if (!exists) {
+          combined.push(localMsg);
+        }
+      }
 
-        const newLastId = formatted[formatted.length - 1]?.id ?? null;
-        const hasNew = formatted.length !== prevCountRef.current || newLastId !== prevLastIdRef.current;
+      if (combined.length > 0) {
+        // Sort chronologically by created_at
+        combined.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+        let lastDateHeader = null;
+        const withHeaders = combined.map((m) => {
+          const dateObj = m.created_at ? new Date(m.created_at) : new Date();
+          const dateHeader = formatMessageDateHeader(dateObj);
+          let showDateHeader = false;
+          if (dateHeader && dateHeader !== lastDateHeader) {
+            showDateHeader = true;
+            lastDateHeader = dateHeader;
+          }
+          return { ...m, dateHeader: showDateHeader ? dateHeader : null };
+        });
+
+        setMessages(withHeaders);
+
+        const newLastId = withHeaders[withHeaders.length - 1]?.id ?? null;
+        const hasNew = withHeaders.length !== prevCountRef.current || newLastId !== prevLastIdRef.current;
         if (hasNew) {
           scrollToBottom(true);
         }
-        prevCountRef.current = formatted.length;
+        prevCountRef.current = withHeaders.length;
         prevLastIdRef.current = newLastId;
       } else if (isFirst) {
-        // Initial friendly support welcome greeting
+        // Initial friendly support welcome greeting personalized with user name
+        const user = currentUserRef.current;
+        const firstName = (user?.display_name || user?.name || '').trim().split(' ')[0] || 'there';
         const initialSupportMsg = {
           id: 'support-welcome-1',
-          text: '👋 Welcome to HeartLink Customer Support! Our dedicated safety and support team is here 24/7 to help you with profile verification, subscription plans, safety reports, or any technical assistance.\n\nYou can also attach and send screenshots or photos directly in this chat. How can we help you today?',
+          text: `👋 Welcome to HeartLink Customer Support, ${firstName}! Our dedicated safety and support team is here 24/7 to help you with profile verification, subscription plans, safety reports, or any technical assistance.\n\nYou can also attach and send screenshots or photos directly in this chat. How can we help you today?`,
           imageUrl: null,
           sender: 'support',
           time: 'Now',
@@ -186,6 +213,24 @@ export default function SupportChatScreen() {
       if (isFirst) setIsLoading(false);
     }
   }, [scrollToBottom]);
+
+  // Load saved local support replies on startup
+  useEffect(() => {
+    const userId = currentUser?.id;
+    if (!userId) return;
+    const storageKey = `@heartlink_support_replies_${userId}`;
+    AsyncStorage.getItem(storageKey).then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            localSupportRepliesRef.current = parsed;
+            fetchHistory(false);
+          }
+        } catch (e) {}
+      }
+    }).catch(() => {});
+  }, [currentUser?.id, fetchHistory]);
 
   // Connect WebSockets Echo + 2s polling
   useEffect(() => {
@@ -300,7 +345,7 @@ export default function SupportChatScreen() {
     const now = new Date();
     const dateHeader = formatMessageDateHeader(now);
 
-    // Optimistic local state update
+    // Optimistic local state update for user's message
     const newMsg = {
       id: tempId,
       text: txt,
@@ -318,6 +363,9 @@ export default function SupportChatScreen() {
     setSelectedImage(null);
     scrollToBottom(true);
 
+    // Show support typing indicator immediately
+    setIsSupportTyping(true);
+
     try {
       let finalPayloadText = txt;
 
@@ -327,13 +375,13 @@ export default function SupportChatScreen() {
         if (uploadedUrl) {
           finalPayloadText = txt ? `[image]${uploadedUrl}[/image] ${txt}` : `[image]${uploadedUrl}[/image]`;
         } else {
-          // If upload failed, fallback to text if available
           if (!txt) {
             throw new Error('Image upload failed. Please try again.');
           }
         }
       }
 
+      // Send to server
       const res = await apiSendMessage(SUPPORT_USER_ID, finalPayloadText);
       eventEmitter.emit(EVENTS.CHAT_UPDATED);
 
@@ -343,9 +391,53 @@ export default function SupportChatScreen() {
         setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: res.data.id.toString(), pending: false } : m));
       }
 
+      // Determine the support auto-reply message text
+      let replyContent = null;
+      if (res?.auto_reply?.message) {
+        replyContent = res.auto_reply.message;
+      } else {
+        replyContent = generateSupportAutoReply(currentUserRef.current, finalPayloadText);
+      }
+
+      // Simulate natural typing duration (1200ms) before the response appears
+      setTimeout(() => {
+        setIsSupportTyping(false);
+
+        if (replyContent) {
+          const replyTime = new Date();
+          const replyMsg = {
+            id: `support-reply-${Date.now()}`,
+            text: replyContent,
+            imageUrl: null,
+            sender: 'support',
+            time: replyTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            dateHeader: null,
+            isRead: true,
+            created_at: replyTime.toISOString(),
+            isLocalAutoReply: true,
+          };
+
+          const updatedReplies = [...(localSupportRepliesRef.current || []), replyMsg];
+          localSupportRepliesRef.current = updatedReplies;
+          const userId = currentUserRef.current?.id;
+          if (userId) {
+            AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
+          }
+
+          setMessages(prev => {
+            if (prev.some(m => m.id === replyMsg.id || (m.sender === 'support' && m.text === replyMsg.text))) {
+              return prev;
+            }
+            return [...prev, replyMsg];
+          });
+          scrollToBottom(true);
+        }
+      }, 1200);
+
       await fetchHistory(false);
       scrollToBottom(true);
     } catch (error) {
+      setIsSupportTyping(false);
       console.warn('Error sending to support:', error);
       setMessages(prev => prev.filter(m => m.id !== tempId));
       triggerToast('Failed to send image or message. Please try again.');
@@ -358,6 +450,11 @@ export default function SupportChatScreen() {
     setShowClearModal(false);
     try {
       setMessages([]);
+      localSupportRepliesRef.current = [];
+      const userId = currentUser?.id;
+      if (userId) {
+        await AsyncStorage.removeItem(`@heartlink_support_replies_${userId}`);
+      }
       await apiClearChat(SUPPORT_USER_ID);
       triggerToast('Support chat cleared');
       eventEmitter.emit(EVENTS.CHAT_UPDATED);
@@ -587,6 +684,28 @@ export default function SupportChatScreen() {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
               onContentSizeChange={() => scrollToBottom(false)}
+              ListFooterComponent={
+                isSupportTyping ? (
+                  <View style={styles.typingRow}>
+                    <LinearGradient
+                      colors={theme.gradientAccent || ['#FF007F', '#B5179E']}
+                      style={styles.supportMsgAvatar}
+                    >
+                      <Ionicons name="headset" size={14} color="#FFF" />
+                    </LinearGradient>
+                    <View style={[styles.bubble, styles.bubbleSupport, styles.typingBubble]}>
+                      <View style={styles.supportLabelRow}>
+                        <Text style={styles.supportSenderTitle}>HeartLink Support</Text>
+                        <Ionicons name="shield-checkmark" size={12} color="#00E5FF" style={{ marginLeft: 3 }} />
+                      </View>
+                      <View style={styles.typingIndicatorRow}>
+                        <ActivityIndicator size="small" color="#FF007F" style={{ marginRight: 6 }} />
+                        <Text style={styles.typingIndicatorText}>Support is typing...</Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : null
+              }
             />
           )}
 
@@ -1038,6 +1157,26 @@ const getStyles = (theme) => StyleSheet.create({
   },
   msgTextSupport: {
     color: theme.textPrimary,
+  },
+  typingRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  typingBubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  typingIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  typingIndicatorText: {
+    fontSize: 12,
+    color: theme.textFaint || '#8E8E93',
+    fontStyle: 'italic',
   },
 
   // Message Image Card

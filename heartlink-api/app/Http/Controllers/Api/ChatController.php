@@ -12,6 +12,7 @@ use App\Models\Swipe;
 use App\Models\ChatMessageCounter;
 use Illuminate\Http\Request;
 use App\Services\ExpoPushService;
+use App\Services\SupportAutoReplyService;
 
 class ChatController extends Controller
 {
@@ -358,9 +359,48 @@ class ChatController extends Controller
             $newLeft = null;
         }
 
+        // HeartLink Support Automatic Reply (User 16)
+        $supportReply = null;
+        if ((int)$receiverId === 16 && (int)$senderId !== 16) {
+            try {
+                $autoReplyService = new SupportAutoReplyService();
+                $replyText = $autoReplyService->generateReply($user, $validated['message']);
+
+                $supportReply = Message::create([
+                    'sender_id'   => 16,
+                    'receiver_id' => $senderId,
+                    'message'     => $replyText,
+                    'is_read'     => false,
+                ]);
+
+                // In-app notification from Support
+                \App\Models\Notification::create([
+                    'user_id'      => $senderId,
+                    'from_user_id' => 16,
+                    'type'         => 'message',
+                    'message'      => "HeartLink Support: " . (mb_strlen($replyText) > 200 ? mb_substr($replyText, 0, 197) . '...' : $replyText),
+                    'is_read'      => false,
+                ]);
+
+                // Expo push notification
+                ExpoPushService::sendToUser(
+                    $senderId,
+                    'HeartLink Support',
+                    $replyText,
+                    [
+                        'screen' => 'SupportChat',
+                        'params' => [],
+                    ]
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('Support auto-reply failed: ' . $e->getMessage());
+            }
+        }
+
         return response()->json([
             'message'            => 'Message sent successfully',
             'data'               => $message,
+            'auto_reply'         => $supportReply,
             'free_messages_left' => $newLeft,
         ], 201);
     }
