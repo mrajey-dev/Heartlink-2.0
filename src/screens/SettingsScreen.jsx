@@ -18,9 +18,7 @@ import {
   apiDeactivateAccount, apiDeleteAccount,
   apiGetUserSettings, apiUpdateUserSettings,
   apiVerifyUserProfile, apiGetProfile,
-  apiTestPushNotification,
 } from '../services/api';
-import { displayPhoneNotification, ensureNotificationPermissionsAsync, Notifications, notificationsUnavailableInExpoGo } from '../services/pushNotificationService';
 import { formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 
 export default function SettingsScreen() {
@@ -275,75 +273,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const [testingNotification, setTestingNotification] = useState(false);
-
-  const handleTestNotification = async () => {
-    setTestingNotification(true);
-    try {
-      // Expo Go on Android (SDK 53+): expo-notifications is entirely unavailable
-      if (notificationsUnavailableInExpoGo) {
-        Alert.alert(
-          '⚠️ Development Build Required',
-          'Notifications (local & remote) are not supported in Expo Go on Android.\n\nTo test notifications, you need to build the app with:\n\n  npx expo run:android\n\nThis creates a real development APK installed directly on your device — notifications will work fully.',
-          [
-            { text: 'Got it', style: 'default' },
-          ]
-        );
-        return;
-      }
-
-      // 1. Check permissions (only reachable when NOT in Expo Go)
-      const { granted } = await ensureNotificationPermissionsAsync();
-
-      if (!granted) {
-        Alert.alert(
-          'Enable Notifications',
-          'Notification permission is turned off for HeartLink. Please open Settings and allow notifications to receive match and message alerts.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Open Settings',
-              onPress: () => Linking.openSettings(),
-            },
-          ]
-        );
-        return;
-      }
-
-      // 2. Permissions are granted — fire local notification
-      const localDelivered = await displayPhoneNotification({
-        title: '❤️ HeartLink',
-        body: 'Notifications are working! You will receive match & message alerts.',
-        data: { screen: 'Notifications' },
-      });
-
-      // 3. Also test backend push route (best-effort)
-      try {
-        await apiTestPushNotification(
-          'HeartLink Live',
-          'Firebase push notification delivered successfully to your device!'
-        );
-      } catch (_) {
-        // Ignored — backend push token not registered in Expo Go
-      }
-
-      if (localDelivered) {
-        triggerToast('✅ Notification banner sent to your phone!');
-      } else {
-        // Permissions are granted but scheduleNotificationAsync failed — show diagnostic
-        Alert.alert(
-          'Notification Error',
-          'Permissions are granted but the notification could not be sent. Check the Metro console (Expo logs) for the exact error.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (e) {
-      console.error('[SettingsScreen] handleTestNotification error:', e);
-      Alert.alert('Error', e?.message || 'Unknown error while sending notification.');
-    } finally {
-      setTestingNotification(false);
-    }
-  };
 
   return (
     <LinearGradient colors={theme.bgGrad} style={styles.container}>
@@ -461,24 +390,6 @@ export default function SettingsScreen() {
               trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
               thumbColor="#FFF"
             />
-          </View>
-
-          <View style={[styles.row, { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.cardBorder, paddingTop: 12, marginTop: 8 }]}>
-            <View style={styles.rowTextWrap}>
-              <Text style={styles.rowLabel}>Test App Notification</Text>
-              <Text style={styles.rowSub}>Send a test alert to check system tray and lock screen</Text>
-            </View>
-            <TouchableOpacity
-              style={[styles.verifyNowBtn, { paddingHorizontal: 12, paddingVertical: 6 }]}
-              onPress={handleTestNotification}
-              disabled={testingNotification}
-              activeOpacity={0.85}
-            >
-              <LinearGradient colors={['#FF007F', '#B5179E']} style={[styles.verifyBtnGrad, { paddingHorizontal: 12, paddingVertical: 8 }]}>
-                <Ionicons name="paper-plane-outline" size={14} color="#FFF" style={{ marginRight: 6 }} />
-                <Text style={[styles.verifyBtnTxt, { fontSize: 12 }]}>{testingNotification ? 'Sending...' : 'Test Now'}</Text>
-              </LinearGradient>
-            </TouchableOpacity>
           </View>
         </View>
 
