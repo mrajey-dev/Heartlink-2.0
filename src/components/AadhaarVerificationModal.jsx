@@ -74,12 +74,12 @@ export default function AadhaarVerificationModal({
       };
 
       const orderResponse = await apiCreateRazorpayOrder(orderData);
-      
+
       const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
       if (!responseOrderId) {
         throw new Error('No order ID received from server');
       }
-      
+
       const razorpayKeyId = orderResponse?.key_id || orderResponse?.keyId || 'rzp_live_SsJLwM19hIvB6A';
 
       const razorpayOptions = {
@@ -114,7 +114,7 @@ export default function AadhaarVerificationModal({
               durationId: 'lifetime',
               userId: user?.id
             };
-            
+
             const verifyRes = await apiVerifyRazorpayPayment(verificationData);
             if (verifyRes?.success) {
               setPaying(false);
@@ -139,7 +139,7 @@ export default function AadhaarVerificationModal({
 
           if (orderResponse?.checkout_url && Platform.OS !== 'web') {
             console.log('[Payment] Falling back to checkout URL on native...');
-            Linking.openURL(orderResponse.checkout_url).catch(() => {});
+            Linking.openURL(orderResponse.checkout_url).catch(() => { });
             setPaying(false);
             setStep('awaiting_payment');
             return;

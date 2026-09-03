@@ -59,7 +59,7 @@ export async function setupNotificationChannelsAsync() {
  */
 export async function ensureNotificationPermissionsAsync() {
   if (!Notifications) {
-    console.warn('[PushPerm] ❌ Notifications module not loaded');
+    console.log('[PushPerm] Notifications module not available in current environment (requires Development Build)');
     return { granted: false, canAskAgain: false };
   }
 
@@ -99,7 +99,7 @@ export async function ensureNotificationPermissionsAsync() {
  */
 export async function displayPhoneNotification({ title, body, data = {} }) {
   if (!Notifications) {
-    console.warn('[PushNotificationService] Notifications module not available');
+    console.log('[PushNotificationService] Notifications module not available in current environment (requires Development Build)');
     return false;
   }
 
@@ -171,38 +171,45 @@ export async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    if (Device.isDevice) {
-      // Extract EAS Project ID from Expo Constants or fallback
-      const projectId =
-        Constants.expoConfig?.extra?.eas?.projectId ||
-        Constants.easConfig?.projectId ||
-        '5474961b-4bf2-4879-b71d-8ab015526254';
-
+    // Strategy 1 (Preferred on Android): Direct Firebase FCM Device Push Token
+    // This allows Laravel backend to send directly via Firebase Cloud Messaging HTTP v1 without EAS relay
+    if (Platform.OS === 'android') {
       try {
+        const deviceTokenData = await Notifications.getDevicePushTokenAsync();
+        if (deviceTokenData?.data) {
+          token = deviceTokenData.data;
+          console.log('[PushNotificationService] ✅ Obtained Native Firebase FCM Device Token:', token);
+        }
+      } catch (deviceErr) {
+        console.warn('[PushNotificationService] Direct FCM token error (falling back to Expo):', deviceErr?.message || deviceErr);
+      }
+    }
+
+    // Strategy 2: Expo Push Token (Fallback or for iOS)
+    if (!token) {
+      try {
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ||
+          Constants.easConfig?.projectId ||
+          '5474961b-4bf2-4879-b71d-8ab015526254';
+
         const tokenData = await Notifications.getExpoPushTokenAsync({
           projectId,
         });
         token = tokenData?.data;
         console.log('[PushNotificationService] Obtained Expo Push Token:', token);
       } catch (expoErr) {
-        console.warn('[PushNotificationService] Expo push token failed, attempting direct device FCM token:', expoErr?.message || expoErr);
-        try {
-          const deviceTokenData = await Notifications.getDevicePushTokenAsync();
-          token = deviceTokenData?.data;
-          console.log('[PushNotificationService] Obtained Direct Device Push Token:', token);
-        } catch (deviceErr) {
-          console.warn('[PushNotificationService] Device push token error:', deviceErr?.message || deviceErr);
-        }
+        console.warn('[PushNotificationService] Expo push token error:', expoErr?.message || expoErr);
       }
+    }
 
-      if (token) {
-        // Send push token to Hostinger Laravel backend
-        await apiSavePushToken(token).catch((err) =>
-          console.warn('[PushNotificationService] Failed to upload push token to Laravel:', err?.message || err)
-        );
-      }
+    if (token) {
+      // Send push token to Hostinger Laravel backend
+      await apiSavePushToken(token).catch((err) =>
+        console.warn('[PushNotificationService] Failed to upload push token to Laravel:', err?.message || err)
+      );
     } else {
-      console.log('[PushNotificationService] Physical device required for remote push token registration.');
+      console.log('[PushNotificationService] No push token obtained (Expo Go or device registration unavailable).');
     }
   } catch (error) {
     console.warn('[PushNotificationService] Error registering push notifications:', error?.message || error);

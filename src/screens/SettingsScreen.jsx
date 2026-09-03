@@ -18,7 +18,9 @@ import {
   apiDeactivateAccount, apiDeleteAccount,
   apiGetUserSettings, apiUpdateUserSettings,
   apiVerifyUserProfile, apiGetProfile,
+  apiTestPushNotification,
 } from '../services/api';
+import { registerForPushNotificationsAsync, displayPhoneNotification, isExpoGo } from '../services/pushNotificationService';
 import { formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 
 export default function SettingsScreen() {
@@ -61,8 +63,10 @@ export default function SettingsScreen() {
   const [disclaimerModalVisible, setDisclaimerModalVisible] = useState(false);
 
   // ─── 7. Account Action Modals ─────────────────────────────────────────────
+  const [logoutAlertVisible, setLogoutAlertVisible] = useState(false);
   const [deactivateAlertVisible, setDeactivateAlertVisible] = useState(false);
   const [deleteAlertVisible, setDeleteAlertVisible] = useState(false);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
@@ -253,26 +257,101 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleConfirmLogout = () => {
+    setLogoutAlertVisible(false);
+    logout();
+  };
+
   const handleConfirmDeactivate = async () => {
     setDeactivateAlertVisible(false);
+    setIsProcessingAction(true);
+    triggerToast('Deactivating account...');
     try {
       await apiDeactivateAccount();
-      logout();
+      triggerToast('Account deactivated');
+      setTimeout(() => logout(), 500);
     } catch (e) {
-      logout();
+      console.warn('Deactivate error:', e);
+      Alert.alert('Error', e?.message || 'Could not deactivate account. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
   const handleConfirmDelete = async () => {
     setDeleteAlertVisible(false);
+    setIsProcessingAction(true);
+    triggerToast('Permanently deleting account...');
     try {
       await apiDeleteAccount();
-      logout();
+      triggerToast('Account deleted');
+      setTimeout(() => logout(), 500);
     } catch (e) {
-      logout();
+      console.warn('Delete account error:', e);
+      Alert.alert('Error', e?.message || 'Could not delete account. Please try again.');
+    } finally {
+      setIsProcessingAction(false);
     }
   };
 
+  const [testingPush, setTestingPush] = useState(false);
+
+  const handleTestPushNotification = async () => {
+    if (testingPush) return;
+    setTestingPush(true);
+    try {
+      if (isExpoGo) {
+        Alert.alert(
+          'Expo Go Limitation (SDK 53+)',
+          'Remote Firebase push notifications cannot be received inside the Expo Go sandbox because it uses Expo\'s generic package.\n\nTo test remote Firebase push on this phone, run a Development Build (`npx expo run:android` or EAS build).\n\nFiring a local push notification test now...',
+          [{ text: 'OK' }]
+        );
+        await displayPhoneNotification({
+          title: 'HeartLink Firebase Notification',
+          body: '🔔 Local notification test: Sound and banners are active!',
+        });
+        triggerToast('Local notification fired');
+        return;
+      }
+
+      triggerToast('Registering device push token...');
+      const token = await registerForPushNotificationsAsync();
+      console.log('[SettingsScreen] Re-registered push token:', token);
+
+      if (!token) {
+        Alert.alert(
+          'Push Token Unavailable',
+          'Could not retrieve a push token on this device. Please ensure notification permissions are allowed.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const res = await apiTestPushNotification(
+        'HeartLink Firebase Notification',
+        '🔔 Firebase Cloud Messaging is working perfectly!'
+      );
+
+      if (res?.status === 'success') {
+        triggerToast('✅ Push delivered! Check notification tray.');
+      } else {
+        await displayPhoneNotification({
+          title: 'HeartLink Firebase Notification',
+          body: '🔔 Notification preview on this device!',
+        });
+        triggerToast(res?.message || 'Local notification preview fired.');
+      }
+    } catch (err) {
+      console.warn('[SettingsScreen] Test push error:', err?.message || err);
+      await displayPhoneNotification({
+        title: 'HeartLink Notification',
+        body: '🔔 Local notification alert active!',
+      });
+      triggerToast('Local notification fired.');
+    } finally {
+      setTestingPush(false);
+    }
+  };
 
   return (
     <LinearGradient colors={theme.bgGrad} style={styles.container}>
@@ -580,6 +659,44 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ─── Push Notifications & Firebase Alerts ───────────────────── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.row}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="notifications-outline" size={18} color="#FF007F" style={{ marginRight: 10 }} />
+              <Text style={styles.rowLabel}>Push Notifications</Text>
+            </View>
+            <Switch
+              value={notificationsOn}
+              onValueChange={(val) => updateSettingField('notifications_on', val, setNotificationsOn, 'Push Notifications')}
+              trackColor={{ false: 'rgba(0,0,0,0.15)', true: '#FF007F' }}
+              thumbColor="#FFF"
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity
+            style={[styles.menuRow, { paddingVertical: 12 }]}
+            onPress={handleTestPushNotification}
+            disabled={testingPush}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons name="paper-plane-outline" size={18} color="#0284C7" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.menuRowTxt, { fontWeight: '600' }]}>
+                  {testingPush ? 'Sending Firebase Test...' : 'Test Firebase Notification'}
+                </Text>
+                <Text style={{ fontSize: 11, color: theme.textFaint, marginTop: 2 }}>
+                  Verify live Firebase Cloud Messaging push to this device
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+          </TouchableOpacity>
+        </View>
+
         {/* ─── 6. Support & Legal ─────────────────────────────────────────── */}
         <View style={styles.sectionCard}>
           <TouchableOpacity style={styles.menuRow} onPress={() => navigation.navigate('SupportChat')} activeOpacity={0.7}>
@@ -623,18 +740,33 @@ export default function SettingsScreen() {
         </View>
 
         {/* ─── 9. Logout Button ──────────────────────────────────────────── */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={() => setLogoutAlertVisible(true)}
+          disabled={isProcessingAction}
+          activeOpacity={0.8}
+        >
           <Ionicons name="log-out-outline" size={18} color="#FF375F" style={{ marginRight: 8 }} />
           <Text style={styles.logoutBtnTxt}>Log Out of Account</Text>
         </TouchableOpacity>
 
         {/* ─── 7. Account Management (Deactivate & Delete) ───────────────── */}
         <View style={styles.accountActionWrap}>
-          <TouchableOpacity style={styles.deactivateBtn} onPress={() => setDeactivateAlertVisible(true)} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.deactivateBtn}
+            onPress={() => setDeactivateAlertVisible(true)}
+            disabled={isProcessingAction}
+            activeOpacity={0.7}
+          >
             <Text style={styles.deactivateBtnTxt}>Deactivate Account</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.deleteBtn} onPress={() => setDeleteAlertVisible(true)} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => setDeleteAlertVisible(true)}
+            disabled={isProcessingAction}
+            activeOpacity={0.7}
+          >
             <Text style={styles.deleteBtnTxt}>Delete Account Permanently</Text>
           </TouchableOpacity>
         </View>
@@ -906,6 +1038,20 @@ export default function SettingsScreen() {
         onClose={() => setAadhaarModalVisible(false)}
         initialStep="verify"
         onVerifiedSuccess={() => triggerToast('Profile verified successfully!')}
+      />
+
+      {/* ─── Logout Alert Modal ─────────────────────────────────────────── */}
+      <CustomAlertModal
+        visible={logoutAlertVisible}
+        title="Log Out of Account?"
+        message="Are you sure you want to log out? You will need to sign in again to access your messages and matches."
+        icon="log-out-outline"
+        iconColor="#FF375F"
+        isDanger={true}
+        confirmText="Log Out"
+        cancelText="Cancel"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setLogoutAlertVisible(false)}
       />
 
       {/* ─── Deactivate Alert Modal ────────────────────────────────────── */}

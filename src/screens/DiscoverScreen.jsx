@@ -5,7 +5,7 @@ import {
   Animated, Dimensions, Image, ActivityIndicator,
   StatusBar, Platform, Easing, BackHandler, PanResponder,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -53,8 +53,9 @@ const SUPERLIKE_MESSAGES = [
 
 export default function DiscoverScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const styles = useMemo(() => getStyles(theme), [theme]);
+  const styles = useMemo(() => getStyles(theme, insets), [theme, insets]);
 
   const [fontsLoaded] = useFonts({
     BricolageGrotesque_700Bold,
@@ -1029,7 +1030,14 @@ export default function DiscoverScreen() {
                 style={styles.actionBtnSmallX}
                 disabled={isAnimating}
               >
-                <Ionicons name="close" size={24} color="#fff" />
+                <LinearGradient
+                  colors={['#3B82F6', '#1D4ED8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionBtnGradFill}
+                >
+                  <Ionicons name="close" size={24} color="#fff" />
+                </LinearGradient>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1042,13 +1050,14 @@ export default function DiscoverScreen() {
                   colors={['#FF007F', '#B5179E']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                {isSuperlikeLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Ionicons name="flash" size={28} color="#fff" />
-                )}
+                  style={styles.actionBtnGradFill}
+                >
+                  {isSuperlikeLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="flash" size={28} color="#fff" />
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1057,7 +1066,14 @@ export default function DiscoverScreen() {
                 style={styles.actionBtnSmallHeart}
                 disabled={isAnimating}
               >
-                <Ionicons name="heart" size={24} color="#fff" />
+                <LinearGradient
+                  colors={['#FF007F', '#D90429']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionBtnGradFill}
+                >
+                  <Ionicons name="heart" size={24} color="#fff" />
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -1154,12 +1170,16 @@ export default function DiscoverScreen() {
   );
 }
 
-const getStyles = (theme) => StyleSheet.create({
-  root: { flex: 1 },
-  mainContent: {
-    flex: 1,
-    paddingBottom: 95,
-  },
+const getStyles = (theme, insets) => {
+  const bottomNavHeight = Math.max((insets?.bottom || 0) + 8, Platform.OS === 'ios' ? 24 : 14) + 72;
+  const bottomClearance = bottomNavHeight + verticalScale(14);
+
+  return StyleSheet.create({
+    root: { flex: 1 },
+    mainContent: {
+      flex: 1,
+      paddingBottom: bottomClearance,
+    },
 
   headerWrap: {
     backgroundColor: 'transparent',
@@ -1612,70 +1632,89 @@ const getStyles = (theme) => StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: verticalScale(4),
-    marginBottom: verticalScale(22),
+    paddingVertical: verticalScale(2),
+    marginTop: verticalScale(2),
+    marginBottom: verticalScale(6),
   },
   actionsRowContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: scale(12),
+    gap: scale(16),
+    paddingHorizontal: scale(18),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(40),
+    backgroundColor: theme.isDark ? 'rgba(22, 16, 42, 0.88)' : 'rgba(255, 255, 255, 0.92)',
+    borderWidth: 1,
+    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.07)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: theme.isDark ? 0.35 : 0.09,
+    shadowRadius: 14,
+    elevation: 6,
   },
   actionBtnRewindFloating: {
     position: 'absolute',
     left: scale(20),
-    width: scale(36),
-    height: scale(36),
-    borderRadius: scale(18),
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-    borderWidth: 0,
-    borderColor: 'transparent',
+    width: scale(38),
+    height: scale(38),
+    borderRadius: scale(19),
+    backgroundColor: theme.isDark ? 'rgba(245, 158, 11, 0.18)' : 'rgba(245, 158, 11, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
     zIndex: 10,
   },
   actionBtnSmallX: {
     width: scale(48),
     height: scale(48),
     borderRadius: scale(24),
-    backgroundColor: '#4A89FF',
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#4A89FF',
+    shadowColor: '#3B82F6',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
-    elevation: 3,
+    elevation: 4,
   },
   actionBtnLargeLightning: {
-    width: scale(60),
-    height: scale(60),
-    borderRadius: scale(30),
+    width: scale(58),
+    height: scale(58),
+    borderRadius: scale(29),
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#FF007F',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    elevation: 7,
+  },
+  actionBtnSmallHeart: {
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#FF007F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 4,
   },
-  actionBtnSmallHeart: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    backgroundColor: '#8A66FF',
+  actionBtnGradFill: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8A66FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 3,
   },
 });
+};

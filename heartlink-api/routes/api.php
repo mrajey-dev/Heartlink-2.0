@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DatePlannerController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\RequestController;
 use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\AppUpdateController;
 use App\Http\Controllers\PaymentController;
 
 
@@ -27,6 +28,10 @@ Route::get('/ping', function () {
 
 // API v1 Routes
 Route::prefix('v1')->group(function () {
+    // App Version Check & Remote Config (Public)
+    Route::get('/app/check-update', [AppUpdateController::class, 'checkUpdate']);
+    Route::post('/app/broadcast-update', [AppUpdateController::class, 'broadcastUpdateNotification']);
+
     // Public Auth & Upload Routes
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login',    [AuthController::class, 'login']);

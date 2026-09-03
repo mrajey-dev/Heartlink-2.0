@@ -431,3 +431,19 @@ export const apiVerifyRazorpayPayment = async (data) => {
     throw error;
   }
 };
+
+// ─── App Version & Compulsory Update Check ───────────────────────────
+export const apiCheckAppUpdate = async ({ platform = 'android', versionCode = 0, versionName = '' } = {}) => {
+  try {
+    const query = new URLSearchParams({
+      platform,
+      version_code: String(versionCode),
+      version_name: String(versionName),
+    }).toString();
+    return await apiFetch(`/app/check-update?${query}`);
+  } catch (error) {
+    console.warn('[AppUpdate] Check update network error:', error?.message);
+    return null;
+  }
+};
+

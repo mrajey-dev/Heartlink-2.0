@@ -19,6 +19,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
 import InAppNotificationBanner from '../components/InAppNotificationBanner';
 import WelcomeOfferModal from '../components/WelcomeOfferModal';
+import ForceUpdateModal from '../components/ForceUpdateModal';
 
 import { navigationRef } from './navigationRef';
 
@@ -92,6 +93,7 @@ export default function AppNavigator() {
           )}
         </Stack.Navigator>
         {isAuthenticated && <WelcomeOfferModal />}
+        <ForceUpdateModal />
       </NavigationContainer>
     </>
   );

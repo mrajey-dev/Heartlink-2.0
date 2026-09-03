@@ -108,7 +108,6 @@ class FirebasePushService
                         'notification' => [
                             'sound'         => 'default',
                             'channel_id'    => 'default',
-                            'click_action'  => 'default',
                             'color'         => '#FF007F',
                         ],
                     ],
