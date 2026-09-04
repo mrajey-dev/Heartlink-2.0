@@ -47,7 +47,7 @@ export default function PlansScreen() {
   const [customOfferPrice, setCustomOfferPrice] = useState(null);
   const [originalOfferPrice, setOriginalOfferPrice] = useState(null);
 
-  const OFFER_DURATION_MS = 48 * 60 * 60 * 1000;
+  const OFFER_DURATION_MS = 24 * 60 * 60 * 1000;
   const [timeLeftMs, setTimeLeftMs] = useState(0);
   const [isOfferEligible, setIsOfferEligible] = useState(false);
 
@@ -120,10 +120,39 @@ export default function PlansScreen() {
     try {
       const res = await apiGetSubscriptionPlans();
       if (res?.plans && Array.isArray(res.plans) && res.plans.length > 0) {
-        setPlans(res.plans);
+        const enhancedPlans = res.plans.map((plan) => {
+          const name = (plan.name || '').toLowerCase();
+          const key = (plan.plan_key || '').toLowerCase();
+
+          if (key === 'plus' || name.includes('plus')) {
+            return {
+              ...plan,
+              accent_color: '#A855F7',
+              accentColor: '#A855F7',
+              gradient: ['#A855F7', '#7C3AED'],
+              glow_color: 'rgba(168, 85, 247, 0.28)',
+              glowColor: 'rgba(168, 85, 247, 0.28)',
+            };
+          }
+
+          if (key === 'premium' || name.includes('premium')) {
+            return {
+              ...plan,
+              accent_color: '#F59E0B',
+              accentColor: '#F59E0B',
+              gradient: ['#FBBF24', '#F59E0B', '#D97706'],
+              glow_color: 'rgba(245, 158, 11, 0.32)',
+              glowColor: 'rgba(245, 158, 11, 0.32)',
+            };
+          }
+
+          return plan;
+        });
+
+        setPlans(enhancedPlans);
         // Initialize default selected durations for each plan
         const initialDurations = {};
-        res.plans.forEach(plan => {
+        enhancedPlans.forEach((plan) => {
           const defaultDur = plan.durations?.find(d => d.popular)?.id || plan.durations?.[1]?.id || plan.durations?.[0]?.id || '6m';
           initialDurations[plan.id] = defaultDur;
         });
@@ -211,11 +240,24 @@ export default function PlansScreen() {
     const selectedDurId = cardDurations[card.id] || durationsList.find(d => d.popular)?.id || durationsList[1]?.id || durationsList[0]?.id || '6m';
     const selectedDurObj = durationsList.find(d => d.id === selectedDurId) || durationsList[0];
 
+    const isPlus = (card.plan_key || '').toLowerCase() === 'plus' || (card.name || '').toLowerCase().includes('plus');
+    const isPremium = (card.plan_key || '').toLowerCase() === 'premium' || (card.name || '').toLowerCase().includes('premium');
+
     const badgeTitle = card.badgeText || card.badge || card.badge_text;
-    const cardGlow = card.glowColor || card.glow_color || 'rgba(255, 0, 127, 0.25)';
-    const cardGrad = Array.isArray(card.gradient) && card.gradient.length >= 2 ? card.gradient : ['#FF007F', '#B5179E'];
-    const accentCol = card.accentColor || card.accent_color || cardGrad[0] || '#FF007F';
-    const icon = card.iconName || card.icon_name || card.icon || 'sparkles-outline';
+    const cardGlow = isPlus
+      ? 'rgba(168, 85, 247, 0.28)'
+      : isPremium
+      ? 'rgba(245, 158, 11, 0.32)'
+      : (card.glowColor || card.glow_color || 'rgba(255, 0, 127, 0.25)');
+
+    const cardGrad = isPlus
+      ? ['#A855F7', '#7C3AED']
+      : isPremium
+      ? ['#FBBF24', '#F59E0B', '#D97706']
+      : (Array.isArray(card.gradient) && card.gradient.length >= 2 ? card.gradient : ['#FF007F', '#B5179E']);
+
+    const accentCol = isPlus ? '#A855F7' : isPremium ? '#F59E0B' : (card.accentColor || card.accent_color || cardGrad[0] || '#FF007F');
+    const icon = card.iconName || card.icon_name || card.icon || (isPlus ? 'star-outline' : isPremium ? 'sparkles-outline' : 'heart-outline');
 
     return (
       <Animated.View style={[styles.cardWrapper, { transform: [{ scale }], opacity }]}>
@@ -404,11 +446,11 @@ export default function PlansScreen() {
             <View style={{ width: 38 }} />
           </View>
 
-          {/* Top 20% Welcome Offer Banner with Countdown Timer for 48-Hour New Users */}
+          {/* Top 20% Welcome Offer Banner with Countdown Timer for 24-Hour New Users */}
           {isOfferEligible && (
             <View style={[styles.topOfferBannerWrap, isSmallDevice && styles.smallTopOfferBannerWrap]}>
               <LinearGradient
-                colors={['#FF007F', '#E0006C', '#8A2BE2']}
+                colors={['#FBBF24', '#F59E0B', '#D97706']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.topOfferBannerGrad}
@@ -424,7 +466,7 @@ export default function PlansScreen() {
           {/* Slidable Carousel of Cards */}
           {loading ? (
             <View style={{ paddingVertical: 80, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#FF007F" />
+              <ActivityIndicator size="large" color="#F59E0B" />
               <Text style={{ color: theme.textSec, fontSize: 13, marginTop: 12 }}>Loading database membership plans…</Text>
             </View>
           ) : plans.length === 0 ? (
@@ -433,7 +475,7 @@ export default function PlansScreen() {
               <Text style={styles.emptyTitle}>Refresh</Text>
               <Text style={styles.emptySubtitle}>Check your internet connection and try again.</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={fetchPlans} activeOpacity={0.8}>
-                <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.retryGrad}>
+                <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.retryGrad}>
                   <Ionicons name="refresh" size={15} color="#FFF" style={{ marginRight: 6 }} />
                   <Text style={styles.retryBtnTxt}>Retry Loading Plans</Text>
                 </LinearGradient>

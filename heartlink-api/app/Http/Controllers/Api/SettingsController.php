@@ -28,7 +28,7 @@ class SettingsController extends Controller
                 'profile_visibility'    => 'Public',
                 'who_can_message'       => 'Everyone',
                 'distance_filter'       => '50 km',
-                'age_range_filter'      => '18 - 35',
+                'age_range_filter'      => 'Any',
                 'verified_only'         => false,
                 'has_bio_only'          => false,
                 'common_interests_only' => false,

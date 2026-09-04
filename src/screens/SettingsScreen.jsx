@@ -45,7 +45,7 @@ export default function SettingsScreen() {
 
   // ─── 4. Match & Discovery Preference Filters ──────────────────────────────
   const [distanceFilter, setDistanceFilter] = useState('50 km');
-  const [ageRangeFilter, setAgeRangeFilter] = useState('18 - 35');
+  const [ageRangeFilter, setAgeRangeFilter] = useState('Any');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [hasBioOnly, setHasBioOnly] = useState(false);
   const [commonInterestsOnly, setCommonInterestsOnly] = useState(false);
@@ -353,6 +353,52 @@ export default function SettingsScreen() {
     }
   };
 
+  const [testingDelayedPush, setTestingDelayedPush] = useState(false);
+
+  const handleTestClosedAppPush = async () => {
+    if (testingDelayedPush) return;
+    setTestingDelayedPush(true);
+    try {
+      if (isExpoGo) {
+        Alert.alert(
+          'Requires Installed Build',
+          'Android blocks closed-app background notifications inside Expo Go (SDK 53+ limitation).\n\nTo receive notifications when closed, use an installed APK / Development Build.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const token = await registerForPushNotificationsAsync();
+      if (!token) {
+        Alert.alert(
+          'Push Token Unavailable',
+          'Could not retrieve a push token on this device. Please check notification permissions.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      Alert.alert(
+        '⏱️ Test Scheduled in 3 Seconds',
+        'Press your phone Home button or close the app NOW!\n\nThe notification will arrive in 3 seconds while HeartLink is closed or minimized.',
+        [{ text: 'Got it!' }]
+      );
+
+      triggerToast('⏱️ Push arriving in 3 seconds... minimize now!');
+
+      // Send to backend with 3 second delay so user has time to close the app
+      apiTestPushNotification(
+        'HeartLink Alert',
+        '🔔 Push received successfully while HeartLink was closed!',
+        3
+      ).catch((err) => console.warn('[SettingsScreen] Delayed push error:', err?.message || err));
+    } catch (err) {
+      console.warn('[SettingsScreen] Delayed test error:', err?.message || err);
+    } finally {
+      setTimeout(() => setTestingDelayedPush(false), 4000);
+    }
+  };
+
   return (
     <LinearGradient colors={theme.bgGrad} style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
@@ -443,7 +489,7 @@ export default function SettingsScreen() {
                 <Text style={styles.subFreeSub}>Upgrade to unlock rewinds, passport & 10x matches!</Text>
               </View>
               <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('Plans')} activeOpacity={0.85}>
-                <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.upgradeBtnGrad}>
+                <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.upgradeBtnGrad}>
                   <Text style={styles.upgradeBtnTxt}>Upgrade Plan</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -571,7 +617,7 @@ export default function SettingsScreen() {
           {/* Age Range Selector */}
           <Text style={styles.subHeaderLabel}>Target Age Range</Text>
           <View style={styles.pillSelectorRow}>
-            {['18 - 25', '18 - 35', '22 - 40', '25 - 50', 'Any'].map(a => (
+            {['Any', '18 - 25', '18 - 35', '22 - 40', '25 - 50'].map(a => (
               <TouchableOpacity
                 key={a}
                 style={[styles.selectorPill, ageRangeFilter === a && styles.selectorPillActive]}
@@ -686,10 +732,32 @@ export default function SettingsScreen() {
               <Ionicons name="paper-plane-outline" size={18} color="#0284C7" style={{ marginRight: 10 }} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.menuRowTxt, { fontWeight: '600' }]}>
-                  {testingPush ? 'Sending Firebase Test...' : 'Test Firebase Notification'}
+                  {testingPush ? 'Sending Firebase Test...' : 'Test Firebase Notification (Instant)'}
                 </Text>
                 <Text style={{ fontSize: 11, color: theme.textFaint, marginTop: 2 }}>
                   Verify live Firebase Cloud Messaging push to this device
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.textFaint} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity
+            style={[styles.menuRow, { paddingVertical: 12 }]}
+            onPress={handleTestClosedAppPush}
+            disabled={testingDelayedPush}
+            activeOpacity={0.7}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <Ionicons name="timer-outline" size={18} color="#10B981" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.menuRowTxt, { fontWeight: '600' }]}>
+                  {testingDelayedPush ? 'Dispatched! Minimize app now...' : 'Test Closed-App Push (3s delay)'}
+                </Text>
+                <Text style={{ fontSize: 11, color: theme.textFaint, marginTop: 2 }}>
+                  Fires in 3s so you can press Home / close app to verify background delivery
                 </Text>
               </View>
             </View>
@@ -1486,7 +1554,6 @@ const getStyles = (theme) => StyleSheet.create({
   privacyLogoImage: {
     width: 52,
     height: 52,
-    resizeMode: 'contain',
   },
   privacyBrandTitle: {
     fontSize: 24,

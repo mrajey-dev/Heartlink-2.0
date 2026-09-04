@@ -18,7 +18,7 @@ import { navigate } from '../navigation/navigationRef';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
-const OFFER_DURATION_MS = 48 * 60 * 60 * 1000; // 48 Hours
+const OFFER_DURATION_MS = 24 * 60 * 60 * 1000; // 24 Hours
 
 export default function WelcomeOfferModal() {
   const insets = useSafeAreaInsets();
@@ -83,11 +83,11 @@ export default function WelcomeOfferModal() {
           }
         }
 
-        const expiresAt = createdAtTimestamp + OFFER_DURATION_MS; // 48 hours from creation
+        const expiresAt = createdAtTimestamp + OFFER_DURATION_MS; // 24 hours from creation
         const remainingMs = expiresAt - Date.now();
 
-        // Strict 48-Hour Eligibility Rule:
-        // Only show offer if account was created within the last 48 hours
+        // Strict 24-Hour Eligibility Rule:
+        // Only show offer if account was created within the last 24 hours
         if (remainingMs <= 0) {
           if (isMounted) setVisible(false);
           return;
@@ -110,13 +110,13 @@ export default function WelcomeOfferModal() {
     };
   }, [user]);
 
-  // 5 Seconds Delay Timer for Close Button
+  // 1 Second Delay Timer for Close Button
   useEffect(() => {
     if (visible) {
       setShowCloseBtn(false);
       const timer = setTimeout(() => {
         setShowCloseBtn(true);
-      }, 6000); // Appears after 5 seconds
+      }, 1000); // Appears after 1 second
 
       return () => clearTimeout(timer);
     }
@@ -186,7 +186,7 @@ export default function WelcomeOfferModal() {
           {/* Top Center Overlapping Heart Badge */}
           <View style={[styles.topBadgeContainer, { borderColor: cardIsDark ? '#141026' : '#FFF0F6' }]}>
             <LinearGradient
-              colors={['#FF007F', '#E0006C', '#8A2BE2']}
+              colors={['#FBBF24', '#F59E0B', '#D97706']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.topBadgeGrad}
@@ -218,7 +218,7 @@ export default function WelcomeOfferModal() {
 
               {/* Expiration Timer Pill in Top Right Corner */}
               <View style={[styles.topRightTimerPill, showCloseBtn && { marginRight: 32 }]}>
-                <Ionicons name="time" size={12} color="#FF007F" style={{ marginRight: 4 }} />
+                <Ionicons name="time" size={12} color="#F59E0B" style={{ marginRight: 4 }} />
                 <Text style={styles.topRightTimerTxt}>EXPIRES IN {formatTimeLeft(timeLeftMs).toUpperCase()}</Text>
               </View>
             </View>
@@ -233,10 +233,10 @@ export default function WelcomeOfferModal() {
                 Get Flat 20% of on any membership plan
               </Text>
 
-              {/* Middle 20% Coupon Ticket Card (HeartLink Signature Gradient Theme!) */}
+              {/* Middle 20% Coupon Ticket Card (Golden Signature Gradient Theme!) */}
               <View style={styles.couponCardWrapper}>
                 <LinearGradient
-                  colors={['#FF007F', '#E0006C', '#8A2BE2']}
+                  colors={['#FBBF24', '#F59E0B', '#D97706']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.couponCardGradient}
@@ -255,20 +255,20 @@ export default function WelcomeOfferModal() {
                   {/* Right Side: Gift Illustration */}
                   <View style={styles.couponRight}>
                     <View style={styles.giftIconBubble}>
-                      <Ionicons name="gift-outline" size={32} color="#FF007F" />
+                      <Ionicons name="gift-outline" size={32} color="#D97706" />
                     </View>
                   </View>
                 </LinearGradient>
               </View>
 
-              {/* Full Width Action Button (HeartLink Gradient!) */}
+              {/* Full Width Action Button (Golden Gradient!) */}
               <TouchableOpacity
                 activeOpacity={0.88}
                 onPress={handleClaimOffer}
                 style={styles.ctaBtnShadow}
               >
                 <LinearGradient
-                  colors={['#FF007F', '#E0006C', '#8A2BE2']}
+                  colors={['#FBBF24', '#F59E0B', '#D97706']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.ctaBtnInner}
@@ -397,18 +397,18 @@ const getStyles = (cardIsDark) =>
     topRightTimerPill: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: cardIsDark ? 'rgba(255, 0, 127, 0.2)' : '#FFFFFF',
+      backgroundColor: cardIsDark ? 'rgba(245, 158, 11, 0.18)' : '#FFFFFF',
       paddingHorizontal: 10,
       paddingVertical: 5,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: 'rgba(255, 0, 127, 0.25)',
+      borderColor: 'rgba(245, 158, 11, 0.3)',
       elevation: 2,
     },
     topRightTimerTxt: {
       fontSize: 10,
       fontWeight: '900',
-      color: '#FF007F',
+      color: '#D97706',
       letterSpacing: 0.3,
     },
 
@@ -442,9 +442,9 @@ const getStyles = (cardIsDark) =>
       overflow: 'hidden',
       marginBottom: 20,
       elevation: 8,
-      shadowColor: '#FF007F',
+      shadowColor: '#F59E0B',
       shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.35,
+      shadowOpacity: 0.4,
       shadowRadius: 10,
     },
     couponCardGradient: {
@@ -513,10 +513,10 @@ const getStyles = (cardIsDark) =>
       alignSelf: 'center',
       overflow: 'hidden',
       elevation: 6,
-      shadowColor: '#FF007F',
+      shadowColor: '#F59E0B',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
     },
     ctaBtnInner: {
       flex: 1,

@@ -1,4 +1,4 @@
-// src/screens/VibesScreen.jsx — Locked Vibes Feature with Real-Time User Counter & Interactive Invites
+// src/screens/VibesScreen.jsx — Orbital Vibes Coming Soon Flagship Screen
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Easing,
@@ -8,7 +8,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import BlurView from '../components/SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { apiGetUserCount } from '../services/api';
@@ -17,6 +17,33 @@ const { width } = Dimensions.get('window');
 
 const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app';
 
+// Floating Orbit Frequency Badges positioned around the radar
+const ORBIT_TAGS = [
+  { id: '1', title: 'Soul Frequency ✨', top: 12, left: 14 },
+  { id: '2', title: 'Late Night Beats 🎧', top: 18, right: 14 },
+  { id: '3', title: 'Deep Chemistry ⚡', bottom: 18, left: 20 },
+  { id: '4', title: 'Aesthetic Cafes ☕', bottom: 12, right: 18 },
+];
+
+// 3 Feature Pillars explaining why Orbital Vibes is game-changing
+const FEATURE_PILLARS = [
+  {
+    icon: 'planet-outline',
+    title: 'Aesthetic Frequencies',
+    desc: 'Match with people who resonate on your exact lifestyle tempo, music tastes, and unspoken energy.',
+  },
+  {
+    icon: 'radio-outline',
+    title: 'Real-Time Orbit Radar',
+    desc: 'Discover mutual wavelength matches nearby who are tuned into the same frequency at the same time.',
+  },
+  {
+    icon: 'sparkles-outline',
+    title: 'Zero Small-Talk Noise',
+    desc: 'Bypasses superficial bios with deep vibe synchrony and shared aesthetic sparks.',
+  },
+];
+
 // Attractive Invite Message Templates
 const INVITE_TEMPLATES = [
   {
@@ -24,7 +51,7 @@ const INVITE_TEMPLATES = [
     name: 'Cosmic Vibe',
     icon: 'planet-outline',
     badge: 'POPULAR ✨',
-    color: ['#FF007F', '#8B5CF6'],
+    color: ['#FBBF24', '#F59E0B', '#D97706'],
     message: (count, goal, isAdmin) =>
       isAdmin
         ? `✨ Join me on HeartLink! Match your vibe frequency & help us reach ${goal.toLocaleString()} members to unlock the Orbital Vibe Radar 🛰️💫 Currently at ${count.toLocaleString()} members!\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
@@ -46,7 +73,7 @@ const INVITE_TEMPLATES = [
     name: 'Romantic Sparks',
     icon: 'heart-outline',
     badge: 'TRENDING 💖',
-    color: ['#FF2E93', '#FF6B6B'],
+    color: ['#F59E0B', '#EA580C'],
     message: (count, goal, isAdmin) =>
       isAdmin
         ? `💖 Stop swiping blindly! Find your true aesthetic vibe match on HeartLink. Help us unlock Orbital Radar for everyone (${count.toLocaleString()}/${goal.toLocaleString()})! 🔮\n\nDownload HeartLink on Google Play: https://play.google.com/store/apps/details?id=com.heartlinkdatingapp.app`
@@ -79,9 +106,11 @@ export default function VibesScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState('cosmic');
   const [copiedToast, setCopiedToast] = useState(false);
+  const [waitlistNotified, setWaitlistNotified] = useState(true);
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const radarSweepAnim = useRef(new Animated.Value(0)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   const activeTemplate = useMemo(() => {
@@ -136,24 +165,48 @@ export default function VibesScreen({ navigation }) {
     return unsubscribe;
   }, [navigation, isSupportOrAdmin]);
 
+  // Orbit Pulse & Radar Rotation Loop
   useEffect(() => {
-    Animated.loop(
+    // Pulse animation
+    const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1200,
+          toValue: 1.08,
+          duration: 1800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
           toValue: 1.0,
-          duration: 1200,
+          duration: 1800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
       ])
-    ).start();
+    );
+    pulseLoop.start();
+
+    // 360 Radar Sweep continuous rotation
+    const radarLoop = Animated.loop(
+      Animated.timing(radarSweepAnim, {
+        toValue: 1,
+        duration: 5000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    radarLoop.start();
+
+    return () => {
+      pulseLoop.stop();
+      radarLoop.stop();
+    };
   }, []);
+
+  const radarInterpolation = radarSweepAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const handleShare = async (customMessage = null) => {
     try {
@@ -182,19 +235,19 @@ export default function VibesScreen({ navigation }) {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
 
       {/* Cosmic background glow blobs */}
-      <View style={styles.glowBlobCyan} pointerEvents="none" />
-      <View style={styles.glowBlobPurple} pointerEvents="none" />
+      <View style={styles.glowBlobGold} pointerEvents="none" />
+      <View style={styles.glowBlobAmber} pointerEvents="none" />
 
       <SafeAreaView style={styles.flex}>
-        {/* Header */}
+        {/* Header Bar */}
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Orbital Vibes</Text>
-            <Text style={styles.sub}>{isSupportOrAdmin ? 'Community Unlock Counter' : 'Exclusive Matching Feature'}</Text>
+            <Text style={styles.sub}>Aesthetic Frequency Matching</Text>
           </View>
           <View style={styles.lockStatusBadge}>
-            <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.lockBadgeGrad}>
-              <Ionicons name="lock-closed" size={12} color="#FFF" style={{ marginRight: 4 }} />
+            <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.lockBadgeGrad}>
+              <View style={styles.pulseDot} />
               <Text style={styles.lockBadgeTxt}>COMING SOON</Text>
             </LinearGradient>
           </View>
@@ -212,43 +265,155 @@ export default function VibesScreen({ navigation }) {
                   setRefreshing(true);
                   fetchUserCount();
                 }}
-                tintColor="#FF007F"
+                tintColor="#F59E0B"
               />
             ) : undefined
           }
         >
-          {/* Main Cosmic Lock Graphic */}
-          <View style={styles.lockOrbContainer}>
-            <Animated.View style={[styles.orbPulseRing, { transform: [{ scale: pulseAnim }] }]}>
-              <LinearGradient colors={['rgba(255, 0, 127, 0.35)', 'rgba(139, 92, 246, 0.15)', 'transparent']} style={StyleSheet.absoluteFill} />
+          {/* ─── 1. HERO ORBITAL RADAR VISUALIZER ─────────────────── */}
+          <View style={styles.radarStage}>
+            {/* Outer Orbit Ring */}
+            <View style={styles.outerOrbitRing} />
+
+            {/* Middle Orbit Ring */}
+            <View style={styles.middleOrbitRing} />
+
+            {/* Rotating Radar Sweep Beam */}
+            <Animated.View
+              style={[
+                styles.radarSweepContainer,
+                { transform: [{ rotate: radarInterpolation }] },
+              ]}
+              pointerEvents="none"
+            >
+              <LinearGradient
+                colors={['rgba(245, 158, 11, 0.35)', 'rgba(245, 158, 11, 0.08)', 'transparent']}
+                start={{ x: 1, y: 1 }}
+                end={{ x: 0, y: 0 }}
+                style={styles.radarSweepBeam}
+              />
             </Animated.View>
 
-            <View style={styles.orbCoreCircle}>
-              <BlurView intensity={isDark ? 60 : 90} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-              <LinearGradient colors={['rgba(255, 0, 127, 0.25)', 'rgba(147, 51, 234, 0.25)']} style={StyleSheet.absoluteFill} />
-              <Ionicons name="sparkles" size={28} color="#ffec7eff" style={styles.sparkleIcon} />
-              <Ionicons name="lock-closed" size={48} color="#FFF" />
-            </View>
+            {/* Central Glowing Golden Core */}
+            <Animated.View style={[styles.orbCoreWrap, { transform: [{ scale: pulseAnim }] }]}>
+              <View style={styles.orbGlowHalo} />
+              <View style={styles.orbCoreCircle}>
+                <BlurView intensity={isDark ? 60 : 90} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                <LinearGradient colors={['rgba(251, 191, 36, 0.3)', 'rgba(217, 119, 6, 0.25)']} style={StyleSheet.absoluteFill} />
+                <Ionicons name="sparkles" size={26} color="#FBBF24" style={styles.sparkleIcon} />
+                <Ionicons name="planet" size={46} color="#FBBF24" />
+                <View style={styles.centerLockBadge}>
+                  <Ionicons name="lock-closed" size={13} color="#FFFFFF" />
+                </View>
+              </View>
+            </Animated.View>
+
+            {/* Floating Frequency Pills around Radar */}
+            {ORBIT_TAGS.map((tag) => (
+              <View
+                key={tag.id}
+                style={[
+                  styles.orbitPillWrap,
+                  tag.top !== undefined && { top: tag.top },
+                  tag.bottom !== undefined && { bottom: tag.bottom },
+                  tag.left !== undefined && { left: tag.left },
+                  tag.right !== undefined && { right: tag.right },
+                ]}
+              >
+                <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                <View style={styles.orbitPillInner}>
+                  <Text style={styles.orbitPillTxt}>{tag.title}</Text>
+                </View>
+              </View>
+            ))}
           </View>
 
-          {/* Heading & Notice */}
-          <View style={styles.messageWrap}>
-            <Text style={styles.headingTitle}>Vibes Feature Coming Soon!</Text>
-            <Text style={styles.headingSub}>
+          {/* Radar Scanning Live Status */}
+          <View style={styles.radarStatusPill}>
+            <View style={styles.radarStatusPulseDot} />
+            <Text style={styles.radarStatusTxt}>Orbital Radar Initializing • Calibration Phase</Text>
+          </View>
+
+          {/* ─── 2. FEATURE MANIFESTO & HEADING ────────────────────── */}
+          <View style={styles.manifestoWrap}>
+            <Text style={styles.manifestoSuper}>EXCLUSIVELY CRAFTED FOR HEARTLINK</Text>
+            <Text style={styles.manifestoTitle}>Match on Energy, Not Just Photos.</Text>
+            <Text style={styles.manifestoBody}>
               {isSupportOrAdmin ? (
-                <>This feature will be launched soon. We are waiting for <Text style={styles.highlightTxt}>5,000 users</Text> to join the HeartLink community before unlocking the Orbital Vibe Radar!</>
+                <>This game-changing feature is launching once we reach <Text style={styles.highlightTxt}>5,000 members</Text>. Discover people who share your vibe wavelength in real time.</>
               ) : (
-                <>Orbital Vibe Radar matches members on aesthetic frequencies, deep compatibility, and shared lifestyle vibes. This exclusive feature is unlocking soon!</>
+                <>Orbital Vibes unlocks aesthetic frequencies, shared life rhythms, and conversational chemistry. Prepare to experience matchmaking on a cosmic level.</>
               )}
             </Text>
           </View>
 
-          {/* Real-time Progress Card — ONLY visible to Admin/Support (user id = 16) */}
+          {/* ─── 3. VIP WAITLIST CONFIRMATION CARD ──────────────────── */}
+          <View style={styles.waitlistCard}>
+            <LinearGradient
+              colors={isDark ? ['rgba(245, 158, 11, 0.12)', 'rgba(217, 119, 6, 0.05)'] : ['#FFFFFF', '#FFFDF7']}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.waitlistHeaderRow}>
+              <View style={styles.waitlistBadgeIcon}>
+                <Ionicons name="checkmark-circle" size={24} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.waitlistTitle}>VIP Priority Beta Active</Text>
+                <Text style={styles.waitlistSub}>You're set to receive instant access the moment the radar goes live.</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setWaitlistNotified(!waitlistNotified)}
+              style={styles.notifyToggleBtn}
+            >
+              <Ionicons
+                name={waitlistNotified ? "notifications" : "notifications-off-outline"}
+                size={16}
+                color={waitlistNotified ? "#F59E0B" : theme.textSec}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[styles.notifyToggleTxt, { color: waitlistNotified ? '#F59E0B' : theme.textSec }]}>
+                {waitlistNotified ? 'Launch Alerts Enabled ✓' : 'Tap to Enable Launch Alerts'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ─── 4. PILLARS / HIGHLIGHT CARDS ───────────────────────── */}
+          <View style={styles.pillarsSection}>
+            <Text style={styles.sectionEyebrow}>WHAT TO EXPECT</Text>
+            <Text style={styles.sectionHeaderTitle}>A Whole New Way to Connect</Text>
+
+            {FEATURE_PILLARS.map((item, index) => (
+              <View key={index} style={styles.pillarCard}>
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]}>
+                  <BlurView intensity={isDark ? 40 : 70} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
+                  <LinearGradient
+                    colors={isDark ? ['rgba(255, 255, 255, 0.04)', 'rgba(245, 158, 11, 0.04)'] : ['#FFFFFF', 'rgba(245, 158, 11, 0.04)']}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </View>
+                <View style={styles.pillarIconBox}>
+                  <Ionicons name={item.icon} size={22} color="#F59E0B" />
+                </View>
+                <View style={styles.pillarContent}>
+                  <Text style={styles.pillarTitle}>{item.title}</Text>
+                  <Text style={styles.pillarDesc}>{item.desc}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* ─── 5. REAL-TIME PROGRESS (Admin/Support Only) ─────────── */}
           {isSupportOrAdmin && (
             <View style={styles.progressCard}>
-              <View style={[StyleSheet.absoluteFill, { borderRadius: 26, overflow: 'hidden' }]}>
+              <View style={[StyleSheet.absoluteFill, { borderRadius: 24, overflow: 'hidden' }]}>
                 <BlurView intensity={isDark ? 50 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
-                <LinearGradient colors={isDark ? ['rgba(255, 255, 255, 0.05)', 'rgba(255, 0, 127, 0.08)'] : ['rgba(255, 255, 255, 0.9)', 'rgba(255, 0, 127, 0.04)']} style={StyleSheet.absoluteFill} />
+                <LinearGradient
+                  colors={isDark ? ['rgba(255, 255, 255, 0.05)', 'rgba(245, 158, 11, 0.08)'] : ['rgba(255, 255, 255, 0.95)', 'rgba(245, 158, 11, 0.04)']}
+                  style={StyleSheet.absoluteFill}
+                />
               </View>
 
               <View style={styles.cardHeaderRow}>
@@ -264,7 +429,7 @@ export default function VibesScreen({ navigation }) {
               {/* Big Stat Display */}
               {loading ? (
                 <View style={{ paddingVertical: 20 }}>
-                  <ActivityIndicator size="large" color="#FF007F" />
+                  <ActivityIndicator size="large" color="#F59E0B" />
                 </View>
               ) : (
                 <View style={styles.statRow}>
@@ -286,7 +451,7 @@ export default function VibesScreen({ navigation }) {
                     },
                   ]}
                 >
-                  <LinearGradient colors={['#FF007F', '#A855F7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+                  <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
                 </Animated.View>
               </View>
 
@@ -299,11 +464,11 @@ export default function VibesScreen({ navigation }) {
             </View>
           )}
 
-          {/* Interactive Invite Message Showcase Section */}
+          {/* ─── 6. INTERACTIVE INVITE MESSAGE SHOWCASE ─────────────── */}
           <View style={styles.inviteSection}>
             <View style={styles.inviteSectionHeader}>
               <View style={styles.inviteSectionIconBox}>
-                <Ionicons name="send" size={16} color="#FF007F" />
+                <Ionicons name="send" size={16} color="#F59E0B" />
               </View>
               <View>
                 <Text style={styles.inviteSectionTitle}>SELECT YOUR INVITE VIBE</Text>
@@ -334,19 +499,19 @@ export default function VibesScreen({ navigation }) {
               })}
             </ScrollView>
 
-            {/* Attractive Message Preview Card */}
+            {/* Message Preview Card */}
             <View style={styles.previewCard}>
               <View style={[StyleSheet.absoluteFill, { borderRadius: 20, overflow: 'hidden' }]}>
                 <BlurView intensity={isDark ? 40 : 80} tint={isDark ? "dark" : "light"} style={StyleSheet.absoluteFill} />
                 <LinearGradient
-                  colors={isDark ? ['rgba(255, 0, 127, 0.1)', 'rgba(139, 92, 246, 0.05)'] : ['rgba(255, 255, 255, 0.95)', 'rgba(255, 0, 127, 0.03)']}
+                  colors={isDark ? ['rgba(245, 158, 11, 0.1)', 'rgba(217, 119, 6, 0.05)'] : ['rgba(255, 255, 255, 0.95)', 'rgba(245, 158, 11, 0.03)']}
                   style={StyleSheet.absoluteFill}
                 />
               </View>
 
               <View style={styles.previewHeaderRow}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Ionicons name="chatbox-ellipses-outline" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                  <Ionicons name="chatbox-ellipses-outline" size={16} color="#F59E0B" style={{ marginRight: 6 }} />
                   <Text style={styles.previewHeaderLabel}>MESSAGE PREVIEW</Text>
                 </View>
                 <View style={styles.templateBadgeContainer}>
@@ -355,7 +520,7 @@ export default function VibesScreen({ navigation }) {
               </View>
 
               <View style={styles.quoteBox}>
-                <Ionicons name="quote" size={24} color="rgba(255, 0, 127, 0.25)" style={styles.quoteIcon} />
+                <FontAwesome name="quote-left" size={18} color="rgba(245, 158, 11, 0.3)" style={styles.quoteIcon} />
                 <Text style={styles.previewText}>{currentInviteText}</Text>
               </View>
 
@@ -391,7 +556,7 @@ export default function VibesScreen({ navigation }) {
             </Animated.View>
           )}
 
-          {/* Google Play Store Direct Download Card */}
+          {/* ─── 7. GOOGLE PLAY STORE DIRECT DOWNLOAD CARD ─────────── */}
           <TouchableOpacity
             style={styles.playStoreCard}
             onPress={() => Linking.openURL(PLAY_STORE_URL).catch(() => { })}
@@ -415,18 +580,13 @@ export default function VibesScreen({ navigation }) {
                 </Text>
               </View>
               <View style={styles.playStoreArrow}>
-                <Ionicons name="open-outline" size={18} color="#FF007F" />
+                <Ionicons name="open-outline" size={18} color="#F59E0B" />
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Share / Invite CTA (Main Bottom) */}
-          <TouchableOpacity style={styles.shareBtn} onPress={() => handleShare(currentInviteText)} activeOpacity={0.85}>
-            <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.shareBtnGrad}>
-              <Ionicons name="paper-plane" size={18} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.shareBtnTxt}>Invite Friends & Unlock Faster 🚀</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+          {/* Bottom extra space */}
+          <View style={{ height: 30 }} />
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>
@@ -440,23 +600,23 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   flex: {
     flex: 1,
   },
-  glowBlobCyan: {
+  glowBlobGold: {
     position: 'absolute',
-    top: -50,
-    left: -50,
-    width: width * 0.7,
-    height: width * 0.7,
-    borderRadius: (width * 0.7) / 2,
-    backgroundColor: 'rgba(0, 240, 255, 0.08)',
+    top: -40,
+    right: -50,
+    width: width * 0.75,
+    height: width * 0.75,
+    borderRadius: (width * 0.75) / 2,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
   },
-  glowBlobPurple: {
+  glowBlobAmber: {
     position: 'absolute',
-    bottom: 100,
-    right: -40,
+    bottom: 120,
+    left: -60,
     width: width * 0.8,
     height: width * 0.8,
     borderRadius: (width * 0.8) / 2,
-    backgroundColor: 'rgba(255, 0, 127, 0.08)',
+    backgroundColor: 'rgba(217, 119, 6, 0.08)',
   },
   header: {
     flexDirection: 'row',
@@ -482,12 +642,24 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   lockStatusBadge: {
     borderRadius: 20,
     overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   lockBadgeGrad: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  pulseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
+    marginRight: 6,
   },
   lockBadgeTxt: {
     color: '#FFF',
@@ -497,80 +669,295 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 120,
+    paddingTop: 6,
+    paddingBottom: 40,
     alignItems: 'center',
   },
-  lockOrbContainer: {
-    width: 160,
-    height: 160,
+
+  // ─── 1. RADAR STAGE ─────────────────────────────
+  radarStage: {
+    width: width - 40,
+    height: 250,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 10,
-    marginBottom: 20,
+    marginVertical: 10,
+    position: 'relative',
   },
-  orbPulseRing: {
+  outerOrbitRing: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    overflow: 'hidden',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.22)' : 'rgba(245, 158, 11, 0.28)',
+    borderStyle: 'dashed',
   },
-  orbCoreCircle: {
+  middleOrbitRing: {
+    position: 'absolute',
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.28)' : 'rgba(245, 158, 11, 0.35)',
+  },
+  radarSweepContainer: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radarSweepBeam: {
     width: 120,
     height: 120,
-    borderRadius: 60,
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    borderTopRightRadius: 120,
+  },
+  orbCoreWrap: {
+    width: 110,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  orbGlowHalo: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+  },
+  orbCoreCircle: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: 'rgba(255, 0, 127, 0.4)',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 8 },
+    borderColor: 'rgba(245, 158, 11, 0.6)',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowRadius: 14,
+    elevation: 8,
   },
   sparkleIcon: {
     position: 'absolute',
-    top: 14,
-    right: 18,
+    top: 10,
+    right: 14,
   },
-  messageWrap: {
+  centerLockBadge: {
+    position: 'absolute',
+    bottom: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  orbitPillWrap: {
+    position: 'absolute',
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.35)' : 'rgba(245, 158, 11, 0.25)',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    zIndex: 6,
+  },
+  orbitPillInner: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.14)' : 'rgba(255, 255, 255, 0.85)',
+  },
+  orbitPillTxt: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: isDark ? '#FDE68A' : '#B45309',
+    letterSpacing: -0.2,
+  },
+  radarStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(245, 158, 11, 0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  radarStatusPulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#F59E0B',
+    marginRight: 8,
+  },
+  radarStatusTxt: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: isDark ? '#FBBF24' : '#B45309',
+    letterSpacing: 0.2,
+  },
+
+  // ─── 2. MANIFESTO / HEADING ─────────────────────
+  manifestoWrap: {
     alignItems: 'center',
     marginBottom: 24,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
-  headingTitle: {
-    fontSize: 23,
+  manifestoSuper: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#F59E0B',
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  manifestoTitle: {
+    fontSize: 24,
     fontWeight: '900',
     color: theme.textPrimary,
     textAlign: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
+    letterSpacing: -0.4,
   },
-  headingSub: {
-    fontSize: 14.5,
+  manifestoBody: {
+    fontSize: 14,
     color: theme.textSec,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 21,
+    paddingHorizontal: 10,
   },
   highlightTxt: {
-    color: theme.accentBright || '#FF007F',
+    color: '#F59E0B',
     fontWeight: '800',
   },
+
+  // ─── 3. VIP WAITLIST CONFIRMATION CARD ──────────
+  waitlistCard: {
+    width: '100%',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.35)' : 'rgba(245, 158, 11, 0.25)',
+    overflow: 'hidden',
+    marginBottom: 24,
+    elevation: 4,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  waitlistHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  waitlistBadgeIcon: {
+    marginRight: 12,
+  },
+  waitlistTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    letterSpacing: -0.3,
+  },
+  waitlistSub: {
+    fontSize: 12,
+    color: theme.textSec,
+    marginTop: 2,
+    lineHeight: 17,
+  },
+  notifyToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)',
+    borderRadius: 14,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.18)',
+  },
+  notifyToggleTxt: {
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+
+  // ─── 4. PILLARS / HIGHLIGHTS ────────────────────
+  pillarsSection: {
+    width: '100%',
+    marginBottom: 26,
+  },
+  sectionEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#F59E0B',
+    letterSpacing: 1.2,
+    marginBottom: 3,
+  },
+  sectionHeaderTitle: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: theme.textPrimary,
+    marginBottom: 14,
+    letterSpacing: -0.3,
+  },
+  pillarCard: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+    marginBottom: 10,
+    overflow: 'hidden',
+  },
+  pillarIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  pillarContent: {
+    flex: 1,
+  },
+  pillarTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: theme.textPrimary,
+    marginBottom: 3,
+  },
+  pillarDesc: {
+    fontSize: 12,
+    color: theme.textSec,
+    lineHeight: 17,
+  },
+
+  // ─── 5. REAL-TIME USER PROGRESS (ADMIN) ─────────
   progressCard: {
     width: '100%',
-    borderRadius: 26,
-    padding: 22,
+    borderRadius: 24,
+    padding: 20,
     borderWidth: 1.5,
-    borderColor: isDark ? 'rgba(255, 0, 127, 0.3)' : 'rgba(255, 0, 127, 0.18)',
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.3)' : 'rgba(245, 158, 11, 0.18)',
     marginBottom: 24,
   },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   liveIndicatorDot: {
     width: 8,
@@ -586,13 +973,13 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     letterSpacing: 1,
   },
   percentBadge: {
-    backgroundColor: 'rgba(255, 0, 127, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
   },
   percentBadgeTxt: {
-    color: '#FF007F',
+    color: '#F59E0B',
     fontSize: 12,
     fontWeight: '900',
   },
@@ -602,26 +989,26 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     marginBottom: 14,
   },
   currentCountTxt: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '900',
     color: theme.textPrimary,
   },
   targetGoalTxt: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: theme.textSec,
   },
   progressBarTrack: {
     width: '100%',
-    height: 12,
-    borderRadius: 6,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   progressBarFill: {
     height: '100%',
-    borderRadius: 6,
+    borderRadius: 5,
     overflow: 'hidden',
   },
   cardFooterRow: {
@@ -629,10 +1016,12 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     alignItems: 'center',
   },
   cardFooterTxt: {
-    fontSize: 12.5,
+    fontSize: 12,
     color: theme.textSec,
     fontWeight: '600',
   },
+
+  // ─── 6. INVITE MESSAGE SECTION ──────────────────
   inviteSection: {
     width: '100%',
     marginBottom: 24,
@@ -646,7 +1035,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 0, 127, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
@@ -695,7 +1084,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     borderRadius: 22,
     padding: 18,
     borderWidth: 1,
-    borderColor: isDark ? 'rgba(255, 0, 127, 0.25)' : 'rgba(255, 0, 127, 0.15)',
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.15)',
   },
   previewHeaderRow: {
     flexDirection: 'row',
@@ -706,11 +1095,11 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   previewHeaderLabel: {
     fontSize: 10.5,
     fontWeight: '900',
-    color: '#FF007F',
+    color: '#F59E0B',
     letterSpacing: 1,
   },
   templateBadgeContainer: {
-    backgroundColor: 'rgba(255, 0, 127, 0.12)',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
@@ -718,7 +1107,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   templateBadgeTxt: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#FF007F',
+    color: '#D97706',
   },
   quoteBox: {
     backgroundColor: isDark ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.6)',
@@ -791,40 +1180,19 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     fontWeight: '700',
     color: theme.textPrimary,
   },
-  shareBtn: {
-    width: '100%',
-    height: 52,
-    borderRadius: 26,
-    overflow: 'hidden',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  shareBtnGrad: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shareBtnTxt: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
 
-  // Play Store Download Card
+  // ─── 7. PLAY STORE CARD ─────────────────────────
   playStoreCard: {
+    width: '100%',
     marginBottom: 16,
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: isDark ? 'rgba(255, 0, 127, 0.25)' : 'rgba(255, 0, 127, 0.18)',
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.18)',
     elevation: 4,
-    shadowColor: '#FF007F',
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
   },
   playStoreCardInner: {
@@ -859,10 +1227,9 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 10,
   },
 });
-

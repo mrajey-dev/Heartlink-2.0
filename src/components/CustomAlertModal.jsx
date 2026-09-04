@@ -31,7 +31,7 @@ export default function CustomAlertModal({
 
   if (!visible) return null;
 
-  const cardBg = isDark ? '#1C1433' : '#FFFFFF';
+  const cardBg = isDark ? '#191309' : '#FFFFFF';
 
   return (
     <Modal
@@ -43,14 +43,20 @@ export default function CustomAlertModal({
     >
       <View style={[styles.backdrop, { paddingTop: insets.top + verticalScale(8), paddingBottom: Math.max(insets.bottom + verticalScale(16), verticalScale(24)) }]}>
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
-        <BlurView intensity={45} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
 
         {/* Outer Wrap allowing top overlapping badge */}
         <View style={styles.cardWrap}>
           {/* Top Center Overlapping Icon Badge */}
-          <View style={[styles.topBadgeContainer, { borderColor: cardBg }]}>
+          <View style={[
+            styles.topBadgeContainer,
+            {
+              borderColor: cardBg,
+              shadowColor: isDanger ? '#EF4444' : '#F59E0B',
+            }
+          ]}>
             <LinearGradient
-              colors={isDanger ? ['#FF375F', '#D00040'] : ['#FF007F', '#E0006C', '#8A2BE2']}
+              colors={isDanger ? ['#EF4444', '#DC2626'] : ['#FBBF24', '#F59E0B', '#D97706']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.topBadgeGrad}
@@ -64,7 +70,11 @@ export default function CustomAlertModal({
             styles.card,
             {
               backgroundColor: cardBg,
-              borderColor: isDark ? 'rgba(255, 0, 127, 0.3)' : 'rgba(0, 0, 0, 0.08)',
+              borderColor: isDanger
+                ? 'rgba(239, 68, 68, 0.35)'
+                : isDark
+                  ? 'rgba(245, 158, 11, 0.32)'
+                  : 'rgba(245, 158, 11, 0.20)',
             }
           ]}>
             {/* Title & Message */}
@@ -75,7 +85,7 @@ export default function CustomAlertModal({
             )}
 
             {!!message && (
-              <Text style={[styles.message, { color: isDark ? 'rgba(255, 255, 255, 0.72)' : '#64748B' }]}>
+              <Text style={[styles.message, { color: isDark ? 'rgba(255, 255, 255, 0.78)' : '#64748B' }]}>
                 {message}
               </Text>
             )}
@@ -88,7 +98,9 @@ export default function CustomAlertModal({
                     styles.btn,
                     styles.cancelBtn,
                     {
-                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#E2E8F0',
+                      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9',
+                      borderWidth: 1,
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
                     }
                   ]}
                   onPress={handleCancel}
@@ -101,12 +113,16 @@ export default function CustomAlertModal({
               )}
 
               <TouchableOpacity
-                style={[styles.btn, styles.confirmBtnShadow]}
+                style={[
+                  styles.btn,
+                  styles.confirmBtnShadow,
+                  { shadowColor: isDanger ? '#EF4444' : '#F59E0B' }
+                ]}
                 onPress={handleConfirm}
                 activeOpacity={0.85}
               >
                 <LinearGradient
-                  colors={isDanger ? ['#FF375F', '#D00040'] : ['#FF007F', '#8A2BE2']}
+                  colors={isDanger ? ['#EF4444', '#DC2626'] : ['#FBBF24', '#F59E0B', '#D97706']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.confirmGrad}
@@ -146,9 +162,9 @@ const styles = StyleSheet.create({
     borderRadius: scale(28),
     borderWidth: scale(4),
     elevation: 12,
-    shadowColor: '#FF007F',
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.45,
     shadowRadius: 10,
   },
   topBadgeGrad: {
@@ -210,7 +226,7 @@ const styles = StyleSheet.create({
   },
   confirmBtnShadow: {
     elevation: 6,
-    shadowColor: '#FF007F',
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 6,

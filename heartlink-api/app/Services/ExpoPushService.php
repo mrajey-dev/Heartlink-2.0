@@ -60,6 +60,11 @@ class ExpoPushService
             ])->post('https://exp.host/--/api/v2/push/send', $payload);
 
             if ($response->successful()) {
+                $resData = $response->json('data');
+                if (isset($resData['status']) && $resData['status'] === 'error') {
+                    Log::error("[ExpoPushService] Expo Ticket Error for user {$user->id}: " . json_encode($resData));
+                    return false;
+                }
                 Log::info("[ExpoPushService] Push delivered successfully to user {$user->id}");
                 return true;
             } else {

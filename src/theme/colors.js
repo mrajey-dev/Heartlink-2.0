@@ -37,7 +37,7 @@ export const DARK_THEME = {
   // ─── Gradient sets ──────────────────────────────────────────────────────────
   gradientCard:   ['rgba(0,0,0,0)', 'rgba(0,0,0,0.30)', 'rgba(0,0,0,0.90)'],
   gradientTop:    ['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.20)', 'transparent'],
-  gradientAccent: ['#FF007F', '#B5179E'],               // neon fuchsia to electric purple
+  gradientAccent: ['#FBBF24', '#F59E0B', '#D97706'],               // luminous warm golden gradient
   gradientBlue:   ['#5E5CE6', '#0A84FF'],
   gradientGreen:  ['#30D158', '#25A244'],
   gradientPurple: ['#BF5AF2', '#5E5CE6'],
@@ -87,7 +87,7 @@ export const LIGHT_THEME = {
   // ─── Gradient sets ──────────────────────────────────────────────────────────
   gradientCard:   ['rgba(255,255,255,0)', 'rgba(14, 12, 12, 0.29)', 'rgba(0, 0, 0, 1)'],
   gradientTop:    ['rgba(255,255,255,0.70)', 'rgba(255,255,255,0.30)', 'transparent'],
-  gradientAccent: ['#FF007F', '#B5179E'],               // neon fuchsia to electric purple
+  gradientAccent: ['#FBBF24', '#F59E0B', '#D97706'],               // luminous warm golden gradient
   gradientBlue:   ['#4A47D1', '#0070E0'],
   gradientGreen:  ['#248A3D', '#1A7031'],
   gradientPurple: ['#A040D9', '#4A47D1'],

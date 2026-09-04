@@ -75,6 +75,7 @@ export default function DiscoverScreen() {
 
   const [passedHistory, setPassedHistory] = useState([]);
   const [swipedCount, setSwipedCount] = useState(0);
+  const [isSwipeLoading, setIsSwipeLoading] = useState(false);
   const [freeLimitModalVisible, setFreeLimitModalVisible] = useState(false);
   const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
   const [noRewindModalVisible, setNoRewindModalVisible] = useState(false);
@@ -216,9 +217,36 @@ export default function DiscoverScreen() {
     };
   };
 
+  const getTodayKey = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const syncDailySwipeLimit = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const today = getTodayKey();
+      const storedDate = await AsyncStorage.getItem(`@heartlink_swipe_date_${user.id}`);
+      if (storedDate !== today) {
+        // Calendar day changed (passed 12:00 AM midnight) -> reset to 0
+        await AsyncStorage.setItem(`@heartlink_swipe_date_${user.id}`, today);
+        await AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, '0');
+        setSwipedCount(0);
+      } else {
+        const countStr = await AsyncStorage.getItem(`@heartlink_daily_swipes_${user.id}`);
+        const count = parseInt(countStr || '0', 10);
+        setSwipedCount(isNaN(count) ? 0 : count);
+      }
+    } catch (_) { }
+  }, [user?.id]);
+
   const fetchFeed = async (isBackground = false) => {
     try {
       if (!isBackground && dbProfiles.length === 0) setFeedLoading(true);
+      await syncDailySwipeLimit();
       const fRes = await apiGetDiscoveryFeed().catch(() => null);
 
       if (fRes?.profiles && Array.isArray(fRes.profiles)) {
@@ -226,6 +254,14 @@ export default function DiscoverScreen() {
           .filter(p => p.id !== 16 && p.id !== '16' && !p.is_support)
           .map(formatApiProfile);
         setDbProfiles(formatted);
+      }
+      if (typeof fRes?.daily_likes_count === 'number') {
+        setSwipedCount(fRes.daily_likes_count);
+        if (user?.id) {
+          const today = getTodayKey();
+          AsyncStorage.setItem(`@heartlink_swipe_date_${user.id}`, today).catch(() => { });
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(fRes.daily_likes_count)).catch(() => { });
+        }
       }
     } catch (err) {
       console.warn('Discovery Feed fetch error:', err?.message);
@@ -236,11 +272,13 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     fetchFeed(false);
+    syncDailySwipeLimit();
 
     const unsubReq = eventEmitter.on(EVENTS.REQUEST_UPDATED, () => fetchFeed(true));
     const unsubMatch = eventEmitter.on(EVENTS.MATCH_UPDATED, () => fetchFeed(true));
     const unsubscribe = navigation.addListener('focus', () => {
       setPhotoIdx(0);
+      syncDailySwipeLimit();
       fetchFeed(true);
     });
 
@@ -249,7 +287,7 @@ export default function DiscoverScreen() {
       unsubReq();
       unsubMatch();
     };
-  }, [navigation]);
+  }, [navigation, syncDailySwipeLimit]);
 
   const activeProfiles = useMemo(() => {
     const userGender = (user?.gender || 'Man').toLowerCase();
@@ -553,24 +591,8 @@ export default function DiscoverScreen() {
   };
 
   // Sequential 3-Phase Animation Sequence for Like / Pass swipes
-  const swipeCard = (direction, rawSwipeType = 'like') => {
-    if (isAnimating || isSuperlikeLoading || !currentProfile) return;
-
-    const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like', 'pass'].includes(rawSwipeType))
-      ? rawSwipeType
-      : (direction === 'right' ? 'like' : 'pass');
-
-    if (swipeType === 'super_like') {
-      handleSparkPress();
-      return;
-    }
-
-    const isUserVerified = user?.is_verified === true || user?.is_verified === 1 || user?.is_verified === '1' || user?.is_verified === 'true';
-    if (!isUserVerified && !hasActivePlan && swipedCount >= 5) {
-      setFreeLimitModalVisible(true);
-      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
-      return;
-    }
+  const executeSwipeTransition = (direction, swipeType, currentP, res) => {
+    if (!currentP) return;
 
     const isLastProfile = activeProfiles.length <= 1;
 
@@ -584,31 +606,20 @@ export default function DiscoverScreen() {
     }
 
     setIsAnimating(true);
-    setSwipedCount(prev => prev + 1);
 
-    const currentP = currentProfile;
-    if (currentP && currentP.id) {
-      if (swipeType === 'pass') {
-        setPassedHistory(prev => [...prev, currentP]);
-      }
-      apiSwipeUser(currentP.id, swipeType).then(res => {
-        if (res?.is_match) {
-          setMatchModalUser(currentP);
-          setMatchModalVisible(true);
-        } else if (swipeType === 'like') {
-          eventEmitter.emit(EVENTS.REQUEST_SENT, {
-            title: 'Like Sent',
-            message: `Sent interest request to ${currentP.name || 'Member'}`,
-            avatar: currentP.avatar || currentP.image,
-            userId: currentP.id,
-          });
-        }
-      }).catch(err => {
-        if (err?.message?.includes('not verified') || err?.requires_verification) {
-          setAadhaarModalVisible(true);
-        } else if (err?.message?.includes('limit') || err?.requires_upgrade || err?.error === 'UPGRADE_PLAN_REQUIRED') {
-          setFreeLimitModalVisible(true);
-        }
+    if (swipeType === 'pass') {
+      setPassedHistory(prev => [...prev, currentP]);
+    }
+
+    if (res?.is_match) {
+      setMatchModalUser(currentP);
+      setMatchModalVisible(true);
+    } else if (swipeType === 'like') {
+      eventEmitter.emit(EVENTS.REQUEST_SENT, {
+        title: 'Like Sent',
+        message: `Sent interest request to ${currentP.name || 'Member'}`,
+        avatar: currentP.avatar || currentP.image,
+        userId: currentP.id,
       });
     }
 
@@ -693,6 +704,65 @@ export default function DiscoverScreen() {
     });
   };
 
+  const swipeCard = async (direction, rawSwipeType = 'like') => {
+    if (isAnimating || isSwipeLoading || !currentProfile) return;
+
+    const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like', 'pass'].includes(rawSwipeType))
+      ? rawSwipeType
+      : (direction === 'right' ? 'like' : 'pass');
+
+    if (swipeType === 'super_like') {
+      handleSparkPress();
+      return;
+    }
+
+    const currentP = currentProfile;
+    if (!currentP || !currentP.id) return;
+
+    // 1. Check if user on free plan without active subscription has already reached 5 daily likes
+    if (!hasActivePlan && (swipeType === 'like' || swipeType === 'pass') && swipedCount >= 5) {
+      setFreeLimitModalVisible(true);
+      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
+      return;
+    }
+
+    setIsSwipeLoading(true);
+
+    try {
+      const res = await apiSwipeUser(currentP.id, swipeType);
+      setIsSwipeLoading(false);
+
+      // Increment daily counter and persist for today
+      setSwipedCount(prev => {
+        const next = prev + 1;
+        if (user?.id) {
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(next)).catch(() => { });
+        }
+        return next;
+      });
+
+      // Execute animated card exit and advance to next profile
+      executeSwipeTransition(direction, swipeType, currentP, res);
+    } catch (err) {
+      setIsSwipeLoading(false);
+
+      // RESTRICT CARD: Spring the card back to center! Never swipe away if rejected or limit reached!
+      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
+
+      if (err?.message?.includes('not verified') || err?.requires_verification) {
+        setAadhaarModalVisible(true);
+      } else if (err?.message?.includes('limit') || err?.requires_upgrade || err?.error === 'UPGRADE_PLAN_REQUIRED') {
+        setSwipedCount(5);
+        if (user?.id) {
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, '5').catch(() => { });
+        }
+        setFreeLimitModalVisible(true);
+      } else {
+        console.warn('Swipe error:', err?.message);
+      }
+    }
+  };
+
   const moveToNext = (swipeType = 'like') => {
     swipeCard('right', swipeType);
   };
@@ -775,29 +845,34 @@ export default function DiscoverScreen() {
     });
   }, [card1Pos]);
 
+  const discoverBgGrad = useMemo(() => {
+    return isDark
+      ? ['#16120C', '#0E0B07', '#060503'] // Ultra-fresh obsidian with luminous golden warmth
+      : ['#FFFDF9', '#FAF5EB', '#F4EDE0']; // Clean frosted starlight champagne
+  }, [isDark]);
+
   return (
-    <LinearGradient colors={theme.bgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
+    <LinearGradient colors={discoverBgGrad} start={{ x: 0.2, y: 0 }} end={{ x: 0.8, y: 1 }} style={styles.root}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
 
       <SafeAreaView style={styles.headerWrap} edges={['top']}>
         <View style={styles.headerPill}>
           <View style={styles.headerTitleContainer} pointerEvents="none">
             <View style={styles.brandTitleRow}>
-
               <Text style={styles.headerCenterTitle}>HeartLink</Text>
             </View>
           </View>
 
           <TouchableOpacity style={styles.headerLeftBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
-            <Ionicons name="person" size={17} color={theme.textPrimary} />
+            <Ionicons name="person" size={17} color={isDark ? '#FDE68A' : theme.textPrimary} />
           </TouchableOpacity>
 
           <View style={styles.headerRightGroup}>
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-              <Ionicons name="options-outline" size={18} color={theme.textPrimary} />
+              <Ionicons name="options-outline" size={18} color={isDark ? '#FDE68A' : theme.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
-              <Ionicons name="notifications" size={19} color={theme.textPrimary} />
+              <Ionicons name="notifications" size={19} color={isDark ? '#FDE68A' : theme.textPrimary} />
               {requestCount > 0 && (
                 <View style={styles.headerBadge}>
                   <Text style={styles.headerBadgeText}>{requestCount > 99 ? '99+' : requestCount}</Text>
@@ -809,9 +884,9 @@ export default function DiscoverScreen() {
       </SafeAreaView>
 
       <View style={styles.mainContent} pointerEvents={(showDetail || feedLoading) ? "none" : "auto"}>
-        <View style={styles.glowBlobFuchsia} pointerEvents="none" />
-        <View style={styles.glowBlobCyan} pointerEvents="none" />
-        <View style={styles.glowBlobPurple} pointerEvents="none" />
+        <View style={styles.glowBlobGold} pointerEvents="none" />
+        <View style={styles.glowBlobAmber} pointerEvents="none" />
+        <View style={styles.glowBlobWarm} pointerEvents="none" />
 
         {/* Reaction Toast Overlay (Shown on clean screen, disappears completely before next profile arrives) */}
         {currentProfile && activeProfiles.length > 0 && (
@@ -861,24 +936,35 @@ export default function DiscoverScreen() {
             ) : (
               <View style={styles.emptyWrap}>
                 <View style={styles.emptyCard}>
-                  <View style={styles.emptyIconWrap}>
-                    <Ionicons name="sparkles-outline" size={48} color="#FF007F" />
-                  </View>
+                  <LinearGradient
+                    colors={['#FBBF24', '#F59E0B', '#D97706']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.emptyIconWrap}
+                  >
+                    <Ionicons name="sparkles" size={36} color="#FFF" />
+                  </LinearGradient>
 
                   <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
+
+                  <View style={styles.emptyRefreshPill}>
+                    <Ionicons name="time-outline" size={13} color="#F59E0B" style={{ marginRight: 5 }} />
+                    <Text style={styles.emptyRefreshPillTxt}>5 Free Likes refresh everyday at 12:00 AM</Text>
+                  </View>
+
                   {!user?.subscription_plan || user?.subscription_plan === 'Free' || user?.subscription_plan === 'basic_free' ? (
                     <>
                       <Text style={styles.emptySub}>
-                        Buy a HeartLink Membership plan to unlock unlimited profile re-checks, worldwide Passport reach, and priority matching!
+                        Upgrade to HeartLink Plus or Premium to unlock unlimited daily profile likes, rewinds, and priority matching!
                       </Text>
                       <TouchableOpacity
                         style={styles.emptyBtn}
                         onPress={() => navigation.navigate('Plans')}
                         activeOpacity={0.85}
                       >
-                        <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.emptyBtnGrad}>
+                        <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
                           <Ionicons name="sparkles" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                          <Text style={styles.emptyBtnTxt}>Buy Plan to Unlock Swipes</Text>
+                          <Text style={styles.emptyBtnTxt}>Upgrade Plan to Unlock Swipes</Text>
                         </LinearGradient>
                       </TouchableOpacity>
                     </>
@@ -904,7 +990,7 @@ export default function DiscoverScreen() {
                         }}
                         activeOpacity={0.85}
                       >
-                        <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.emptyBtnGrad}>
+                        <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
                           <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
                           <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
                         </LinearGradient>
@@ -952,15 +1038,21 @@ export default function DiscoverScreen() {
               </Animated.View>
 
               <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
-                <Ionicons name="chevron-up" size={17} color="#00E5FF" style={{ marginRight: 4 }} />
+                <Ionicons name="chevron-up" size={17} color="#FDE68A" style={{ marginRight: 4 }} />
                 <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
               </Animated.View>
 
               {/* Top-Right Match Percentage Badge */}
-              <View style={styles.cardMatchBadge} pointerEvents="none">
-                <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 3 }} />
+              <LinearGradient
+                colors={['rgba(251, 191, 36, 0.95)', 'rgba(217, 119, 6, 0.95)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.cardMatchBadge}
+                pointerEvents="none"
+              >
+                <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 4 }} />
                 <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
-              </View>
+              </LinearGradient>
 
               {/* Photo progress dots */}
               {currentProfile.images.length > 1 && (
@@ -990,16 +1082,23 @@ export default function DiscoverScreen() {
               <View style={{ width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
                 <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={styles.cardProfileName}>{currentProfile.display_name || currentProfile.displayName || currentProfile.name}{currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}</Text>
+                    <Text style={styles.cardProfileName}>
+                      {currentProfile.display_name || currentProfile.displayName || currentProfile.name}
+                      {currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}
+                    </Text>
                     {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
                   </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, flexWrap: 'wrap' }}>
-                    <Text style={styles.cardProfileJob}>{currentProfile.job}</Text>
+                  <View style={styles.cardGlassPillRow}>
+                    {currentProfile.job ? (
+                      <View style={styles.cardInfoPill}>
+                        <Ionicons name="briefcase-outline" size={12} color="#FDE68A" style={{ marginRight: 5 }} />
+                        <Text style={styles.cardInfoPillTxt} numberOfLines={1}>{currentProfile.job}</Text>
+                      </View>
+                    ) : null}
                     {currentProfile.distance ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.cardProfileJob}> · </Text>
-                        <Ionicons name="location-sharp" size={13} color="#ffffffff" style={{ marginRight: 2 }} />
-                        <Text style={styles.cardProfileJob}>{currentProfile.distance}</Text>
+                      <View style={styles.cardInfoPill}>
+                        <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
+                        <Text style={styles.cardInfoPillTxt}>{currentProfile.distance}</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1028,7 +1127,7 @@ export default function DiscoverScreen() {
                 onPress={moveToPrevious}
                 activeOpacity={0.8}
                 style={styles.actionBtnSmallX}
-                disabled={isAnimating}
+                disabled={isAnimating || isSwipeLoading}
               >
                 <LinearGradient
                   colors={['#3B82F6', '#1D4ED8']}
@@ -1044,10 +1143,10 @@ export default function DiscoverScreen() {
                 onPress={handleSparkPress}
                 activeOpacity={0.8}
                 style={styles.actionBtnLargeLightning}
-                disabled={isAnimating || isSuperlikeLoading}
+                disabled={isAnimating || isSuperlikeLoading || isSwipeLoading}
               >
                 <LinearGradient
-                  colors={['#FF007F', '#B5179E']}
+                  colors={['#FBBF24', '#F59E0B', '#D97706']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.actionBtnGradFill}
@@ -1064,7 +1163,7 @@ export default function DiscoverScreen() {
                 onPress={() => moveToNext('like')}
                 activeOpacity={0.8}
                 style={styles.actionBtnSmallHeart}
-                disabled={isAnimating}
+                disabled={isAnimating || isSwipeLoading}
               >
                 <LinearGradient
                   colors={['#FF007F', '#D90429']}
@@ -1105,16 +1204,19 @@ export default function DiscoverScreen() {
       <CustomAlertModal
         visible={freeLimitModalVisible}
         title="Free Profiles Exhausted"
-        message="You have swiped through all 5 of your free profiles! Upgrade your plan to unlock unlimited swipes and discover more amazing people."
+        message="You have reached your daily limit of 5 free profiles for today. Your 5 free likes refresh everyday at 12:00 AM midnight. Upgrade your plan now to unlock unlimited likes and discover more connections!"
         icon="lock-closed-outline"
-        iconColor="#FF007F"
+        iconColor="#F59E0B"
         confirmText="Upgrade Plan"
         cancelText="Maybe Later"
         onConfirm={() => {
           setFreeLimitModalVisible(false);
           navigation.navigate('Plans');
         }}
-        onCancel={() => setFreeLimitModalVisible(false)}
+        onCancel={() => {
+          setFreeLimitModalVisible(false);
+          Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
+        }}
       />
 
       <AadhaarVerificationModal
@@ -1171,6 +1273,7 @@ export default function DiscoverScreen() {
 }
 
 const getStyles = (theme, insets) => {
+  const isDark = !!theme?.isDark;
   const bottomNavHeight = Math.max((insets?.bottom || 0) + 8, Platform.OS === 'ios' ? 24 : 14) + 72;
   const bottomClearance = bottomNavHeight + verticalScale(14);
 
@@ -1181,540 +1284,598 @@ const getStyles = (theme, insets) => {
       paddingBottom: bottomClearance,
     },
 
-  headerWrap: {
-    backgroundColor: 'transparent',
-    paddingTop: 0,
-  },
-  headerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    position: 'relative',
-  },
-  headerTitleContainer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerLeftBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerRightGroup: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  headerRightBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: theme.isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.05)',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  headerBadge: {
-    position: 'absolute',
-    top: -3,
-    right: -3,
-    backgroundColor: '#FF375F',
-    borderRadius: 8,
-    minWidth: 15,
-    height: 15,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 2,
-    borderWidth: 0,
-    borderColor: 'transparent',
-  },
-  headerBadgeText: {
-    color: '#fff',
-    fontSize: 8.5,
-    fontWeight: '900',
-  },
-  brandTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
-  },
-  headerHeartBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  headerCenterTitle: {
-    fontFamily: 'Satisfy_400Regular',
-    fontSize: fs(24),
-    color: theme.textPrimary,
-    letterSpacing: 0.3,
-    lineHeight: 34,
-    paddingTop: Platform.OS === 'android' ? 2 : 0,
-    textShadowColor: theme.isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+    headerWrap: {
+      backgroundColor: 'transparent',
+      paddingTop: 0,
+    },
+    headerPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 24,
+      position: 'relative',
+    },
+    headerTitleContainer: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    headerLeftBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.75)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(245, 158, 11, 0.22)' : 'rgba(245, 158, 11, 0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    headerRightGroup: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    headerRightBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.75)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(245, 158, 11, 0.22)' : 'rgba(245, 158, 11, 0.15)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.08,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    headerBadge: {
+      position: 'absolute',
+      top: -2,
+      right: -2,
+      backgroundColor: '#F59E0B',
+      borderRadius: 8,
+      minWidth: 16,
+      height: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 3,
+      borderWidth: 1.5,
+      borderColor: isDark ? '#16120C' : '#FFFFFF',
+    },
+    headerBadgeText: {
+      color: '#fff',
+      fontSize: 8.5,
+      fontWeight: '900',
+    },
+    brandTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 7,
+    },
+    headerHeartBadge: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#FF007F',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    headerCenterTitle: {
+      fontFamily: 'Satisfy_400Regular',
+      fontSize: fs(24),
+      color: theme.textPrimary,
+      letterSpacing: 0.3,
+      lineHeight: 34,
+      paddingTop: Platform.OS === 'android' ? 2 : 0,
+      textShadowColor: theme.isDark ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.1)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
 
-  glowBlobFuchsia: {
-    position: 'absolute',
-    top: height * 0.15,
-    left: -80,
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    backgroundColor: 'rgba(255, 0, 127, 0.26)',
-    opacity: 0.85,
-    zIndex: 0,
-  },
-  glowBlobCyan: {
-    position: 'absolute',
-    bottom: height * 0.1,
-    right: -100,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(0, 191, 255, 0.20)',
-    opacity: 0.75,
-    zIndex: 0,
-  },
-  glowBlobPurple: {
-    position: 'absolute',
-    top: height * 0.48,
-    right: -40,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(123, 47, 190, 0.24)',
-    opacity: 0.75,
-    zIndex: 0,
-  },
+    glowBlobGold: {
+      position: 'absolute',
+      top: height * 0.12,
+      left: -70,
+      width: 280,
+      height: 280,
+      borderRadius: 140,
+      backgroundColor: isDark ? 'rgba(245, 158, 11, 0.16)' : 'rgba(245, 158, 11, 0.09)',
+      opacity: 0.85,
+      zIndex: 0,
+    },
+    glowBlobAmber: {
+      position: 'absolute',
+      bottom: height * 0.08,
+      right: -90,
+      width: 290,
+      height: 290,
+      borderRadius: 145,
+      backgroundColor: isDark ? 'rgba(217, 119, 6, 0.13)' : 'rgba(217, 119, 6, 0.07)',
+      opacity: 0.8,
+      zIndex: 0,
+    },
+    glowBlobWarm: {
+      position: 'absolute',
+      top: height * 0.45,
+      right: -50,
+      width: 230,
+      height: 230,
+      borderRadius: 115,
+      backgroundColor: isDark ? 'rgba(251, 191, 36, 0.12)' : 'rgba(251, 191, 36, 0.07)',
+      opacity: 0.8,
+      zIndex: 0,
+    },
 
-  reactionToast: {
-    position: 'absolute',
-    top: '35%',
-    left: 28,
-    right: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 50,
-  },
-  reactionIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  reactionIconCircleLike: {
-    backgroundColor: '#FF007F',
-    shadowColor: '#FF007F',
-  },
-  reactionIconCirclePass: {
-    backgroundColor: '#4A89FF',
-    shadowColor: '#4A89FF',
-  },
-  reactionIconCircleSuperlike: {
-    backgroundColor: '#F59E0B',
-    shadowColor: '#F59E0B',
-  },
-  reactionTitle: {
-    fontFamily: 'BricolageGrotesque_800Bold',
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 4,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 6,
-  },
-  reactionSubtitle: {
-    fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
-    fontSize: 14,
-    fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.90)',
-    textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+    reactionToast: {
+      position: 'absolute',
+      top: '35%',
+      left: 28,
+      right: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+    },
+    reactionIconCircle: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 12,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    reactionIconCircleLike: {
+      backgroundColor: '#FF007F',
+      shadowColor: '#FF007F',
+    },
+    reactionIconCirclePass: {
+      backgroundColor: '#4A89FF',
+      shadowColor: '#4A89FF',
+    },
+    reactionIconCircleSuperlike: {
+      backgroundColor: '#F59E0B',
+      shadowColor: '#F59E0B',
+    },
+    reactionTitle: {
+      fontFamily: 'BricolageGrotesque_800Bold',
+      fontSize: 28,
+      fontWeight: '900',
+      color: '#FFFFFF',
+      letterSpacing: -0.5,
+      textAlign: 'center',
+      marginBottom: 4,
+      textShadowColor: 'rgba(0,0,0,0.6)',
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 6,
+    },
+    reactionSubtitle: {
+      fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
+      fontSize: 14,
+      fontWeight: '600',
+      color: 'rgba(255, 255, 255, 0.90)',
+      textAlign: 'center',
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 4,
+    },
 
-  cardStackContainer: {
-    flex: 1,
-    marginTop: verticalScale(6),
-    marginBottom: verticalScale(6),
-    width: width - 48,
-    alignSelf: 'center',
-    position: 'relative',
-  },
-  emptyWrap: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyCard: {
-    width: '100%',
-    borderRadius: 32,
-    padding: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: theme.isDark ? '#1C1236' : '#FFFFFF',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  emptyIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(255, 0, 127, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: theme.textPrimary,
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  emptySub: {
-    fontSize: 13.5,
-    color: theme.textSec,
-    marginTop: 8,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 10,
-  },
-  emptyBtn: {
-    marginTop: 20,
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  emptyBtnGrad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  emptyBtnTxt: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  card: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
-    overflow: 'hidden',
-    backgroundColor: '#000000',
-    borderWidth: 0,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  cardActive: {
-    zIndex: 3,
-  },
-  cardPhoto: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    borderRadius: 36,
-    borderWidth: 0,
-    borderColor: 'transparent',
-  },
-  topGrad: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 90,
-  },
-  bottomGrad: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '40%',
-  },
+    cardStackContainer: {
+      flex: 1,
+      marginTop: verticalScale(6),
+      marginBottom: verticalScale(6),
+      width: width - 48,
+      alignSelf: 'center',
+      position: 'relative',
+    },
+    emptyWrap: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    emptyCard: {
+      width: '100%',
+      borderRadius: 32,
+      paddingVertical: verticalScale(30),
+      paddingHorizontal: scale(22),
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: isDark ? 'rgba(25, 18, 9, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(245, 158, 11, 0.35)' : 'rgba(245, 158, 11, 0.22)',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: isDark ? 0.35 : 0.15,
+      shadowRadius: 20,
+      elevation: 10,
+    },
+    emptyIconWrap: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 12,
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.45,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    emptyRefreshPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.08)',
+      paddingHorizontal: 12,
+      paddingVertical: 5.5,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(245, 158, 11, 0.30)' : 'rgba(245, 158, 11, 0.20)',
+      marginTop: 8,
+      marginBottom: 4,
+    },
+    emptyRefreshPillTxt: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: isDark ? '#FDE68A' : '#D97706',
+      letterSpacing: 0.2,
+    },
+    emptyTitle: {
+      fontSize: 22,
+      fontWeight: '900',
+      color: isDark ? '#FFFFFF' : '#1C1917',
+      marginTop: 4,
+      textAlign: 'center',
+      letterSpacing: -0.3,
+    },
+    emptySub: {
+      fontSize: 13.5,
+      color: isDark ? 'rgba(255, 255, 255, 0.72)' : '#64748B',
+      marginTop: 8,
+      textAlign: 'center',
+      lineHeight: 20,
+      paddingHorizontal: 6,
+    },
+    emptyBtn: {
+      marginTop: 20,
+      borderRadius: 24,
+      overflow: 'hidden',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: 0.45,
+      shadowRadius: 10,
+      elevation: 6,
+    },
+    emptyBtnGrad: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 26,
+      paddingVertical: 13,
+    },
+    emptyBtnTxt: {
+      color: '#FFF',
+      fontSize: 14.5,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+    },
+    card: {
+      position: 'absolute',
+      width: '100%',
+      height: '100%',
+      borderRadius: 36,
+      overflow: 'hidden',
+      backgroundColor: '#000000',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(251, 191, 36, 0.22)' : 'rgba(255, 255, 255, 0.85)',
+      shadowColor: isDark ? '#F59E0B' : '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.25 : 0.15,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    cardActive: {
+      zIndex: 3,
+    },
+    cardPhoto: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      borderRadius: 36,
+      borderWidth: 0,
+      borderColor: 'transparent',
+    },
+    topGrad: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 90,
+    },
+    bottomGrad: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: '40%',
+    },
 
-  tapZoneRow: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 90,
-    flexDirection: 'row',
-    zIndex: 5,
-  },
-  tapZoneSide: {
-    flex: 0.32,
-    height: '100%',
-  },
-  tapZoneCenter: {
-    flex: 0.36,
-    height: '100%',
-  },
+    tapZoneRow: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 90,
+      flexDirection: 'row',
+      zIndex: 5,
+    },
+    tapZoneSide: {
+      flex: 0.32,
+      height: '100%',
+    },
+    tapZoneCenter: {
+      flex: 0.36,
+      height: '100%',
+    },
 
-  photoDotsRow: {
-    position: 'absolute',
-    top: 14,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    zIndex: 8,
-  },
-  photoDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-  },
-  photoDotActive: {
-    width: 18,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#FFFFFF',
-  },
-  cardMatchBadge: {
-    position: 'absolute',
-    top: 24,
-    right: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 0, 127, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-    zIndex: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  cardMatchBadgeTxt: {
-    color: '#FFF',
-    fontSize: 10.5,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
+    photoDotsRow: {
+      position: 'absolute',
+      top: 14,
+      left: 0,
+      right: 0,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 6,
+      zIndex: 8,
+    },
+    photoDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 3.5,
+      backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    },
+    photoDotActive: {
+      width: 18,
+      height: 7,
+      borderRadius: 3.5,
+      backgroundColor: '#FFFFFF',
+    },
+    cardMatchBadge: {
+      position: 'absolute',
+      top: 22,
+      right: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 5.5,
+      borderRadius: 16,
+      zIndex: 10,
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.45,
+      shadowRadius: 8,
+      elevation: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    cardMatchBadgeTxt: {
+      color: '#FFF',
+      fontSize: 10.5,
+      fontWeight: '900',
+      letterSpacing: 0.8,
+    },
 
-  // Dynamic Gestures & Action Stamps
-  stampContainer: {
-    position: 'absolute',
-    top: 40,
-    zIndex: 25,
-    borderWidth: 3,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-  },
-  likeStamp: {
-    left: 24,
-    borderColor: '#30D158',
-    transform: [{ rotate: '-14deg' }],
-  },
-  likeStampText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#30D158',
-    letterSpacing: 2,
-  },
-  nopeStamp: {
-    right: 24,
-    borderColor: '#FF375F',
-    transform: [{ rotate: '14deg' }],
-  },
-  nopeStampText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FF375F',
-    letterSpacing: 2,
-  },
-  detailsHintContainer: {
-    position: 'absolute',
-    top: 32,
-    alignSelf: 'center',
-    zIndex: 25,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(10, 10, 25, 0.75)',
-    borderColor: '#00E5FF',
-    borderWidth: 1.5,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  detailsHintText: {
-    fontSize: 11.5,
-    fontWeight: '900',
-    color: '#00E5FF',
-    letterSpacing: 1,
-  },
+    // Dynamic Gestures & Action Stamps
+    stampContainer: {
+      position: 'absolute',
+      top: 40,
+      zIndex: 25,
+      borderWidth: 3,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 5,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    },
+    likeStamp: {
+      left: 24,
+      borderColor: '#30D158',
+      transform: [{ rotate: '-14deg' }],
+    },
+    likeStampText: {
+      fontSize: 22,
+      fontWeight: '900',
+      color: '#30D158',
+      letterSpacing: 2,
+    },
+    nopeStamp: {
+      right: 24,
+      borderColor: '#FF375F',
+      transform: [{ rotate: '14deg' }],
+    },
+    nopeStampText: {
+      fontSize: 22,
+      fontWeight: '900',
+      color: '#FF375F',
+      letterSpacing: 2,
+    },
+    detailsHintContainer: {
+      position: 'absolute',
+      top: 32,
+      alignSelf: 'center',
+      zIndex: 25,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(20, 15, 8, 0.78)',
+      borderColor: 'rgba(245, 158, 11, 0.45)',
+      borderWidth: 1.5,
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+    },
+    detailsHintText: {
+      fontSize: 11.5,
+      fontWeight: '900',
+      color: '#FDE68A',
+      letterSpacing: 1,
+    },
 
-  cardTextOverlayBottomLeft: {
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    zIndex: 10,
-  },
-  cardProfileName: {
-    fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
-    fontSize: fs(24),
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -0.6,
-    marginBottom: verticalScale(3),
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1.5 },
-    textShadowRadius: 4,
-  },
-  cardProfileJob: {
-    fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif-light',
-    fontSize: fs(13),
-    color: 'rgba(255, 255, 255, 0.85)',
-    fontWeight: '600',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
+    cardTextOverlayBottomLeft: {
+      paddingBottom: 24,
+      paddingHorizontal: 20,
+      zIndex: 10,
+    },
+    cardProfileName: {
+      fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
+      fontSize: fs(24),
+      fontWeight: '900',
+      color: '#FFFFFF',
+      letterSpacing: -0.6,
+      marginBottom: verticalScale(3),
+      textShadowColor: 'rgba(0,0,0,0.6)',
+      textShadowOffset: { width: 0, height: 1.5 },
+      textShadowRadius: 4,
+    },
+    cardGlassPillRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 7,
+      marginTop: 7,
+    },
+    cardInfoPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.45)',
+      paddingHorizontal: 10,
+      paddingVertical: 4.5,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.18)',
+    },
+    cardInfoPillTxt: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: 'rgba(255, 255, 255, 0.92)',
+    },
+    cardProfileJob: {
+      fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif-light',
+      fontSize: fs(13),
+      color: 'rgba(255, 255, 255, 0.85)',
+      fontWeight: '600',
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
+    },
 
-  actionsRowWrapper: {
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: verticalScale(2),
-    marginTop: verticalScale(2),
-    marginBottom: verticalScale(6),
-  },
-  actionsRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: scale(16),
-    paddingHorizontal: scale(18),
-    paddingVertical: verticalScale(6),
-    borderRadius: scale(40),
-    backgroundColor: theme.isDark ? 'rgba(22, 16, 42, 0.88)' : 'rgba(255, 255, 255, 0.92)',
-    borderWidth: 1,
-    borderColor: theme.isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.07)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: theme.isDark ? 0.35 : 0.09,
-    shadowRadius: 14,
-    elevation: 6,
-  },
-  actionBtnRewindFloating: {
-    position: 'absolute',
-    left: scale(20),
-    width: scale(38),
-    height: scale(38),
-    borderRadius: scale(19),
-    backgroundColor: theme.isDark ? 'rgba(245, 158, 11, 0.18)' : 'rgba(245, 158, 11, 0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-    zIndex: 10,
-  },
-  actionBtnSmallX: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionBtnLargeLightning: {
-    width: scale(58),
-    height: scale(58),
-    borderRadius: scale(29),
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 7,
-  },
-  actionBtnSmallHeart: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  actionBtnGradFill: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+    actionsRowWrapper: {
+      position: 'relative',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: verticalScale(2),
+      marginTop: verticalScale(2),
+      marginBottom: verticalScale(6),
+    },
+    actionsRowContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: scale(16),
+      paddingHorizontal: scale(20),
+      paddingVertical: verticalScale(7),
+      borderRadius: scale(40),
+      backgroundColor: isDark ? 'rgba(24, 18, 11, 0.82)' : 'rgba(255, 255, 255, 0.88)',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(245, 158, 11, 0.28)' : 'rgba(255, 255, 255, 0.95)',
+      shadowColor: isDark ? '#F59E0B' : '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.35 : 0.12,
+      shadowRadius: 18,
+      elevation: 8,
+    },
+    actionBtnRewindFloating: {
+      position: 'absolute',
+      left: scale(20),
+      width: scale(38),
+      height: scale(38),
+      borderRadius: scale(19),
+      backgroundColor: isDark ? 'rgba(30, 22, 12, 0.85)' : 'rgba(255, 255, 255, 0.9)',
+      borderWidth: 1,
+      borderColor: 'rgba(245, 158, 11, 0.35)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 6,
+      elevation: 3,
+      zIndex: 10,
+    },
+    actionBtnSmallX: {
+      width: scale(48),
+      height: scale(48),
+      borderRadius: scale(24),
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#3B82F6',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    actionBtnLargeLightning: {
+      width: scale(58),
+      height: scale(58),
+      borderRadius: scale(29),
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: 0.5,
+      shadowRadius: 14,
+      elevation: 7,
+    },
+    actionBtnSmallHeart: {
+      width: scale(48),
+      height: scale(48),
+      borderRadius: scale(24),
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#FF007F',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    actionBtnGradFill: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+  });
 };

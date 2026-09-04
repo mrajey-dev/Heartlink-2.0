@@ -15,6 +15,22 @@ class DiscoverController extends Controller
     {
         $user = $request->user();
 
+        // Midnight Reset Check (12:00 AM IST)
+        $tz = 'Asia/Kolkata';
+        $nowTz = now()->timezone($tz);
+        $lastReset = $user->last_swipe_reset_at;
+        $lastResetTz = $lastReset ? \Carbon\Carbon::parse($lastReset)->timezone($tz) : null;
+
+        if (!$lastResetTz || !$lastResetTz->isSameDay($nowTz)) {
+            $user->daily_likes_count = 0;
+            $user->daily_passes_count = 0;
+            if (!$lastResetTz || $nowTz->diffInDays($lastResetTz) >= 30) {
+                $user->monthly_superlikes_count = 0;
+            }
+            $user->last_swipe_reset_at = $nowTz;
+            $user->save();
+        }
+
         // 1. Exclude ALL profiles that the CURRENT USER actively swiped on (whether like, pass, or super_like)
         // so that once you swipe on a profile, they never appear again in Discover feed!
         $swipedByMeIds = Swipe::where('swiper_id', $user->id)
@@ -120,6 +136,9 @@ class DiscoverController extends Controller
 
         return response()->json([
             'profiles' => $profiles,
+            'daily_likes_count' => (int) $user->daily_likes_count,
+            'daily_passes_count' => (int) $user->daily_passes_count,
+            'daily_swipes_limit' => 5,
         ]);
     }
 
@@ -305,15 +324,19 @@ class DiscoverController extends Controller
             return response()->json(['message' => 'Cannot swipe on yourself.'], 422);
         }
 
-        // 1. Reset Checks (24h for likes/passes, 30 days for superlikes)
+        // 1. Reset Checks (Reset every day at 12:00 AM midnight, 30 days for superlikes)
+        $tz = 'Asia/Kolkata';
+        $nowTz = now()->timezone($tz);
         $lastReset = $swiper->last_swipe_reset_at;
-        if (empty($lastReset) || now()->diffInHours($lastReset) >= 24) {
+        $lastResetTz = $lastReset ? \Carbon\Carbon::parse($lastReset)->timezone($tz) : null;
+
+        if (!$lastResetTz || !$lastResetTz->isSameDay($nowTz)) {
             $swiper->daily_likes_count = 0;
             $swiper->daily_passes_count = 0;
-            if (empty($lastReset) || now()->diffInDays($lastReset) >= 30) {
+            if (!$lastResetTz || $nowTz->diffInDays($lastResetTz) >= 30) {
                 $swiper->monthly_superlikes_count = 0;
             }
-            $swiper->last_swipe_reset_at = now();
+            $swiper->last_swipe_reset_at = $nowTz;
             $swiper->save();
         }
 
@@ -337,23 +360,23 @@ class DiscoverController extends Controller
         }
 
         $planName = strtolower($planStr);
-        $isVerified = (bool) $swiper->is_verified;
 
-        $maxLikes = $isVerified ? 999999 : 5;
-        $maxPasses = $isVerified ? 999999 : 5;
-        $maxSuperlikes = 0; // Free and Basic users get 0 superlikes per month
+        // Free plan default is strictly 5 daily likes & passes, refreshed at 12:00 AM
+        $maxLikes = 5;
+        $maxPasses = 5;
+        $maxSuperlikes = 0;
 
         if (str_contains($planName, 'premium')) {
             $maxLikes = 999999;
             $maxPasses = 999999;
             $maxSuperlikes = 15;
         } elseif (str_contains($planName, 'plus')) {
-            $maxLikes = max($maxLikes, 50);
-            $maxPasses = max($maxPasses, 50);
+            $maxLikes = 50;
+            $maxPasses = 50;
             $maxSuperlikes = 5;
         } elseif (str_contains($planName, 'basic')) {
-            $maxLikes = max($maxLikes, 10);
-            $maxPasses = max($maxPasses, 20);
+            $maxLikes = 10;
+            $maxPasses = 20;
             $maxSuperlikes = 0;
         }
 
@@ -363,9 +386,11 @@ class DiscoverController extends Controller
         if ($type === 'like' && $swiper->daily_likes_count >= $maxLikes) {
             return response()->json([
                 'error' => 'UPGRADE_PLAN_REQUIRED',
-                'message' => "You have reached your daily limit of {$maxLikes} likes for your current plan. Upgrade your plan to unlock more swipes!",
+                'message' => "You have reached your daily limit of {$maxLikes} free profiles for today. Your 5 free likes refresh everyday at 12:00 AM midnight, or upgrade your plan now for unlimited swipes!",
                 'requires_upgrade' => true,
                 'limit_type' => 'like',
+                'daily_likes_count' => (int) $swiper->daily_likes_count,
+                'max_likes' => $maxLikes,
             ], 403);
         }
 

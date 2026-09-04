@@ -250,6 +250,26 @@ export const NotificationProvider = ({ children }) => {
 
     if (!isExpoGo && Notifications) {
       try {
+        // Cold start handler: user tapped notification while app was completely closed
+        Notifications.getLastNotificationResponseAsync().then((response) => {
+          if (response) {
+            console.log('[NotificationContext] App opened from cold start via notification tap:', response);
+            const data = response?.notification?.request?.content?.data;
+            if (data?.screen) {
+              setTimeout(() => {
+                if (data.screen === 'ChatDetail' && (data.params?.userId || data.params?.user?.id)) {
+                  navigate('ChatDetail', {
+                    userId: data.params.userId || data.params.user?.id,
+                    user: data.params.user || { id: data.params.userId, name: 'User' },
+                  });
+                } else {
+                  navigate(data.screen, data.params || {});
+                }
+              }, 600);
+            }
+          }
+        }).catch(() => {});
+
         foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
           console.log('[NotificationContext] Notification received:', notification);
           checkNotifications();

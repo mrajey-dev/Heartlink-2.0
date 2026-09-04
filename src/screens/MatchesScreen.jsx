@@ -171,7 +171,7 @@ export default function MatchesScreen() {
         onPress={() => openProfile(item)}
         activeOpacity={0.85}
       >
-        <Image source={{ uri: item.image }} style={styles.cardImage} />
+        <Image source={{ uri: item.image }} style={styles.cardImage} resizeMode="cover" />
         <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.cardOverlay} />
 
         {/* Dynamic compat neon pill */}
@@ -440,7 +440,6 @@ const getStyles = (theme) => StyleSheet.create({
   sparkPhoto: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   sparkCompatBadge: {
     position: 'absolute',
@@ -515,7 +514,7 @@ const getStyles = (theme) => StyleSheet.create({
 
   // Grid Card Items
   card: {
-    height: 280,
+    height: 240,
     overflow: 'hidden',
     backgroundColor: theme.glass,
     borderWidth: 1,
@@ -526,7 +525,7 @@ const getStyles = (theme) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
   },
-  cardImage: { position: 'absolute', width: '100%', height: '100%', resizeMode: 'cover' },
+  cardImage: { position: 'absolute', width: '100%', height: '100%' },
   cardOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%' },
   onlineDot: {
     position: 'absolute', top: 12, left: 12,

@@ -845,6 +845,11 @@ public function savePushToken(Request $request)
 
         $title = $request->input('title', 'HeartLink Test');
         $body  = $request->input('body', 'Firebase Cloud Messaging notification is working perfectly!');
+        $delay = min((int)$request->input('delay', 0), 15);
+
+        if ($delay > 0) {
+            sleep($delay);
+        }
 
         $delivered = \App\Services\ExpoPushService::sendToUser(
             $user,

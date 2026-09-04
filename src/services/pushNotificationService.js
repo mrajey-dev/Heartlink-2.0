@@ -47,6 +47,8 @@ export async function setupNotificationChannelsAsync() {
       enableLights: true,
       enableVibrate: true,
       showBadge: true,
+      bypassDnd: true,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     });
   } catch (error) {
     console.warn('[PushNotificationService] Error creating notification channel:', error?.message || error);
@@ -58,7 +60,22 @@ export async function setupNotificationChannelsAsync() {
  * Returns { granted: boolean, canAskAgain: boolean }
  */
 export async function ensureNotificationPermissionsAsync() {
-  if (!Notifications) {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        return { granted: true, canAskAgain: false };
+      }
+      try {
+        const res = await Notification.requestPermission();
+        return { granted: res === 'granted', canAskAgain: false };
+      } catch (_) {
+        return { granted: false, canAskAgain: false };
+      }
+    }
+    return { granted: false, canAskAgain: false };
+  }
+
+  if (!Notifications || typeof Notifications.getPermissionsAsync !== 'function') {
     console.log('[PushPerm] Notifications module not available in current environment (requires Development Build)');
     return { granted: false, canAskAgain: false };
   }
@@ -98,7 +115,30 @@ export async function ensureNotificationPermissionsAsync() {
  * @param {Object} [param0.data] Additional payload/navigation data
  */
 export async function displayPhoneNotification({ title, body, data = {} }) {
-  if (!Notifications) {
+  // Gracefully handle Web browsers (use Web Notification API if permitted)
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        if (Notification.permission === 'granted') {
+          new Notification(title || 'HeartLink', { body: body || '' });
+          console.log('[PushNotificationService] ✅ Web Browser notification fired successfully.');
+          return true;
+        } else if (Notification.permission !== 'denied') {
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') {
+            new Notification(title || 'HeartLink', { body: body || '' });
+            console.log('[PushNotificationService] ✅ Web Browser notification fired successfully.');
+            return true;
+          }
+        }
+      } catch (webErr) {
+        console.warn('[PushNotificationService] Web notification skipped:', webErr?.message || webErr);
+      }
+    }
+    return false;
+  }
+
+  if (!Notifications || typeof Notifications.scheduleNotificationAsync !== 'function') {
     console.log('[PushNotificationService] Notifications module not available in current environment (requires Development Build)');
     return false;
   }
@@ -148,7 +188,7 @@ export async function displayPhoneNotification({ title, body, data = {} }) {
  * Registers device for remote push notifications, gets Expo Push Token, and uploads it to Laravel backend.
  */
 export async function registerForPushNotificationsAsync() {
-  if (isExpoGo || !Notifications) {
+  if (Platform.OS === 'web' || isExpoGo || !Notifications || typeof Notifications.getPermissionsAsync !== 'function') {
     return null;
   }
 

@@ -372,7 +372,7 @@ export default function PaymentGatewayModal({
                   onPress={handleFinishAndClose}
                   activeOpacity={0.88}
                 >
-                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.payBtnGrad}>
+                  <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.payBtnGrad}>
                     <Ionicons name="sparkles" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
                     <Text style={styles.payBtnTxt}>Start Exploring Matches</Text>
                   </LinearGradient>
@@ -442,7 +442,7 @@ export default function PaymentGatewayModal({
                 {/* Real Itemized Order Invoice / Tax Breakdown */}
                 <View style={[styles.invoiceBreakdownBox, { backgroundColor: innerSectionBg, borderColor }]}>
                   <View style={styles.invoiceHeaderRow}>
-                    <Ionicons name="receipt-outline" size={15} color={theme.accent || '#FF007F'} style={{ marginRight: 6 }} />
+                    <Ionicons name="receipt-outline" size={15} color="#F59E0B" style={{ marginRight: 6 }} />
                     <Text style={[styles.invoiceHeaderTitle, { color: theme.textPrimary }]}>ITEMIZED ORDER SUMMARY</Text>
                   </View>
 
@@ -476,7 +476,7 @@ export default function PaymentGatewayModal({
                       <Text style={[styles.invoiceTotalLabel, { color: theme.textPrimary }]}>Total Payable Amount</Text>
                       <Text style={[styles.invoiceTaxNote, { color: theme.textFaint }]}>Net amount charged to payment method</Text>
                     </View>
-                    <Text style={[styles.invoiceTotalAmount, { color: theme.accent || '#FF007F' }]}>{finalPrice}</Text>
+                    <Text style={[styles.invoiceTotalAmount, { color: '#F59E0B' }]}>{finalPrice}</Text>
                   </View>
                 </View>
 
@@ -486,7 +486,7 @@ export default function PaymentGatewayModal({
                   {getPlanPerks().map((perk, index) => (
                     <View key={index} style={styles.perkItemRow}>
                       <View style={styles.perkIconBadge}>
-                        <Ionicons name={perk.icon} size={15} color="#FF007F" />
+                        <Ionicons name={perk.icon} size={15} color="#F59E0B" />
                       </View>
                       <View style={styles.perkTextWrap}>
                         <Text style={[styles.perkTitle, { color: theme.textPrimary }]}>{perk.title}</Text>
@@ -523,14 +523,14 @@ export default function PaymentGatewayModal({
                   </View>
                 </View>
 
-                {/* Pay Button */}
+                {/* Golden Pay Button */}
                 <TouchableOpacity
                   style={styles.payBtn}
                   onPress={handleRazorpayPayment}
                   disabled={processing}
                   activeOpacity={0.85}
                 >
-                  <LinearGradient colors={['#FF007F', '#B5179E']} style={styles.payBtnGrad}>
+                  <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.payBtnGrad}>
                     {processing ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 10 }} />
@@ -558,7 +558,7 @@ export default function PaymentGatewayModal({
                   </View>
                   <View style={styles.trustDot} />
                   <View style={styles.trustItem}>
-                    <Ionicons name="checkmark-circle" size={14} color="#FF007F" style={{ marginRight: 4 }} />
+                    <Ionicons name="checkmark-circle" size={14} color="#F59E0B" style={{ marginRight: 4 }} />
                     <Text style={[styles.trustText, { color: theme.textFaint }]}>Instant Activation</Text>
                   </View>
                 </View>
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255, 0, 127, 0.12)',
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 10,
@@ -872,9 +872,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 14,
     elevation: 8,
-    shadowColor: '#FF007F',
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.4,
     shadowRadius: 10,
   },
   payBtnGrad: {

@@ -73,9 +73,9 @@ export function AuthProvider({ children }) {
 
         if (savedToken) {
           setAuthToken(savedToken);
-          // Sync fresh profile in background with 4s timeout
+          // Sync fresh profile in background with 12s timeout for reliable sync on mobile/cellular
           const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile sync timeout')), 4000)
+            setTimeout(() => reject(new Error('Profile sync timeout')), 12000)
           );
           try {
             const res = await Promise.race([apiGetProfile(), timeoutPromise]);

@@ -244,7 +244,7 @@ export default function LoginScreen({ navigation }) {
               activeOpacity={0.8}
             >
               <LinearGradient
-                colors={['#FF007F', '#B5179E']}
+                colors={['#FBBF24', '#F59E0B', '#D97706']}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.loginBtn}
               >
@@ -343,17 +343,25 @@ const getStyles = (theme) => StyleSheet.create({
     borderRadius: scale(14), borderWidth: 1.5, borderColor: theme.border,
     paddingHorizontal: scale(14), paddingVertical: verticalScale(10), marginBottom: verticalScale(10),
   },
-  inputWrapFocused: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.06)' },
+  inputWrapFocused: { borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.06)' },
   inputIcon: { marginRight: scale(10) },
   input: { flex: 1, color: theme.textPrimary, fontSize: fs(14.5), padding: 0 },
   eyeBtn: { padding: scale(4) },
 
   // Forgot
   forgotBtn: { alignSelf: 'flex-end', marginBottom: verticalScale(16) },
-  forgotText: { color: '#FF4D94', fontSize: fs(12.5), fontWeight: '600' },
+  forgotText: { color: '#F59E0B', fontSize: fs(12.5), fontWeight: '600' },
 
   // Sign In
-  loginBtnWrap: { borderRadius: scale(16), overflow: 'hidden' },
+  loginBtnWrap: {
+    borderRadius: scale(16),
+    overflow: 'hidden',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   loginBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: scale(8), paddingVertical: verticalScale(13) },
   loginBtnText: { color: '#fff', fontSize: fs(15.5), fontWeight: '800' },
 
@@ -365,5 +373,5 @@ const getStyles = (theme) => StyleSheet.create({
   // Register
   registerBtn: { alignItems: 'center' },
   registerText: { color: theme.textSec, fontSize: fs(13.5) },
-  registerLink: { color: '#FF007F', fontWeight: '700' },
+  registerLink: { color: '#F59E0B', fontWeight: '700' },
 });

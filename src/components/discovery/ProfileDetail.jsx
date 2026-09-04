@@ -421,7 +421,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onSup
                       style={styles.sheetBtnSuperLike}
                       onPress={() => { handleClose(); onSuperLike(profile.id); }}
                     >
-                      <LinearGradient colors={['#7B2CBF', '#9D4EDD']} style={styles.sheetBtnSuperLikeGrad}>
+                      <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.sheetBtnSuperLikeGrad}>
                         <Ionicons name="flash" size={18} color="#fff" />
                         <Text style={styles.sheetBtnSuperLikeTxt}>Spark</Text>
                       </LinearGradient>
@@ -528,7 +528,6 @@ const getStyles = (theme) => StyleSheet.create({
   sheetPhoto: {
     width: width,
     height: height * 0.52,
-    resizeMode: 'cover',
   },
   sheetTopGrad: {
     position: 'absolute',
@@ -755,6 +754,11 @@ const getStyles = (theme) => StyleSheet.create({
     height: 52,
     borderRadius: 26,
     overflow: 'hidden',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 5,
   },
   sheetBtnSuperLikeGrad: {
     flex: 1,

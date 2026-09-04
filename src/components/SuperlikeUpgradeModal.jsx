@@ -1,4 +1,4 @@
-// src/components/SuperlikeUpgradeModal.jsx — Superlikes Exhausted Upgrade & Top-Up Packs Modal
+// src/components/SuperlikeUpgradeModal.jsx — Ultra-Professional Superlikes Top-Up & Upgrade Modal
 import React, { useState } from 'react';
 import {
   View,
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   StatusBar,
   ScrollView,
+  Dimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import BlurView from './SafeBlurView';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,8 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { scale, verticalScale, fs } from '../utils/responsive';
 import PaymentGatewayModal from './PaymentGatewayModal';
+
+const { width } = Dimensions.get('window');
 
 const SUPERLIKE_PACKS = [
   {
@@ -25,8 +28,9 @@ const SUPERLIKE_PACKS = [
     count: 5,
     title: '5 Superlikes',
     price: '₹109',
-    unitPrice: '₹21.8/each',
+    unitPrice: '₹21.8/ea',
     badge: null,
+    save: null,
     popular: false,
   },
   {
@@ -34,7 +38,7 @@ const SUPERLIKE_PACKS = [
     count: 15,
     title: '15 Superlikes',
     price: '₹207',
-    unitPrice: '₹13.8/each',
+    unitPrice: '₹13.8/ea',
     badge: 'POPULAR',
     save: 'SAVE 27%',
     popular: true,
@@ -44,7 +48,7 @@ const SUPERLIKE_PACKS = [
     count: 30,
     title: '30 Superlikes',
     price: '₹349',
-    unitPrice: '₹11.6/each',
+    unitPrice: '₹11.6/ea',
     badge: 'BEST VALUE',
     save: 'SAVE 43%',
     popular: false,
@@ -66,13 +70,14 @@ export default function SuperlikeUpgradeModal({
 
   if (!visible) return null;
 
-  const cardBg = isDark ? '#160E29' : '#FFFFFF';
+  const cardBg = isDark ? '#140E26' : '#FFFFFF';
+  const cardBorder = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
   const selectedPack = SUPERLIKE_PACKS.find(p => p.id === selectedPackId) || SUPERLIKE_PACKS[1];
 
   const paymentPlanObj = {
     id: `superlike_${selectedPack.count}`,
     name: `${selectedPack.count} Superlikes Pack`,
-    gradient: ['#FF007F', '#9D4EDD'],
+    gradient: ['#FBBF24', '#F59E0B', '#D97706'],
     durations: [
       {
         id: selectedPack.id,
@@ -119,229 +124,218 @@ export default function SuperlikeUpgradeModal({
           style={[
             styles.backdrop,
             {
-              paddingTop: insets.top + verticalScale(12),
-              paddingBottom: Math.max(insets.bottom + verticalScale(16), verticalScale(24)),
+              paddingTop: insets.top + 16,
+              paddingBottom: Math.max(insets.bottom + 16, 24),
             },
           ]}
         >
-          <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
+          <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
           <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
 
           <View style={styles.cardWrap}>
-            {/* Top Overlapping Glowing Icon Badge */}
+            {/* Top Center Floating Golden Lightning Badge */}
             <View style={[styles.topBadgeContainer, { borderColor: cardBg }]}>
               <LinearGradient
-                colors={['#7B2CBF', '#9D4EDD', '#FF007F']}
+                colors={['#FBBF24', '#F59E0B', '#D97706']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.topBadgeGrad}
               >
-                <Ionicons name="flash" size={scale(28)} color="#FFFFFF" />
+                <Ionicons name="flash" size={28} color="#FFFFFF" />
               </LinearGradient>
             </View>
 
-            {/* Close Button Top-Right */}
+            {/* Top-Right Cross Close Button */}
             <TouchableOpacity
               style={styles.closeIconBtn}
               onPress={onClose}
-              activeOpacity={0.7}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.75}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
               <View style={[styles.closeIconBg, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.06)' }]}>
-                <Ionicons name="close" size={scale(18)} color={isDark ? '#FFFFFF' : '#475569'} />
+                <Ionicons name="close" size={18} color={isDark ? '#FFFFFF' : '#475569'} />
               </View>
             </TouchableOpacity>
 
             {/* Card Main Body */}
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: cardBg,
-                  borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#F1F5F9',
-                },
-              ]}
-            >
+            <View style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
                 style={{ width: '100%' }}
               >
-                {/* Status Pill Badge */}
+                {/* Status Pill Header */}
                 <View style={styles.statusPillWrap}>
                   <LinearGradient
-                    colors={['rgba(255, 0, 127, 0.12)', 'rgba(123, 44, 191, 0.18)']}
+                    colors={['rgba(245, 158, 11, 0.18)', 'rgba(217, 119, 6, 0.12)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.statusPillGrad}
                   >
-                    <Ionicons name="flash-outline" size={scale(13)} color="#FF007F" style={{ marginRight: 4 }} />
-                    <Text style={styles.statusPillTxt}>OUT OF SUPERLIKES</Text>
+                    <Ionicons name="sparkles" size={12} color="#F59E0B" style={{ marginRight: 5 }} />
+                    <Text style={styles.statusPillTxt}>STAND OUT FROM THE CROWD</Text>
                   </LinearGradient>
                 </View>
 
-                {/* Title & Headline */}
-                <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#1E1B2E' }]}>
+                {/* Title & Description */}
+                <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                   Need More Superlikes?
                 </Text>
 
                 <Text style={[styles.subtitle, { color: isDark ? 'rgba(255, 255, 255, 0.72)' : '#64748B' }]}>
-                  {message || "Buy a Superlike Pack to keep sending Superlikes instantly without waiting for monthly plan resets!"}
+                  {message || 'Send a Superlike to get highlighted on their screen and stand out with a 3x higher match rate!'}
                 </Text>
 
-                {/* Superlike Packs Selection Grid */}
-                <View style={styles.packsHeaderRow}>
-                  <Text style={[styles.sectionLabel, { color: isDark ? 'rgba(255, 255, 255, 0.5)' : '#94A3B8' }]}>
-                    SELECT SUPERLIKE TOP-UP PACK
-                  </Text>
-                </View>
-
-                <View style={styles.packsContainer}>
+                {/* Modern 3-Column Pack Selector Cards */}
+                <View style={styles.packsGrid}>
                   {SUPERLIKE_PACKS.map((pack) => {
                     const isSelected = pack.id === selectedPackId;
                     return (
                       <TouchableOpacity
                         key={pack.id}
-                        style={[
-                          styles.packCard,
-                          {
-                            backgroundColor: isDark ? '#22173D' : '#FFFFFF',
-                            borderColor: isSelected
-                              ? '#FF007F'
-                              : isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
-                          },
-                          isSelected && styles.packCardSelected,
-                        ]}
                         onPress={() => setSelectedPackId(pack.id)}
-                        activeOpacity={0.8}
+                        activeOpacity={0.85}
+                        style={[
+                          styles.packTile,
+                          {
+                            backgroundColor: isDark ? (isSelected ? '#271D12' : '#1A132E') : (isSelected ? '#FFFBEB' : '#F8FAFC'),
+                            borderColor: isSelected ? '#F59E0B' : (isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0'),
+                          },
+                          isSelected && styles.packTileSelected,
+                        ]}
                       >
-                        {isSelected && (
-                          <LinearGradient
-                            colors={['rgba(255, 0, 127, 0.04)', 'rgba(157, 78, 221, 0.04)']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={StyleSheet.absoluteFill}
-                          />
-                        )}
-
-                        {/* Top Badge Tag */}
+                        {/* Top Highlight Badge (Popular / Best Value) */}
                         {!!pack.badge && (
-                          <View style={styles.packBadgeWrap}>
+                          <View style={styles.packRibbonWrap}>
                             <LinearGradient
-                              colors={['#FF007F', '#9D4EDD']}
+                              colors={pack.popular ? ['#F59E0B', '#D97706'] : ['#EAB308', '#B45309']}
                               start={{ x: 0, y: 0 }}
                               end={{ x: 1, y: 0 }}
-                              style={styles.packBadgeGrad}
+                              style={styles.packRibbonGrad}
                             >
-                              <Text style={styles.packBadgeTxt}>{pack.badge}</Text>
+                              <Text style={styles.packRibbonTxt}>{pack.badge}</Text>
                             </LinearGradient>
                           </View>
                         )}
 
-                        <View style={styles.packMainRow}>
-                          <View style={styles.packLeftInfo}>
-                            <View style={styles.packTitleRow}>
-                              <Ionicons
-                                name="flash"
-                                size={scale(16)}
-                                color={isSelected ? '#FF007F' : isDark ? '#E2E8F0' : '#475569'}
-                                style={{ marginRight: scale(6) }}
-                              />
-                              <Text
-                                style={[
-                                  styles.packTitleTxt,
-                                  { color: isDark ? '#FFFFFF' : '#1E1B2E' },
-                                  isSelected && { fontWeight: '800', color: '#FF007F' },
-                                ]}
-                              >
-                                {pack.title}
-                              </Text>
+                        {/* Lightning Icon & Superlike Count */}
+                        <View style={styles.packCountRow}>
+                          <Ionicons
+                            name="flash"
+                            size={16}
+                            color={isSelected ? '#F59E0B' : (isDark ? '#CBD5E1' : '#64748B')}
+                            style={{ marginRight: 3 }}
+                          />
+                          <Text
+                            style={[
+                              styles.packCountNumber,
+                              { color: isDark ? '#FFFFFF' : '#0F172A' },
+                              isSelected && { color: '#F59E0B', fontWeight: '900' },
+                            ]}
+                          >
+                            {pack.count}
+                          </Text>
+                        </View>
 
-                              {!!pack.save && (
-                                <View style={styles.savePill}>
-                                  <Text style={styles.savePillTxt}>{pack.save}</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text style={[styles.packSubTxt, { color: isDark ? 'rgba(255,255,255,0.5)' : '#64748B' }]}>
-                              {pack.unitPrice} • Instant delivery
-                            </Text>
+                        <Text style={[styles.packLabelTxt, { color: isDark ? 'rgba(255, 255, 255, 0.6)' : '#64748B' }]}>
+                          Superlikes
+                        </Text>
+
+                        {/* Price */}
+                        <Text style={[styles.packPriceTxt, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                          {pack.price}
+                        </Text>
+
+                        {/* Unit Price / Savings Tag */}
+                        {pack.save ? (
+                          <View style={styles.saveBadge}>
+                            <Text style={styles.saveBadgeTxt}>{pack.save}</Text>
                           </View>
+                        ) : (
+                          <Text style={[styles.unitPriceTxt, { color: isDark ? 'rgba(255, 255, 255, 0.45)' : '#94A3B8' }]}>
+                            {pack.unitPrice}
+                          </Text>
+                        )}
 
-                          <View style={styles.packRightPrice}>
-                            <Text style={[styles.priceTxt, { color: isDark ? '#FFFFFF' : '#1E1B2E' }]}>
-                              {pack.price}
-                            </Text>
-
-                            <View
-                              style={[
-                                styles.radioCircle,
-                                isSelected && styles.radioCircleActive,
-                              ]}
-                            >
-                              {isSelected && <View style={styles.radioInnerDot} />}
-                            </View>
-                          </View>
+                        {/* Active Selection Indicator */}
+                        <View
+                          style={[
+                            styles.radioIndicator,
+                            isSelected ? styles.radioIndicatorActive : { borderColor: isDark ? 'rgba(255,255,255,0.25)' : '#CBD5E1' },
+                          ]}
+                        >
+                          {isSelected && <Ionicons name="checkmark" size={12} color="#FFFFFF" />}
                         </View>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                {/* Benefits Feature Grid */}
-                <View style={styles.featuresList}>
-                  <View style={[styles.featureItem, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(123, 44, 191, 0.03)' }]}>
-                    <LinearGradient colors={['#7B2CBF', '#9D4EDD']} style={styles.featureIconGrad}>
-                      <Ionicons name="sparkles" size={scale(14)} color="#FFF" />
-                    </LinearGradient>
-                    <View style={styles.featureTextWrap}>
-                      <Text style={[styles.featureTitle, { color: isDark ? '#FFF' : '#1E1B2E' }]}>3x Higher Match Rate</Text>
-                      <Text style={[styles.featureDesc, { color: isDark ? 'rgba(255,255,255,0.6)' : '#64748B' }]}>Stand out at the top of their discovery stack</Text>
+                {/* High-Impact Benefit Badges */}
+                <View style={[styles.benefitsBox, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC', borderColor: cardBorder }]}>
+                  <View style={styles.benefitRow}>
+                    <View style={styles.benefitIconWrap}>
+                      <Ionicons name="trending-up" size={14} color="#F59E0B" />
                     </View>
+                    <Text style={[styles.benefitTxt, { color: isDark ? '#E2E8F0' : '#334155' }]}>
+                      <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>3x Higher Match Rate:</Text> Your profile shines with an electric glowing badge
+                    </Text>
+                  </View>
+
+                  <View style={[styles.benefitDivider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)' }]} />
+
+                  <View style={styles.benefitRow}>
+                    <View style={styles.benefitIconWrap}>
+                      <Ionicons name="notifications" size={14} color="#D97706" />
+                    </View>
+                    <Text style={[styles.benefitTxt, { color: isDark ? '#E2E8F0' : '#334155' }]}>
+                      <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>Instant Priority Alert:</Text> Notifies them right away before they browse
+                    </Text>
                   </View>
                 </View>
 
-                {/* Primary Action Button: Buy Superlikes Pack */}
+                {/* Big Golden Action CTA Button */}
                 <TouchableOpacity
-                  style={styles.buyBtnShadow}
+                  style={styles.ctaBtnShadow}
                   onPress={handleBuySuperlikes}
-                  activeOpacity={0.85}
+                  activeOpacity={0.88}
                 >
                   <LinearGradient
-                    colors={['#FF007F', '#B5179E', '#7B2CBF']}
+                    colors={['#FBBF24', '#F59E0B', '#D97706']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.buyBtnGrad}
+                    style={styles.ctaBtnGrad}
                   >
-                    <Ionicons name="flash" size={scale(18)} color="#FFF" style={{ marginRight: scale(8) }} />
-                    <Text style={styles.buyBtnTxt}>
-                      Buy {selectedPack.count} Superlikes — {selectedPack.price}
+                    <Ionicons name="flash" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.ctaBtnTxt}>
+                      Get {selectedPack.count} Superlikes • {selectedPack.price}
                     </Text>
-                    <Ionicons name="chevron-forward" size={scale(18)} color="#FFF" style={{ marginLeft: scale(4) }} />
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
                   </LinearGradient>
                 </TouchableOpacity>
 
-                {/* Secondary Option: Full Membership Upgrade */}
+                {/* Secondary Upgrade Link to Full Plans */}
                 <TouchableOpacity
-                  style={styles.upgradeLinkBtn}
+                  style={styles.plansLinkBtn}
                   onPress={() => {
                     if (onUpgrade) onUpgrade();
                   }}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                 >
-                  <Ionicons name="star-outline" size={scale(14)} color="#FF007F" style={{ marginRight: 6 }} />
-                  <Text style={styles.upgradeLinkTxt}>
-                    Or View Full Membership Plans
+                  <Ionicons name="diamond-outline" size={14} color="#F59E0B" style={{ marginRight: 6 }} />
+                  <Text style={styles.plansLinkTxt}>
+                    Or get weekly free Superlikes with Premium Plans
                   </Text>
                 </TouchableOpacity>
 
+                {/* Subtle Dismiss Link */}
                 <TouchableOpacity
-                  style={styles.cancelBtn}
+                  style={styles.dismissBtn}
                   onPress={onClose}
                   activeOpacity={0.7}
                 >
-                  <Text style={[styles.cancelBtnTxt, { color: isDark ? 'rgba(255, 255, 255, 0.5)' : '#64748B' }]}>
-                    Maybe Later
+                  <Text style={[styles.dismissBtnTxt, { color: isDark ? 'rgba(255, 255, 255, 0.45)' : '#94A3B8' }]}>
+                    No thanks, maybe later
                   </Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -350,7 +344,7 @@ export default function SuperlikeUpgradeModal({
         </View>
       </Modal>
 
-      {/* Embedded Razorpay Payment Modal for Superlike Pack */}
+      {/* Razorpay Payment Modal for Superlike Pack */}
       <PaymentGatewayModal
         visible={paymentModalVisible}
         plan={paymentPlanObj}
@@ -365,291 +359,281 @@ export default function SuperlikeUpgradeModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(5, 2, 12, 0.85)',
+    backgroundColor: 'rgba(7, 3, 15, 0.82)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: scale(16),
+    paddingHorizontal: 16,
     zIndex: 9999,
   },
   cardWrap: {
-    width: '94%',
-    maxWidth: scale(380),
-    maxHeight: '90%',
+    width: '100%',
+    maxWidth: 390,
+    maxHeight: '92%',
     position: 'relative',
     alignItems: 'center',
   },
   topBadgeContainer: {
     position: 'absolute',
-    top: -verticalScale(28),
+    top: -26,
     zIndex: 25,
-    width: scale(58),
-    height: scale(58),
-    borderRadius: scale(29),
-    borderWidth: scale(3.5),
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 3.5,
     elevation: 14,
-    shadowColor: '#9D4EDD',
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.5,
-    shadowRadius: 12,
+    shadowRadius: 14,
   },
   topBadgeGrad: {
     flex: 1,
-    borderRadius: scale(26),
+    borderRadius: 27,
     justifyContent: 'center',
     alignItems: 'center',
   },
   closeIconBtn: {
     position: 'absolute',
-    top: verticalScale(12),
-    right: scale(12),
+    top: 14,
+    right: 14,
     zIndex: 30,
   },
   closeIconBg: {
-    width: scale(28),
-    height: scale(28),
-    borderRadius: scale(14),
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },
   card: {
     width: '100%',
-    borderRadius: scale(26),
-    paddingTop: verticalScale(36),
-    paddingBottom: verticalScale(16),
-    paddingHorizontal: scale(18),
+    borderRadius: 28,
+    paddingTop: 42,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     alignItems: 'center',
     borderWidth: 1,
-    elevation: 16,
+    elevation: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
   },
   scrollContent: {
     alignItems: 'center',
-    paddingBottom: verticalScale(10),
+    paddingBottom: 8,
   },
   statusPillWrap: {
-    borderRadius: scale(20),
+    borderRadius: 20,
     overflow: 'hidden',
-    marginBottom: verticalScale(8),
+    marginBottom: 10,
   },
   statusPillGrad: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: verticalScale(4),
-    paddingHorizontal: scale(12),
-    borderRadius: scale(20),
+    paddingVertical: 5,
+    paddingHorizontal: 14,
+    borderRadius: 20,
   },
   statusPillTxt: {
-    fontSize: fs(10),
-    fontWeight: '800',
-    color: '#FF007F',
-    letterSpacing: 0.6,
+    fontSize: 10.5,
+    fontWeight: '900',
+    color: '#D97706',
+    letterSpacing: 0.8,
   },
   title: {
-    fontSize: fs(20),
+    fontSize: 22,
     fontWeight: '900',
-    marginBottom: verticalScale(4),
+    marginBottom: 6,
     textAlign: 'center',
     letterSpacing: -0.3,
   },
   subtitle: {
-    fontSize: fs(12),
+    fontSize: 12.5,
     fontWeight: '500',
     textAlign: 'center',
-    lineHeight: verticalScale(17),
-    marginBottom: verticalScale(14),
-    paddingHorizontal: scale(4),
+    lineHeight: 18,
+    marginBottom: 18,
+    paddingHorizontal: 8,
   },
-  sectionLabel: {
-    fontSize: fs(9.5),
-    fontWeight: '800',
-    letterSpacing: 1.0,
-    marginBottom: verticalScale(8),
-    alignSelf: 'flex-start',
-  },
-  packsHeaderRow: {
+
+  // 3-Column Pack Selector Grid
+  packsGrid: {
+    flexDirection: 'row',
     width: '100%',
+    gap: 8,
+    marginBottom: 16,
   },
-  packsContainer: {
-    width: '100%',
-    gap: verticalScale(8),
-    marginBottom: verticalScale(14),
-  },
-  packCard: {
-    width: '100%',
-    borderRadius: scale(16),
-    borderWidth: 1,
-    paddingVertical: verticalScale(10),
-    paddingHorizontal: scale(14),
+  packTile: {
+    flex: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    alignItems: 'center',
     position: 'relative',
     overflow: 'hidden',
   },
-  packCardSelected: {
-    borderWidth: 1.5,
-    borderColor: '#FF007F',
-    elevation: 2,
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+  packTileSelected: {
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+    elevation: 6,
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
   },
-  packBadgeWrap: {
+  packRibbonWrap: {
     position: 'absolute',
     top: 0,
-    right: scale(14),
-    borderBottomLeftRadius: scale(8),
-    borderBottomRightRadius: scale(8),
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
     overflow: 'hidden',
   },
-  packBadgeGrad: {
-    paddingHorizontal: scale(8),
-    paddingVertical: verticalScale(2),
+  packRibbonGrad: {
+    width: '100%',
+    paddingVertical: 2.5,
+    alignItems: 'center',
   },
-  packBadgeTxt: {
-    fontSize: fs(8.5),
+  packRibbonTxt: {
+    fontSize: 8.5,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.6,
   },
-  packMainRow: {
+  packCountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginTop: 6,
   },
-  packLeftInfo: {
-    flex: 1,
+  packCountNumber: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
-  packTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  packLabelTxt: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    marginBottom: 6,
   },
-  packTitleTxt: {
-    fontSize: fs(14),
-    fontWeight: '700',
+  packPriceTxt: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 4,
   },
-  savePill: {
+  saveBadge: {
     backgroundColor: 'rgba(48, 209, 88, 0.15)',
-    paddingHorizontal: scale(6),
-    paddingVertical: verticalScale(1.5),
-    borderRadius: scale(6),
-    marginLeft: scale(6),
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 8,
   },
-  savePillTxt: {
-    fontSize: fs(9),
-    fontWeight: '800',
+  saveBadgeTxt: {
+    fontSize: 9.5,
+    fontWeight: '900',
     color: '#30D158',
   },
-  packSubTxt: {
-    fontSize: fs(10.5),
-    fontWeight: '500',
-    marginTop: verticalScale(2),
+  unitPriceTxt: {
+    fontSize: 9.5,
+    fontWeight: '600',
+    marginBottom: 8,
   },
-  packRightPrice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: scale(10),
-  },
-  priceTxt: {
-    fontSize: fs(16),
-    fontWeight: '900',
-  },
-  radioCircle: {
-    width: scale(18),
-    height: scale(18),
-    borderRadius: scale(9),
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
+  radioIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  radioCircleActive: {
-    borderColor: '#FF007F',
-    backgroundColor: 'rgba(255, 0, 127, 0.1)',
+  radioIndicatorActive: {
+    backgroundColor: '#F59E0B',
+    borderColor: '#F59E0B',
   },
-  radioInnerDot: {
-    width: scale(9),
-    height: scale(9),
-    borderRadius: scale(4.5),
-    backgroundColor: '#FF007F',
-  },
-  featuresList: {
+
+  // Benefits Box
+  benefitsBox: {
     width: '100%',
-    marginBottom: verticalScale(14),
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 18,
   },
-  featureItem: {
+  benefitRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: verticalScale(8),
-    paddingHorizontal: scale(12),
-    borderRadius: scale(12),
   },
-  featureIconGrad: {
-    width: scale(28),
-    height: scale(28),
-    borderRadius: scale(14),
+  benefitIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: scale(10),
+    marginRight: 10,
   },
-  featureTextWrap: {
+  benefitTxt: {
     flex: 1,
+    fontSize: 11.5,
+    lineHeight: 16,
   },
-  featureTitle: {
-    fontSize: fs(12.5),
-    fontWeight: '700',
-    marginBottom: 1,
-  },
-  featureDesc: {
-    fontSize: fs(10.5),
-    fontWeight: '500',
-  },
-  buyBtnShadow: {
+  benefitDivider: {
+    height: 1,
     width: '100%',
-    height: verticalScale(46),
-    borderRadius: scale(15),
+    marginVertical: 8,
+  },
+
+  // Big Golden CTA Button
+  ctaBtnShadow: {
+    width: '100%',
+    height: 50,
+    borderRadius: 25,
     overflow: 'hidden',
     elevation: 8,
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    marginBottom: verticalScale(10),
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    marginBottom: 12,
   },
-  buyBtnGrad: {
+  ctaBtnGrad: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: scale(16),
+    paddingHorizontal: 18,
   },
-  buyBtnTxt: {
+  ctaBtnTxt: {
     color: '#FFFFFF',
-    fontSize: fs(14.5),
-    fontWeight: '800',
+    fontSize: 15.5,
+    fontWeight: '900',
     letterSpacing: 0.3,
   },
-  upgradeLinkBtn: {
+
+  // Secondary Links
+  plansLinkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: verticalScale(6),
-    paddingHorizontal: scale(12),
-    marginBottom: verticalScale(4),
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 4,
   },
-  upgradeLinkTxt: {
-    fontSize: fs(12.5),
+  plansLinkTxt: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#FF007F',
+    color: '#F59E0B',
   },
-  cancelBtn: {
-    marginTop: verticalScale(4),
-    paddingVertical: verticalScale(6),
-    paddingHorizontal: scale(16),
+  dismissBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
   },
-  cancelBtnTxt: {
-    fontSize: fs(12.5),
+  dismissBtnTxt: {
+    fontSize: 12,
     fontWeight: '600',
   },
 });

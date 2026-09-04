@@ -42,6 +42,18 @@ class SubscriptionController extends Controller
                     }
                 }
             }
+
+            $lower = strtolower(($plan->plan_key ?? '') . ' ' . ($plan->name ?? ''));
+            if (str_contains($lower, 'plus')) {
+                $plan->accent_color = '#A855F7';
+                $plan->gradient = ['#A855F7', '#7C3AED'];
+                $plan->glow_color = 'rgba(168, 85, 247, 0.28)';
+            } elseif (str_contains($lower, 'premium')) {
+                $plan->accent_color = '#F59E0B';
+                $plan->gradient = ['#FBBF24', '#F59E0B', '#D97706'];
+                $plan->glow_color = 'rgba(245, 158, 11, 0.32)';
+            }
+
             return $plan;
         });
 
