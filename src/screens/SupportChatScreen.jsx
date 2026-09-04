@@ -47,7 +47,7 @@ export const CONCIERGE_CATEGORIES = [
 ];
 
 const formatMessageDateHeader = (dateObj) => {
-  if (!dateObj || isNaN(dateObj.getTime())) return null;
+  if (!dateObj || isNaN(dateObj.getTime()) || dateObj.getFullYear() <= 1970) return 'Today';
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
@@ -58,11 +58,7 @@ const formatMessageDateHeader = (dateObj) => {
   if (dateObj.toDateString() === yesterday.toDateString()) {
     return 'Yesterday';
   }
-  return dateObj.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: dateObj.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
-  });
+  return 'Today';
 };
 
 // Parser to extract image and text from message content
@@ -187,31 +183,51 @@ export default function SupportChatScreen() {
       else if (response && response.messages) messagesData = response.messages;
       else if (Array.isArray(response)) messagesData = response;
 
+      // 24 hours ephemeral window: delete/exclude messages older than 24 hours
+      const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+
       let serverFormatted = [];
       if (Array.isArray(messagesData) && messagesData.length > 0) {
-        serverFormatted = messagesData.map((m) => {
-          const rawContent = m.message || m.text || m.content || '';
-          const { text: cleanText, imageUrl } = parseMessageContent(rawContent);
+        serverFormatted = messagesData
+          .filter((m) => {
+            if (!m.created_at) return true;
+            const t = new Date(m.created_at).getTime();
+            return !isNaN(t) && (nowMs - t <= TWENTY_FOUR_HOURS_MS);
+          })
+          .map((m) => {
+            const rawContent = m.message || m.text || m.content || '';
+            const { text: cleanText, imageUrl } = parseMessageContent(rawContent);
 
-          return {
-            id: m.id?.toString() || Date.now().toString(),
-            text: cleanText,
-            imageUrl: imageUrl || m.image_url || null,
-            sender: m.sender_id == SUPPORT_USER_ID ? 'support' : 'me',
-            time: m.created_at
-              ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : 'Now',
-            dateHeader: null,
-            isRead: Boolean(m.is_read),
-            created_at: m.created_at || new Date().toISOString(),
-          };
-        });
+            return {
+              id: m.id?.toString() || Date.now().toString(),
+              text: cleanText,
+              imageUrl: imageUrl || m.image_url || null,
+              sender: m.sender_id == SUPPORT_USER_ID ? 'support' : 'me',
+              time: m.created_at
+                ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : 'Now',
+              dateHeader: null,
+              isRead: Boolean(m.is_read),
+              created_at: m.created_at || new Date().toISOString(),
+            };
+          });
       }
 
       setMessages((prev) => {
-        // Merge server messages with persistent local support auto-replies
+        // Merge server messages with persistent local support auto-replies (filtered to 24h)
         const combined = [...serverFormatted];
-        const localReplies = localSupportRepliesRef.current || [];
+        const localReplies = (localSupportRepliesRef.current || []).filter((m) => {
+          if (!m.created_at) return true;
+          const t = new Date(m.created_at).getTime();
+          return !isNaN(t) && (nowMs - t <= TWENTY_FOUR_HOURS_MS);
+        });
+        localSupportRepliesRef.current = localReplies;
+        const userId = currentUserRef.current?.id;
+        if (userId) {
+          AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localReplies)).catch(() => {});
+        }
+
         for (const localMsg of localReplies) {
           const exists = combined.some(m => m.id === localMsg.id || (m.sender === 'support' && m.text === localMsg.text));
           if (!exists) {
@@ -219,9 +235,16 @@ export default function SupportChatScreen() {
           }
         }
 
-        // Also preserve any in-memory interactive, menu, or pending messages from current state
+        // Also preserve any in-memory interactive, menu, or pending messages from current state (within 24h)
         if (Array.isArray(prev)) {
           for (const p of prev) {
+            if (p.id === 'support-welcome-1') continue;
+            if (p.created_at) {
+              const pTime = new Date(p.created_at).getTime();
+              if (!isNaN(pTime) && (nowMs - pTime > TWENTY_FOUR_HOURS_MS)) {
+                continue; // Ephemeral: automatically deleted after 24 hrs
+              }
+            }
             if (p.interactiveType || p.id?.startsWith('support-') || p.id?.startsWith('temp-') || p.pending) {
               const exists = combined.some(m => m.id === p.id || (m.sender === p.sender && m.text === p.text));
               if (!exists) {
@@ -244,19 +267,23 @@ export default function SupportChatScreen() {
             time: 'Now',
             dateHeader: 'Today',
             isRead: true,
-            created_at: new Date(0).toISOString(),
+            created_at: new Date().toISOString(),
             interactiveType: 'category_menu',
           };
           combined.unshift(initialSupportMsg);
         }
 
-        // Sort chronologically by created_at
-        combined.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+        // Sort chronologically by created_at, keeping the welcome message pinned at the top
+        combined.sort((a, b) => {
+          if (a.id === 'support-welcome-1') return -1;
+          if (b.id === 'support-welcome-1') return 1;
+          return new Date(a.created_at || 0) - new Date(b.created_at || 0);
+        });
 
         let lastDateHeader = null;
         const withHeaders = combined.map((m) => {
-          const dateObj = m.created_at ? new Date(m.created_at) : new Date();
-          const dateHeader = formatMessageDateHeader(dateObj);
+          const dateObj = (m.created_at && !m.created_at.startsWith('1970')) ? new Date(m.created_at) : new Date();
+          const dateHeader = formatMessageDateHeader(dateObj) || 'Today';
           let showDateHeader = false;
           if (dateHeader && dateHeader !== lastDateHeader) {
             showDateHeader = true;
@@ -282,17 +309,27 @@ export default function SupportChatScreen() {
     }
   }, [scrollToBottom]);
 
-  // Load saved local support replies on startup
+  // Load saved local support replies on startup, pruning anything > 24 hours
   useEffect(() => {
     const userId = currentUser?.id;
     if (!userId) return;
     const storageKey = `@heartlink_support_replies_${userId}`;
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
     AsyncStorage.getItem(storageKey).then((val) => {
       if (val) {
         try {
           const parsed = JSON.parse(val);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            localSupportRepliesRef.current = parsed;
+            const validReplies = parsed.filter((m) => {
+              if (!m.created_at) return true;
+              const t = new Date(m.created_at).getTime();
+              return !isNaN(t) && (nowMs - t <= TWENTY_FOUR_HOURS_MS);
+            });
+            localSupportRepliesRef.current = validReplies;
+            if (validReplies.length !== parsed.length) {
+              AsyncStorage.setItem(storageKey, JSON.stringify(validReplies)).catch(() => {});
+            }
             fetchHistory(false);
           }
         } catch (e) {}

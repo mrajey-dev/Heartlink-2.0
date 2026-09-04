@@ -62,7 +62,7 @@ export default function ChatScreen() {
             id: c.id,
             name: (c.id === 16 || c.id === '16') ? 'HeartLink Support' : c.name,
             display_name: (c.id === 16 || c.id === '16') ? 'HeartLink Support' : (c.display_name || c.user?.display_name || c.name),
-            time: c.last_time || 'Now',
+            time: (c.id === 16 || c.id === '16') ? '' : (c.last_time || 'Now'),
             unread: c.unread_count || 0,
             online: (bool => bool)(c.online),
             is_verified: (c.id === 16 || c.id === '16') ? true : (c.is_verified || c.user?.is_verified),
@@ -91,7 +91,12 @@ export default function ChatScreen() {
         const regularList = apiList.filter(c => c.id !== 16 && c.id !== '16');
 
         let supportTime = user16Conv?.time || '';
-        if (typeof supportTime === 'string' && (supportTime.toLowerCase().includes('minute') || supportTime.toLowerCase().includes('ago'))) {
+        if (
+          typeof supportTime === 'string' &&
+          (supportTime.toLowerCase().includes('minute') ||
+           supportTime.toLowerCase().includes('ago') ||
+           supportTime.toLowerCase().includes('now'))
+        ) {
           supportTime = '';
         }
 
@@ -195,12 +200,6 @@ export default function ChatScreen() {
                 <View style={styles.officialBadge}>
                   <Text style={styles.officialBadgeText}>OFFICIAL</Text>
                 </View>
-              </View>
-              <View style={styles.pinnedRow}>
-                <Ionicons name="pin" size={12} color={theme.accent || '#FF007F'} style={Boolean(item.time && !item.time.toLowerCase().includes('minute') && !item.time.toLowerCase().includes('ago')) ? { marginRight: 3 } : null} />
-                {Boolean(item.time && !item.time.toLowerCase().includes('minute') && !item.time.toLowerCase().includes('ago')) && (
-                  <Text style={[styles.chatTime, { color: theme.accent || '#FF007F', fontWeight: '700' }]}>{item.time}</Text>
-                )}
               </View>
             </View>
             <View style={styles.chatRow}>

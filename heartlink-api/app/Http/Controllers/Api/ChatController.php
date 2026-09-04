@@ -38,6 +38,15 @@ class ChatController extends Controller
             ], 403);
         }
 
+        // Auto-delete support messages older than 24 hours (24hr ephemeral support chat)
+        if ((int) $otherUserId === 16 || (int) $authId === 16) {
+            Message::where(function ($q) use ($authId, $otherUserId) {
+                $q->where('sender_id', $authId)->where('receiver_id', $otherUserId);
+            })->orWhere(function ($q) use ($authId, $otherUserId) {
+                $q->where('sender_id', $otherUserId)->where('receiver_id', $authId);
+            })->where('created_at', '<', now()->subHours(24))->delete();
+        }
+
         $messages = Message::where(function ($q) use ($authId, $otherUserId) {
             $q->where('sender_id', $authId)
               ->where('receiver_id', $otherUserId)
@@ -105,6 +114,11 @@ class ChatController extends Controller
     public function conversations(Request $request)
     {
         $authId = $request->user()->id;
+
+        // Auto-delete support messages older than 24 hours (24hr ephemeral support chat)
+        Message::where(function ($q) {
+            $q->where('sender_id', 16)->orWhere('receiver_id', 16);
+        })->where('created_at', '<', now()->subHours(24))->delete();
 
         $blockedIds = UserBlock::where('blocker_id', $authId)
             ->pluck('blocked_user_id')
@@ -264,6 +278,15 @@ class ChatController extends Controller
             return response()->json([
                 'message' => 'Cannot send message. User is blocked.',
             ], 403);
+        }
+
+        // Auto-delete support messages older than 24 hours
+        if ((int) $receiverId === 16 || (int) $senderId === 16) {
+            Message::where(function ($q) use ($senderId, $receiverId) {
+                $q->where('sender_id', $senderId)->where('receiver_id', $receiverId);
+            })->orWhere(function ($q) use ($senderId, $receiverId) {
+                $q->where('sender_id', $receiverId)->where('receiver_id', $senderId);
+            })->where('created_at', '<', now()->subHours(24))->delete();
         }
 
         // If regular user chatting with another regular user, verify active match
@@ -453,6 +476,15 @@ class ChatController extends Controller
         Message::where('sender_id', $otherUserId)
             ->where('receiver_id', $authId)
             ->update(['deleted_by_receiver' => true]);
+
+        // If clearing Support chat (User 16), permanently delete the messages
+        if ($otherUserId === 16 || (int)$authId === 16) {
+            Message::where(function ($q) use ($authId, $otherUserId) {
+                $q->where('sender_id', $authId)->where('receiver_id', $otherUserId);
+            })->orWhere(function ($q) use ($authId, $otherUserId) {
+                $q->where('sender_id', $otherUserId)->where('receiver_id', $authId);
+            })->delete();
+        }
 
         // Clean up rows where both sides deleted for themselves
         Message::where('deleted_by_sender', true)
