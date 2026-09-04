@@ -261,7 +261,7 @@ export default function SupportChatScreen() {
           const firstName = (user?.display_name || user?.name || '').trim().split(' ')[0] || 'there';
           const initialSupportMsg = {
             id: 'support-welcome-1',
-            text: `👋 Welcome to HeartLink Customer Support, ${firstName}!\n\nOur 24/7 dedicated concierge assistance team is online to help you. Select an assistance category below to view instant solutions, or connect with our live specialists:`,
+            text: `👋 Welcome to Heart Link Customer Support, ${firstName}!\n\nOur 24/7 dedicated concierge assistance team is online to help you. Select an assistance category below to view instant solutions, or connect with our live specialists:`,
             imageUrl: null,
             sender: 'support',
             time: 'Now',
@@ -303,7 +303,27 @@ export default function SupportChatScreen() {
         return withHeaders;
       });
     } catch (err) {
-      console.warn('Support history fetch error:', err?.message);
+      if (isFirst) {
+        console.warn('Support history fetch error:', err?.message);
+        setMessages((prev) => {
+          if (!prev || prev.length === 0) {
+            const user = currentUserRef.current;
+            const firstName = (user?.display_name || user?.name || '').trim().split(' ')[0] || 'there';
+            return [{
+              id: 'support-welcome-1',
+              text: `👋 Welcome to Heart Link Customer Support, ${firstName}!\n\nOur 24/7 dedicated concierge assistance team is online to help you. Select an assistance category below to view instant solutions, or connect with our live specialists:`,
+              imageUrl: null,
+              sender: 'support',
+              time: 'Now',
+              dateHeader: 'Today',
+              isRead: true,
+              created_at: new Date().toISOString(),
+              interactiveType: 'category_menu',
+            }];
+          }
+          return prev;
+        });
+      }
     } finally {
       if (isFirst) setIsLoading(false);
     }
@@ -765,7 +785,7 @@ export default function SupportChatScreen() {
           ) : (
             <View style={[styles.bubble, styles.bubbleSupport, isWelcome && styles.bubbleWelcomeDossier]}>
               <View style={styles.supportLabelRow}>
-                <Text style={styles.supportSenderTitle}>HeartLink Concierge</Text>
+                <Text style={styles.supportSenderTitle}>Heart Link Concierge</Text>
                 <Ionicons name="shield-checkmark" size={12} color="#F59E0B" style={{ marginLeft: 3 }} />
                 <View style={styles.agentPill}>
                   <Text style={styles.agentPillText}>OFFICIAL</Text>
@@ -1011,7 +1031,7 @@ export default function SupportChatScreen() {
 
               <View style={styles.headerTitleBox}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.headerTitle}>HeartLink Concierge</Text>
+                  <Text style={styles.headerTitle}>Heart Link Concierge</Text>
                   <Ionicons name="shield-checkmark" size={15} color="#F59E0B" style={{ marginLeft: 4 }} />
                 </View>
                 <Text style={styles.headerSub}>Official 24/7 Support • Online</Text>
@@ -1123,7 +1143,7 @@ export default function SupportChatScreen() {
                     </LinearGradient>
                     <View style={[styles.bubble, styles.bubbleSupport, styles.typingBubble]}>
                       <View style={styles.supportLabelRow}>
-                        <Text style={styles.supportSenderTitle}>HeartLink Concierge</Text>
+                        <Text style={styles.supportSenderTitle}>Heart Link Concierge</Text>
                         <Ionicons name="shield-checkmark" size={12} color="#F59E0B" style={{ marginLeft: 3 }} />
                       </View>
                       <View style={styles.typingIndicatorRow}>
@@ -1337,7 +1357,7 @@ export default function SupportChatScreen() {
               <View style={styles.infoModalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="shield-checkmark" size={22} color="#F59E0B" style={{ marginRight: 8 }} />
-                  <Text style={styles.infoModalTitle}>HeartLink Concierge</Text>
+                  <Text style={styles.infoModalTitle}>Heart Link Concierge</Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowInfoModal(false)}>
                   <Ionicons name="close-circle" size={24} color={theme.textFaint} />
@@ -1346,7 +1366,7 @@ export default function SupportChatScreen() {
               <ScrollView style={{ maxHeight: height * 0.5 }} showsVerticalScrollIndicator={false}>
                 <Text style={styles.infoSectionTitle}>Official 24/7 Support Team</Text>
                 <Text style={styles.infoSectionBody}>
-                  Our safety and concierge team is available around the clock to assist all HeartLink members. You can attach screenshots of payment receipts, verification documents, or suspicious profiles.
+                  Our safety and concierge team is available around the clock to assist all Heart Link members. You can attach screenshots of payment receipts, verification documents, or suspicious profiles.
                 </Text>
 
                 <View style={styles.infoBullet}>
@@ -1438,7 +1458,7 @@ export default function SupportChatScreen() {
                   <Ionicons name="checkmark-circle" size={18} color="#F59E0B" style={styles.consentItemIcon} />
                   <Text style={styles.consentItemText}>
                     <Text style={{ fontWeight: '700', color: theme.textPrimary }}>Guidelines: </Text>
-                    Respectful communication is strictly enforced in accordance with HeartLink Community Guidelines.
+                    Respectful communication is strictly enforced in accordance with Heart Link Community Guidelines.
                   </Text>
                 </View>
               </View>
@@ -1484,7 +1504,7 @@ export default function SupportChatScreen() {
               <View style={styles.faqModalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="help-circle" size={22} color="#F59E0B" style={{ marginRight: 8 }} />
-                  <Text style={styles.faqModalTitle}>HeartLink Help Center ({SUPPORT_QUESTIONS.length} Topics)</Text>
+                  <Text style={styles.faqModalTitle}>Heart Link Help Center ({SUPPORT_QUESTIONS.length} Topics)</Text>
                 </View>
                 <TouchableOpacity onPress={() => setShowQuestionsModal(false)}>
                   <Ionicons name="close-circle" size={24} color={theme.textFaint} />

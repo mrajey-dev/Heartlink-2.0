@@ -33,12 +33,12 @@ export const generateSupportAutoReply = (user, incomingMessage = '') => {
 
   // Case 2: Standard Greetings
   if (matchesGreeting(lower)) {
-    return `Hello ${firstName}! 👋 Welcome to HeartLink Customer Support.\n\nHow can we help you today? Please tap any of the categorized topics above for instant answers:\n• 🛡️ Aadhaar Profile Verification & Blue Shield\n• 💎 Plus & Premium Benefits\n• 💳 Billing & Razorpay Reconciliation\n• ✨ Matching Tips & Profile Boost\n• 🚨 Safety & Reporting Fake Users\n\nOr if you need human assistance, tap "Talk to our Live Expert" below!`;
+    return `Hello ${firstName}! 👋 Welcome to Heart Link Customer Support.\n\nHow can we help you today? Please tap any of the categorized topics above for instant answers:\n• 🛡️ Aadhaar Profile Verification & Blue Shield\n• 💎 Plus & Premium Benefits\n• 💳 Billing & Razorpay Reconciliation\n• ✨ Matching Tips & Profile Boost\n• 🚨 Safety & Reporting Fake Users\n\nOr if you need human assistance, tap "Talk to our Live Expert" below!`;
   }
 
   // Case 3: Gratitude
   if (matchesGratitude(lower)) {
-    return `You're very welcome, ${firstName}! ❤️ We're always here to support your journey on HeartLink. Let us know if there's anything else you need. Happy connecting!`;
+    return `You're very welcome, ${firstName}! ❤️ We're always here to support your journey on Heart Link. Let us know if there's anything else you need. Happy connecting!`;
   }
 
   // Case 4: Knowledge base lookup for all other questions

@@ -754,17 +754,17 @@ export default function ChatDetailScreen() {
           setActiveUser((prev) => ({
             ...prev,
             id: recipientObj.id || prev.id,
-            name: isSupportChat ? 'HeartLink Support' : (recipientObj.name || prev.name),
-            display_name: isSupportChat ? 'HeartLink Support' : (recipientObj.display_name || recipientObj.name || prev.display_name || prev.name),
+            name: isSupportChat ? 'Heart Link Support' : (recipientObj.name || prev.name),
+            display_name: isSupportChat ? 'Heart Link Support' : (recipientObj.display_name || recipientObj.name || prev.display_name || prev.name),
             is_verified: isSupportChat ? true : (recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.is_verified)),
             isVerified: isSupportChat ? true : (recipientObj.is_verified !== undefined ? Boolean(recipientObj.is_verified) : (recipientObj.isVerified !== undefined ? Boolean(recipientObj.isVerified) : prev.isVerified)),
             is_support: isSupportChat || Boolean(recipientObj.is_support),
             subscription_plan: isSupportChat ? 'Official Support' : (recipientObj.subscription_plan || prev.subscription_plan),
             age: isSupportChat ? null : (recipientObj.age || prev.age || 24),
             job: isSupportChat ? 'Customer Support & Safety Team' : (recipientObj.job || prev.job || 'Member'),
-            bio: isSupportChat ? 'Official 24/7 HeartLink Support. Available round-the-clock to help you with account verification, subscriptions, profile safety, date planner queries, and technical assistance.' : (recipientObj.bio || prev.bio || 'Connected on HeartLink.'),
+            bio: isSupportChat ? 'Official 24/7 Heart Link Support. Available round-the-clock to help you with account verification, subscriptions, profile safety, date planner queries, and technical assistance.' : (recipientObj.bio || prev.bio || 'Connected on Heart Link.'),
             city: isSupportChat ? 'Official Support' : (recipientObj.city || prev.city || 'Nearby'),
-            location: isSupportChat ? 'HeartLink Official HQ' : (recipientObj.city ? `${recipientObj.city}${recipientObj.state ? ', ' + recipientObj.state : ''}` : ((prev.location && prev.location !== 'Nearby') ? prev.location : 'Nearby')),
+            location: isSupportChat ? 'Heart Link Official HQ' : (recipientObj.city ? `${recipientObj.city}${recipientObj.state ? ', ' + recipientObj.state : ''}` : ((prev.location && prev.location !== 'Nearby') ? prev.location : 'Nearby')),
             distance: isSupportChat ? 'Online 24/7' : (prev.distance || 'Recently matched'),
             compatibility: isSupportChat ? 100 : (recipientObj.compatibility_score || prev.compatibility || 90),
             image: formatImageUrl(rawAvatar) || prev.image,
@@ -1469,7 +1469,7 @@ export default function ChatDetailScreen() {
                   style={styles.dropdownOption}
                   onPress={() => {
                     setShowMenu(false);
-                    triggerCustomToast('HeartLink Support: support@heartlink.app');
+                    triggerCustomToast('Heart Link Support: support@heartlink.app');
                   }}
                 >
                   <Ionicons name="mail-outline" size={18} color={theme.textPrimary} />

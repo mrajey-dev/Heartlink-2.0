@@ -38,32 +38,35 @@ class ChatController extends Controller
             ], 403);
         }
 
-        // Auto-delete support messages older than 24 hours (24hr ephemeral support chat)
-        if ((int) $otherUserId === 16 || (int) $authId === 16) {
-            Message::where(function ($q) use ($authId, $otherUserId) {
-                $q->where('sender_id', $authId)->where('receiver_id', $otherUserId);
+
+        $messagesQuery = Message::where(function ($outer) use ($authId, $otherUserId) {
+            $outer->where(function ($q) use ($authId, $otherUserId) {
+                $q->where('sender_id', $authId)
+                  ->where('receiver_id', $otherUserId)
+                  ->where('deleted_by_sender', false);
             })->orWhere(function ($q) use ($authId, $otherUserId) {
-                $q->where('sender_id', $otherUserId)->where('receiver_id', $authId);
-            })->where('created_at', '<', now()->subHours(24))->delete();
+                $q->where('sender_id', $otherUserId)
+                  ->where('receiver_id', $authId)
+                  ->where('deleted_by_receiver', false);
+            });
+        });
+
+        // For Support chat (User 16): strictly only return messages within the last 24 hours
+        if ((int) $otherUserId === 16 || (int) $authId === 16) {
+            $messagesQuery->where('created_at', '>=', now()->subHours(24));
         }
 
-        $messages = Message::where(function ($q) use ($authId, $otherUserId) {
-            $q->where('sender_id', $authId)
-              ->where('receiver_id', $otherUserId)
-              ->where('deleted_by_sender', false);
-        })->orWhere(function ($q) use ($authId, $otherUserId) {
-            $q->where('sender_id', $otherUserId)
-              ->where('receiver_id', $authId)
-              ->where('deleted_by_receiver', false);
-        })
-        ->orderBy('created_at', 'asc')
-        ->get();
+        $messages = $messagesQuery->orderBy('created_at', 'asc')->get();
 
         // Mark incoming messages as read
-        Message::where('sender_id', $otherUserId)
-            ->where('receiver_id', $authId)
-            ->where('is_read', false)
-            ->update(['is_read' => true]);
+        try {
+            Message::where('sender_id', $otherUserId)
+                ->where('receiver_id', $authId)
+                ->where('is_read', false)
+                ->update(['is_read' => true]);
+        } catch (\Throwable $e) {
+            // Non-fatal
+        }
 
         // Auto-fetch recipient user details so the chat header & modal can display live info
         $recipient = User::where('id', $otherUserId)->with('photos')->first();
@@ -73,10 +76,11 @@ class ChatController extends Controller
             if ($recipient->avatar && !in_array($recipient->avatar, $photos)) {
                 array_unshift($photos, $recipient->avatar);
             }
+            $isSupportRecipient = (int) $recipient->id === 16 || !empty($recipient->is_support);
             $recipientData = [
                 'id'                => $recipient->id,
-                'name'              => $recipient->name,
-                'display_name'      => $recipient->display_name ?? $recipient->name,
+                'name'              => $isSupportRecipient ? 'Heart Link Support' : $recipient->name,
+                'display_name'      => $isSupportRecipient ? 'Heart Link Support' : ($recipient->display_name ?? $recipient->name),
                 'avatar'            => $recipient->avatar,
                 'photos'            => $photos,
                 'bio'               => $recipient->bio ?? '',
@@ -87,9 +91,30 @@ class ChatController extends Controller
                 'state'             => $recipient->state ?? '',
                 'is_verified'       => (bool) $recipient->is_verified,
                 'is_online'         => (bool) $recipient->is_online,
-                'is_support'        => (int) $recipient->id === 16 || !empty($recipient->is_support),
+                'is_support'        => $isSupportRecipient,
                 'subscription_plan' => $recipient->subscription_plan ?? null,
                 'interests'         => $recipient->interests ?? [],
+            ];
+        }
+
+        if (!$recipientData && (int) $otherUserId === 16) {
+            $recipientData = [
+                'id'                => 16,
+                'name'              => 'Heart Link Support',
+                'display_name'      => 'Heart Link Support',
+                'avatar'            => null,
+                'photos'            => [],
+                'bio'               => 'Official 24/7 Heart Link Support & Helpdesk.',
+                'age'               => null,
+                'job'               => 'Support Team',
+                'occupation'        => 'Support Team',
+                'city'              => 'Online',
+                'state'             => '',
+                'is_verified'       => true,
+                'is_online'         => true,
+                'is_support'        => true,
+                'subscription_plan' => 'Official Support',
+                'interests'         => ['24/7 Support', 'Verification', 'Safety'],
             ];
         }
 
@@ -116,9 +141,13 @@ class ChatController extends Controller
         $authId = $request->user()->id;
 
         // Auto-delete support messages older than 24 hours (24hr ephemeral support chat)
-        Message::where(function ($q) {
-            $q->where('sender_id', 16)->orWhere('receiver_id', 16);
-        })->where('created_at', '<', now()->subHours(24))->delete();
+        try {
+            Message::where(function ($q) {
+                $q->where('sender_id', 16)->orWhere('receiver_id', 16);
+            })->where('created_at', '<', now()->subHours(24))->delete();
+        } catch (\Throwable $e) {
+            // Non-fatal
+        }
 
         $blockedIds = UserBlock::where('blocker_id', $authId)
             ->pluck('blocked_user_id')
@@ -180,8 +209,8 @@ class ChatController extends Controller
                 if ($partnerId === 16) {
                     $otherUser = (object) [
                         'id'                => 16,
-                        'name'              => 'HeartLink Support',
-                        'display_name'      => 'HeartLink Support',
+                        'name'              => 'Heart Link Support',
+                        'display_name'      => 'Heart Link Support',
                         'avatar'            => null,
                         'is_online'         => true,
                         'is_verified'       => true,
@@ -222,7 +251,8 @@ class ChatController extends Controller
                 ? ($isMe ? 'You: ' . $lastMsg->message : $lastMsg->message)
                 : ((int) $authId === 16 ? 'No messages yet' : "We're here to help! Tap to message our support team.");
 
-            $lastTime = ($partnerId === 16 || !empty($otherUser->is_support))
+            $isSupportPartner = ($partnerId === 16 || !empty($otherUser->is_support));
+            $lastTime = $isSupportPartner
                 ? ''
                 : ($lastMsg ? $lastMsg->created_at->diffForHumans() : '');
             $lastTimestamp = $lastMsg ? $lastMsg->created_at->timestamp : 0;
@@ -232,12 +262,12 @@ class ChatController extends Controller
 
             return [
                 'id'             => (int) $otherUser->id,
-                'name'           => $otherUser->name ?? 'User',
-                'display_name'   => $otherUser->display_name ?? ($otherUser->name ?? 'User'),
+                'name'           => $isSupportPartner ? 'Heart Link Support' : ($otherUser->name ?? 'User'),
+                'display_name'   => $isSupportPartner ? 'Heart Link Support' : ($otherUser->display_name ?? ($otherUser->name ?? 'User')),
                 'avatar'         => $avatarUrl,
                 'online'         => (bool) ($otherUser->is_online ?? true),
                 'is_verified'    => (bool) ($otherUser->is_verified ?? false),
-                'is_support'     => $partnerId === 16 || !empty($otherUser->is_support),
+                'is_support'     => $isSupportPartner,
                 'subscription_plan' => $otherUser->subscription_plan ?? null,
                 'last_msg'       => $msgText,
                 'last_time'      => $lastTime,
@@ -282,11 +312,17 @@ class ChatController extends Controller
 
         // Auto-delete support messages older than 24 hours
         if ((int) $receiverId === 16 || (int) $senderId === 16) {
-            Message::where(function ($q) use ($senderId, $receiverId) {
-                $q->where('sender_id', $senderId)->where('receiver_id', $receiverId);
-            })->orWhere(function ($q) use ($senderId, $receiverId) {
-                $q->where('sender_id', $receiverId)->where('receiver_id', $senderId);
-            })->where('created_at', '<', now()->subHours(24))->delete();
+            try {
+                Message::where(function ($outer) use ($senderId, $receiverId) {
+                    $outer->where(function ($q) use ($senderId, $receiverId) {
+                        $q->where('sender_id', $senderId)->where('receiver_id', $receiverId);
+                    })->orWhere(function ($q) use ($senderId, $receiverId) {
+                        $q->where('sender_id', $receiverId)->where('receiver_id', $senderId);
+                    });
+                })->where('created_at', '<', now()->subHours(24))->delete();
+            } catch (\Throwable $e) {
+                // Non-fatal
+            }
         }
 
         // If regular user chatting with another regular user, verify active match
@@ -403,14 +439,14 @@ class ChatController extends Controller
                     'user_id'      => $senderId,
                     'from_user_id' => 16,
                     'type'         => 'message',
-                    'message'      => "HeartLink Support: " . (mb_strlen($replyText) > 200 ? mb_substr($replyText, 0, 197) . '...' : $replyText),
+                    'message'      => "Heart Link Support: " . (mb_strlen($replyText) > 200 ? mb_substr($replyText, 0, 197) . '...' : $replyText),
                     'is_read'      => false,
                 ]);
 
                 // Expo push notification
                 ExpoPushService::sendToUser(
                     $senderId,
-                    'HeartLink Support',
+                    'Heart Link Support',
                     $replyText,
                     [
                         'screen' => 'SupportChat',

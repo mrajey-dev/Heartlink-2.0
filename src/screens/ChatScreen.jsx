@@ -20,15 +20,15 @@ export const SUPPORT_USER_ID = 16;
 
 export const SUPPORT_USER = {
   id: 16,
-  name: 'HeartLink Support',
-  display_name: 'HeartLink Support',
+  name: 'Heart Link Support',
+  display_name: 'Heart Link Support',
   is_support: true,
   is_verified: true,
   isVerified: true,
   subscription_plan: 'Official Support',
   age: null,
   job: 'Customer Support & Safety Team',
-  location: 'HeartLink HQ',
+  location: 'Heart Link HQ',
   bio: 'Official 24/7 Support & Helpdesk.',
   image: null,
   online: true,
@@ -60,8 +60,8 @@ export default function ChatScreen() {
         if (res?.conversations && Array.isArray(res.conversations)) {
           apiList = res.conversations.map(c => ({
             id: c.id,
-            name: (c.id === 16 || c.id === '16') ? 'HeartLink Support' : c.name,
-            display_name: (c.id === 16 || c.id === '16') ? 'HeartLink Support' : (c.display_name || c.user?.display_name || c.name),
+            name: (c.id === 16 || c.id === '16') ? 'Heart Link Support' : c.name,
+            display_name: (c.id === 16 || c.id === '16') ? 'Heart Link Support' : (c.display_name || c.user?.display_name || c.name),
             time: (c.id === 16 || c.id === '16') ? '' : (c.last_time || 'Now'),
             unread: c.unread_count || 0,
             online: (bool => bool)(c.online),
@@ -86,7 +86,7 @@ export default function ChatScreen() {
         // User 16 is Support Admin — sees all user chats
         setChats(apiList);
       } else {
-        // Regular user — HeartLink Support (id: 16) is ALWAYS pinned at index 0
+        // Regular user — Heart Link Support (id: 16) is ALWAYS pinned at index 0
         const user16Conv = apiList.find(c => c.id === 16 || c.id === '16');
         const regularList = apiList.filter(c => c.id !== 16 && c.id !== '16');
 
@@ -102,8 +102,8 @@ export default function ChatScreen() {
 
         const supportChat = {
           id: 16,
-          name: 'HeartLink Support',
-          display_name: 'HeartLink Support',
+          name: 'Heart Link Support',
+          display_name: 'Heart Link Support',
           time: supportTime,
           unread: user16Conv?.unread || 0,
           online: true,
@@ -114,7 +114,7 @@ export default function ChatScreen() {
           lastMsg: formatMessagePreview(user16Conv?.lastMsg) || "We're here to help! Tap to message our support team.",
           image: null,
           user: user16Conv?.user
-            ? { ...SUPPORT_USER, ...user16Conv.user, id: 16, is_support: true, is_verified: true, display_name: 'HeartLink Support' }
+            ? { ...SUPPORT_USER, ...user16Conv.user, id: 16, is_support: true, is_verified: true, display_name: 'Heart Link Support' }
             : SUPPORT_USER,
           lastTimestamp: Infinity, // Always pinned first
         };

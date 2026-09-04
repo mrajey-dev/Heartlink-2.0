@@ -30,9 +30,9 @@ export const SUPPORT_QUESTIONS = [
     categoryId: 'verify',
     icon: 'lock-closed',
     label: 'Aadhaar Security & Privacy',
-    question: 'Is my Aadhaar number and OTP secure and private on HeartLink?',
+    question: 'Is my Aadhaar number and OTP secure and private on Heart Link?',
     getAnswer: (name) =>
-      `Hi ${name}! 🔒 Yes, your security is 100% guaranteed:\n\n• UIDAI Compliant: We verify using bank-grade 256-bit SSL encryption.\n• No Aadhaar Stored: HeartLink NEVER stores your raw 12-digit Aadhaar number on our servers.\n• Privacy Assured: Other users will never see your Aadhaar details — they only see your verified Blue Shield badge.\n• OTP Security: Your OTP is verified directly and expires in 10 minutes.`,
+      `Hi ${name}! 🔒 Yes, your security is 100% guaranteed:\n\n• UIDAI Compliant: We verify using bank-grade 256-bit SSL encryption.\n• No Aadhaar Stored: Heart Link NEVER stores your raw 12-digit Aadhaar number on our servers.\n• Privacy Assured: Other users will never see your Aadhaar details — they only see your verified Blue Shield badge.\n• OTP Security: Your OTP is verified directly and expires in 10 minutes.`,
   },
   {
     id: 'verify-3',
@@ -50,7 +50,7 @@ export const SUPPORT_QUESTIONS = [
     label: 'Benefits of Blue Shield Badge',
     question: 'What are the exact benefits of getting the verified Blue Shield badge?',
     getAnswer: (name) =>
-      `Hi ${name}! 🌟 Verified profiles get huge advantages on HeartLink:\n\n• 3x Higher Match Rate: Genuine profiles with verified badges receive significantly more likes and replies.\n• Priority Discovery: Verified profiles are shown earlier in the Discover feed.\n• Trust & Safety: Other members know you are a real, authentic person, which makes connecting and going on dates much safer and easier!`,
+      `Hi ${name}! 🌟 Verified profiles get huge advantages on Heart Link:\n\n• 3x Higher Match Rate: Genuine profiles with verified badges receive significantly more likes and replies.\n• Priority Discovery: Verified profiles are shown earlier in the Discover feed.\n• Trust & Safety: Other members know you are a real, authentic person, which makes connecting and going on dates much safer and easier!`,
   },
 
   // ──────────────────────────────────────────────────────────
@@ -61,9 +61,9 @@ export const SUPPORT_QUESTIONS = [
     categoryId: 'plans',
     icon: 'diamond',
     label: 'Plus vs Premium Benefits',
-    question: 'What benefits do I get with HeartLink Plus and Premium subscriptions?',
+    question: 'What benefits do I get with Heart Link Plus and Premium subscriptions?',
     getAnswer: (name) =>
-      `Hi ${name}! 💎 Here is a quick comparison of our plans:\n\n• HeartLink Plus:\n  - Unlimited Swipes & Likes (no daily limits)\n  - Rewind accidental left swipes anytime\n  - 5 Free SuperLikes every week\n  - Ad-free browsing\n\n• HeartLink Premium:\n  - Everything in Plus\n  - See who liked your profile before matching\n  - Unlimited direct messaging with matches\n  - 1 Free Profile Boost per month for 10x visibility\n\nVisit Settings > Subscription Plans to choose your plan!`,
+      `Hi ${name}! 💎 Here is a quick comparison of our plans:\n\n• Heart Link Plus:\n  - Unlimited Swipes & Likes (no daily limits)\n  - Rewind accidental left swipes anytime\n  - 5 Free SuperLikes every week\n  - Ad-free browsing\n\n• Heart Link Premium:\n  - Everything in Plus\n  - See who liked your profile before matching\n  - Unlimited direct messaging with matches\n  - 1 Free Profile Boost per month for 10x visibility\n\nVisit Settings > Subscription Plans to choose your plan!`,
   },
   {
     id: 'plans-2',
@@ -81,7 +81,7 @@ export const SUPPORT_QUESTIONS = [
     label: 'Auto-Renewal & Cancellation',
     question: 'How do I cancel my subscription or disable auto-renewal?',
     getAnswer: (name) =>
-      `Hi ${name}, you have full control over your billing:\n\n• One-Time Purchases: Most HeartLink plans are one-time passes that do NOT auto-debit your account without permission.\n• If Auto-Renew is active: Go to Settings > Subscription Plans > Manage Subscription > Cancel Auto-Renewal.\n• You will continue to enjoy your full premium benefits until the end of your billing cycle.`,
+      `Hi ${name}, you have full control over your billing:\n\n• One-Time Purchases: Most Heart Link plans are one-time passes that do NOT auto-debit your account without permission.\n• If Auto-Renew is active: Go to Settings > Subscription Plans > Manage Subscription > Cancel Auto-Renewal.\n• You will continue to enjoy your full premium benefits until the end of your billing cycle.`,
   },
 
   // ──────────────────────────────────────────────────────────
@@ -94,14 +94,14 @@ export const SUPPORT_QUESTIONS = [
     label: 'Payment Deducted But Plan Inactive',
     question: 'My payment was deducted from bank, but my subscription is not active yet.',
     getAnswer: (name) =>
-      `Hi ${name}! 💳 If your money was deducted but the plan has not appeared:\n\n1. Banking Settlement: Razorpay and bank payment gateways take 5-15 minutes to reconcile UPI/card transactions.\n2. Refresh the App: Close HeartLink completely and reopen it; then check Settings > Subscription Plans.\n3. Live Resolution: If it still hasn't updated after 15 minutes, tap "Talk to our Live Expert" below and share your Razorpay Payment ID or transaction screenshot — our team will activate it right away!`,
+      `Hi ${name}! 💳 If your money was deducted but the plan has not appeared:\n\n1. Banking Settlement: Razorpay and bank payment gateways take 5-15 minutes to reconcile UPI/card transactions.\n2. Refresh the App: Close Heart Link completely and reopen it; then check Settings > Subscription Plans.\n3. Live Resolution: If it still hasn't updated after 15 minutes, tap "Talk to our Live Expert" below and share your Razorpay Payment ID or transaction screenshot — our team will activate it right away!`,
   },
   {
     id: 'billing-2',
     categoryId: 'billing',
     icon: 'wallet-outline',
     label: 'Accepted Payment Methods',
-    question: 'What payment methods are supported on HeartLink?',
+    question: 'What payment methods are supported on Heart Link?',
     getAnswer: (name) =>
       `Hi ${name}! 💰 We accept all major Indian and international payment options via Razorpay:\n\n• UPI: Google Pay, PhonePe, Paytm, BHIM, CRED\n• Debit & Credit Cards: Visa, Mastercard, RuPay, Diners Club\n• NetBanking: 50+ Indian banks supported\n• Wallets: Paytm, Mobikwik, Freecharge\n\nAll transactions are secured with 256-bit encryption.`,
   },
@@ -143,7 +143,7 @@ export const SUPPORT_QUESTIONS = [
     label: 'Rewind Accidental Swipe',
     question: 'How do I rewind or undo an accidental swipe on Discover?',
     getAnswer: (name) =>
-      `Hi ${name}! ⏪ Made an accidental swipe? No worries!\n\n• Tap the yellow Rewind button located on the Discover swiping controls to bring back the last passed profile.\n• Rewinds are an exclusive feature of HeartLink Plus and Premium subscriptions. Upgrade anytime to enjoy unlimited rewinds!`,
+      `Hi ${name}! ⏪ Made an accidental swipe? No worries!\n\n• Tap the yellow Rewind button located on the Discover swiping controls to bring back the last passed profile.\n• Rewinds are an exclusive feature of Heart Link Plus and Premium subscriptions. Upgrade anytime to enjoy unlimited rewinds!`,
   },
   {
     id: 'matches-4',
@@ -174,7 +174,7 @@ export const SUPPORT_QUESTIONS = [
     label: 'What are Vibes & Tags?',
     question: 'What are Vibes and how do they help me find compatible dates?',
     getAnswer: (name) =>
-      `Hi ${name}! 🎵 Vibes are community clubs on HeartLink (like Cafe Hop, Foodie Club, Cinephile, Tech & Dev, Late Night Beats, Gamer Zone).\n\n• Selecting your Vibe helps our algorithm match you with people who share your exact weekend hobbies and lifestyle.\n• You can browse matches by specific Vibes on the Discover feed!`,
+      `Hi ${name}! 🎵 Vibes are community clubs on Heart Link (like Cafe Hop, Foodie Club, Cinephile, Tech & Dev, Late Night Beats, Gamer Zone).\n\n• Selecting your Vibe helps our algorithm match you with people who share your exact weekend hobbies and lifestyle.\n• You can browse matches by specific Vibes on the Discover feed!`,
   },
   {
     id: 'profile-3',
@@ -212,7 +212,7 @@ export const SUPPORT_QUESTIONS = [
     categoryId: 'safety',
     icon: 'camera-outline',
     label: 'Screenshot Protection Policy',
-    question: 'Are screenshots allowed in private chats on HeartLink?',
+    question: 'Are screenshots allowed in private chats on Heart Link?',
     getAnswer: (name) =>
       `Hi ${name}! 🛡️ We prioritize member privacy:\n\n• For regular member-to-member chats, screenshot capture is restricted to protect your personal media and conversations.\n• In this official Customer Support chat, screenshots ARE allowed so you can easily send payment receipts, bug photos, or report violations to our team!`,
   },
@@ -234,9 +234,9 @@ export const SUPPORT_QUESTIONS = [
     categoryId: 'date',
     icon: 'pricetag-outline',
     label: 'Partner Cafe Discounts',
-    question: 'Do we get discounts at HeartLink partner cafes and restaurants?',
+    question: 'Do we get discounts at Heart Link partner cafes and restaurants?',
     getAnswer: (name) =>
-      `Hi ${name}! 🍽️ Yes! HeartLink has exclusive partnerships with top dining spots across major cities.\n\n• When you book a date through our Date Planner, you get exclusive partner discounts (10% to 25% off your bill) and priority romantic seating!`,
+      `Hi ${name}! 🍽️ Yes! Heart Link has exclusive partnerships with top dining spots across major cities.\n\n• When you book a date through our Date Planner, you get exclusive partner discounts (10% to 25% off your bill) and priority romantic seating!`,
   },
 
   // ──────────────────────────────────────────────────────────
@@ -249,14 +249,14 @@ export const SUPPORT_QUESTIONS = [
     label: 'Pause / Hide My Profile',
     question: 'How do I take a break and hide my profile from Discover?',
     getAnswer: (name) =>
-      `Hi ${name}! 🏖️ Need some time off? You can hide your profile without losing your current matches:\n\n1. Go to Profile > Settings.\n2. Toggle "Show Me on HeartLink" OFF.\n3. Your profile will no longer be shown to new people on Discover, but you can continue chatting with existing matches anytime!`,
+      `Hi ${name}! 🏖️ Need some time off? You can hide your profile without losing your current matches:\n\n1. Go to Profile > Settings.\n2. Toggle "Show Me on Heart Link" OFF.\n3. Your profile will no longer be shown to new people on Discover, but you can continue chatting with existing matches anytime!`,
   },
   {
     id: 'account-2',
     categoryId: 'account',
     icon: 'trash-outline',
     label: 'Delete My Account',
-    question: 'How do I permanently delete my HeartLink account?',
+    question: 'How do I permanently delete my Heart Link account?',
     getAnswer: (name) =>
       `Hi ${name}, you can permanently delete your account at any time:\n\n1. Go to Profile > Settings.\n2. Scroll to the very bottom and tap "Delete Account".\n3. Confirm your choice.\n\n⚠️ Please note: Deleting your account is permanent. All your matches, messages, photos, and subscription benefits will be wiped and cannot be recovered.`,
   },
@@ -311,5 +311,5 @@ export const findAnswerForQuestion = (user, queryText = '') => {
   }
 
   // Fallback
-  return `Hello ${firstName}! 👋 Thank you for messaging HeartLink Support.\n\nWe have received your query: "${clean.slice(0, 60)}". You can tap any of the categorized topics above for instant answers, or tap "Talk to our Live Expert" below to connect directly with a support specialist!`;
+  return `Hello ${firstName}! 👋 Thank you for messaging Heart Link Support.\n\nWe have received your query: "${clean.slice(0, 60)}". You can tap any of the categorized topics above for instant answers, or tap "Talk to our Live Expert" below to connect directly with a support specialist!`;
 };

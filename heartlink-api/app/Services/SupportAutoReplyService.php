@@ -39,7 +39,7 @@ class SupportAutoReplyService
 
         // Case 2: Greetings
         if ($this->matchesGreeting($lower)) {
-            return "Hello {$firstName}! 👋 Welcome to HeartLink Customer Support.\n\nHow can we help you today? Feel free to ask about:\n• Profile & Aadhaar Verification 🛡️\n• Subscription Plans & Premium Features 💎\n• Safety, Reporting & Privacy 🚨\n• Matching Tips & Profile Visibility ✨\n• Billing & Payment Inquiries 💳\n\nOr simply type your question or send a screenshot!";
+            return "Hello {$firstName}! 👋 Welcome to Heart Link Customer Support.\n\nHow can we help you today? Feel free to ask about:\n• Profile & Aadhaar Verification 🛡️\n• Subscription Plans & Premium Features 💎\n• Safety, Reporting & Privacy 🚨\n• Matching Tips & Profile Visibility ✨\n• Billing & Payment Inquiries 💳\n\nOr simply type your question or send a screenshot!";
         }
 
         // Case 3: Aadhaar / Profile Verification / Blue Shield Badge
@@ -54,7 +54,7 @@ class SupportAutoReplyService
 
         // Case 5: Subscription Plans / Premium / Plus / Benefits
         if ($this->matchesPlans($lower)) {
-            return "Hi {$firstName}! 💎 Here are the benefits of HeartLink subscription plans:\n\n• HeartLink Plus: Unlimited likes & swipes, rewind accidental passes, and 5 SuperLikes per week.\n• HeartLink Premium: Everything in Plus + see who liked your profile, priority match boost, and unlimited messaging with all matches!\n\nTo view active discounts and activate your plan, head over to Profile > Settings > Subscription Plans.";
+            return "Hi {$firstName}! 💎 Here are the benefits of Heart Link subscription plans:\n\n• Heart Link Plus: Unlimited likes & swipes, rewind accidental passes, and 5 SuperLikes per week.\n• Heart Link Premium: Everything in Plus + see who liked your profile, priority match boost, and unlimited messaging with all matches!\n\nTo view active discounts and activate your plan, head over to Profile > Settings > Subscription Plans.";
         }
 
         // Case 6: Safety / Report User / Block / Fake Accounts
@@ -74,12 +74,12 @@ class SupportAutoReplyService
 
         // Case 9: Thank You / Gratitude
         if ($this->matchesGratitude($lower)) {
-            return "You're very welcome, {$firstName}! ❤️ We're always here to support your journey on HeartLink. Let us know if there's anything else you need. Happy connecting!";
+            return "You're very welcome, {$firstName}! ❤️ We're always here to support your journey on Heart Link. Let us know if there's anything else you need. Happy connecting!";
         }
 
         // Case 10: General fallback / acknowledging custom query
         $snippet = mb_strlen($cleanText) > 60 ? mb_substr($cleanText, 0, 57) . '...' : $cleanText;
-        return "Hello {$firstName}! 👋 Thank you for messaging HeartLink Support.\n\nWe have received your query: \"{$snippet}\". Our dedicated support team is reviewing your message and will get back to you shortly.\n\nIf you have any supporting screenshots or documents, feel free to attach them in this chat!";
+        return "Hello {$firstName}! 👋 Thank you for messaging Heart Link Support.\n\nWe have received your query: \"{$snippet}\". Our dedicated support team is reviewing your message and will get back to you shortly.\n\nIf you have any supporting screenshots or documents, feel free to attach them in this chat!";
     }
 
     private function matchesGreeting(string $text): bool
