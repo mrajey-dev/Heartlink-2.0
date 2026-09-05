@@ -1,7 +1,7 @@
 // src/services/pushNotificationService.js — Expo Remote & Local Phone Notifications Service
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, Image } from 'react-native';
 import { apiSavePushToken } from './api';
 
 // Detect if app is running inside Expo Go client app (where remote push notifications are disabled by Expo in SDK 53+)
@@ -53,6 +53,11 @@ export async function setupNotificationChannelsAsync() {
   } catch (error) {
     console.warn('[PushNotificationService] Error creating notification channel:', error?.message || error);
   }
+}
+
+// Automatically create channel on module evaluation if on Android
+if (Platform.OS === 'android') {
+  setupNotificationChannelsAsync().catch(() => {});
 }
 
 /**
@@ -117,22 +122,87 @@ export async function ensureNotificationPermissionsAsync() {
 export async function displayPhoneNotification({ title, body, data = {} }) {
   // Gracefully handle Web browsers (use Web Notification API if permitted)
   if (Platform.OS === 'web') {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (typeof window !== 'undefined') {
+      // 1. Play audible chime using Web Audio API
       try {
-        if (Notification.permission === 'granted') {
-          new Notification(title || 'HeartLink', { body: body || '' });
-          console.log('[PushNotificationService] ✅ Web Browser notification fired successfully.');
-          return true;
-        } else if (Notification.permission !== 'denied') {
-          const perm = await Notification.requestPermission();
-          if (perm === 'granted') {
-            new Notification(title || 'HeartLink', { body: body || '' });
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          const ctx = new AudioCtx();
+          if (ctx.state === 'suspended') {
+            ctx.resume();
+          }
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.45);
+        }
+      } catch (_) {}
+
+      // 2. Flash browser tab title so user notices even when on another tab
+      try {
+        if (typeof document !== 'undefined') {
+          const originalTitle = document.title || 'HeartLink';
+          document.title = `🔔 New Notification: ${title || 'HeartLink'}`;
+          setTimeout(() => {
+            document.title = originalTitle;
+          }, 4500);
+        }
+      } catch (_) {}
+
+      // 3. Trigger OS Desktop Notification if Notification API exists
+      if ('Notification' in window) {
+        try {
+          let iconUri = undefined;
+          try {
+            const resolved = Image.resolveAssetSource(require('../../assets/logo.png'));
+            if (resolved?.uri) {
+              iconUri = resolved.uri;
+            }
+          } catch (_) {}
+
+          const notifOptions = {
+            body: body || '',
+            tag: 'hl-' + Date.now(),
+            requireInteraction: true,
+            silent: false,
+            data,
+          };
+          if (iconUri) {
+            notifOptions.icon = iconUri;
+          }
+
+          if (Notification.permission === 'granted') {
+            const notif = new Notification(title || 'HeartLink', notifOptions);
+            notif.onclick = () => {
+              if (typeof window !== 'undefined') {
+                window.focus();
+              }
+            };
             console.log('[PushNotificationService] ✅ Web Browser notification fired successfully.');
             return true;
+          } else if (Notification.permission !== 'denied') {
+            const perm = await Notification.requestPermission();
+            if (perm === 'granted') {
+              const notif = new Notification(title || 'HeartLink', notifOptions);
+              notif.onclick = () => {
+                if (typeof window !== 'undefined') {
+                  window.focus();
+                }
+              };
+              console.log('[PushNotificationService] ✅ Web Browser notification fired successfully.');
+              return true;
+            }
           }
+        } catch (webErr) {
+          console.warn('[PushNotificationService] Web notification skipped:', webErr?.message || webErr);
         }
-      } catch (webErr) {
-        console.warn('[PushNotificationService] Web notification skipped:', webErr?.message || webErr);
       }
     }
     return false;
@@ -211,35 +281,34 @@ export async function registerForPushNotificationsAsync() {
       return null;
     }
 
-    // Strategy 1 (Preferred on Android): Direct Firebase FCM Device Push Token
-    // This allows Laravel backend to send directly via Firebase Cloud Messaging HTTP v1 without EAS relay
-    if (Platform.OS === 'android') {
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ||
+      Constants.easConfig?.projectId ||
+      '5474961b-4bf2-4879-b71d-8ab015526254';
+
+    // Strategy 1 (Primary): Universal Expo Push Token (Delivered via Expo Push Service + Firebase FCM)
+    try {
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId,
+      });
+      if (tokenData?.data) {
+        token = tokenData.data;
+        console.log('[PushNotificationService] ✅ Obtained Expo Push Token:', token);
+      }
+    } catch (expoErr) {
+      console.warn('[PushNotificationService] Expo push token error (falling back to native device token):', expoErr?.message || expoErr);
+    }
+
+    // Strategy 2 (Fallback): Native Firebase FCM Device Token on Android
+    if (!token && Platform.OS === 'android') {
       try {
         const deviceTokenData = await Notifications.getDevicePushTokenAsync();
         if (deviceTokenData?.data) {
           token = deviceTokenData.data;
-          console.log('[PushNotificationService] ✅ Obtained Native Firebase FCM Device Token:', token);
+          console.log('[PushNotificationService] Obtained Native Firebase FCM Device Token:', token);
         }
       } catch (deviceErr) {
-        console.warn('[PushNotificationService] Direct FCM token error (falling back to Expo):', deviceErr?.message || deviceErr);
-      }
-    }
-
-    // Strategy 2: Expo Push Token (Fallback or for iOS)
-    if (!token) {
-      try {
-        const projectId =
-          Constants.expoConfig?.extra?.eas?.projectId ||
-          Constants.easConfig?.projectId ||
-          '5474961b-4bf2-4879-b71d-8ab015526254';
-
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId,
-        });
-        token = tokenData?.data;
-        console.log('[PushNotificationService] Obtained Expo Push Token:', token);
-      } catch (expoErr) {
-        console.warn('[PushNotificationService] Expo push token error:', expoErr?.message || expoErr);
+        console.warn('[PushNotificationService] Direct FCM token error:', deviceErr?.message || deviceErr);
       }
     }
 

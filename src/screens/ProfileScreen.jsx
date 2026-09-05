@@ -297,7 +297,6 @@ export default function ProfileScreen() {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         setUploadingPhoto(true);
-        setHeroLoading(true);
         const asset = result.assets[0];
         let imagePayload = asset.uri;
         if (asset.base64) {

@@ -6,7 +6,7 @@ import { formatImageUrl } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 import MatchModal from '../components/MatchModal';
 import { navigationRef, navigate } from '../navigation/navigationRef';
-import { registerForPushNotificationsAsync, displayPhoneNotification, isExpoGo, Notifications } from '../services/pushNotificationService';
+import { registerForPushNotificationsAsync, ensureNotificationPermissionsAsync, displayPhoneNotification, isExpoGo, Notifications } from '../services/pushNotificationService';
 
 const getActiveChatUserId = () => {
   if (navigationRef.isReady()) {
@@ -232,8 +232,10 @@ export const NotificationProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    // Register physical device for Remote Push Notifications (Expo Push API + Hostinger Laravel)
-    registerForPushNotificationsAsync();
+    // Ensure permissions are granted and register device for Push Notifications
+    ensureNotificationPermissionsAsync().then(() => {
+      registerForPushNotificationsAsync();
+    }).catch(() => {});
 
     // Check notifications immediately on mount
     checkNotifications();
