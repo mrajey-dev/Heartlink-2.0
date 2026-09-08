@@ -21,11 +21,12 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { renderVerifiedBadge } from '../utils/helpers';
 import ProfileDetail from '../components/discovery/ProfileDetail';
+import { setActiveChatUserId } from '../services/activeChatManager';
 import { getEcho } from '../services/echo';
 import {
   apiSendMessage,
@@ -702,6 +703,19 @@ export default function ChatDetailScreen() {
 
   const isSupportChat = isTargetSupport && !isCurrentUserSupport;
   const resolvedTargetId = isTargetSupport ? 16 : targetId;
+
+  // Track active chat recipient to suppress notifications while user is chatting
+  useFocusEffect(
+    useCallback(() => {
+      const activeId = resolvedTargetId || targetId || route.params?.userId || route.params?.user?.id;
+      if (activeId) {
+        setActiveChatUserId(activeId);
+      }
+      return () => {
+        setActiveChatUserId(null);
+      };
+    }, [resolvedTargetId, targetId, route.params])
+  );
 
   const fetchHistory = useCallback(
     async (isFirst = false) => {

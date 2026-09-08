@@ -1,8 +1,13 @@
-// src/services/pushNotificationService.js — Expo Remote & Local Phone Notifications Service
 import * as Device from 'expo-device';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform, Image } from 'react-native';
 import { apiSavePushToken } from './api';
+import {
+  isUserInActiveChat,
+  hasRecentlyShownNotification,
+  markNotificationShown,
+  getNotificationUniqueKey,
+} from './activeChatManager';
 
 // Detect if app is running inside Expo Go client app (where remote push notifications are disabled by Expo in SDK 53+)
 export const isExpoGo =
@@ -18,13 +23,59 @@ export let notificationsUnavailableInExpoGo = false;
 try {
   Notifications = require('expo-notifications');
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      try {
+        const content = notification?.request?.content || {};
+        const data = content?.data || {};
+        const senderId =
+          data?.userId ||
+          data?.params?.userId ||
+          data?.user?.id ||
+          data?.params?.user?.id ||
+          data?.from_user_id ||
+          data?.fromUserId ||
+          data?.match?.id ||
+          data?.match?.user_id;
+
+        // 1. SUPPRESS notification if user is currently inside chat with this sender
+        if (senderId && isUserInActiveChat(senderId)) {
+          return {
+            shouldShowAlert: false,
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+            shouldShowBanner: false,
+            shouldShowList: false,
+          };
+        }
+
+        // 2. DEDUPLICATE: Prevent duplicate notification alerts
+        const notifKey = getNotificationUniqueKey({
+          title: content.title,
+          body: content.body,
+          data,
+        });
+
+        if (hasRecentlyShownNotification(notifKey)) {
+          return {
+            shouldShowAlert: false,
+            shouldPlaySound: false,
+            shouldSetBadge: false,
+            shouldShowBanner: false,
+            shouldShowList: false,
+          };
+        }
+
+        markNotificationShown(notifKey);
+      } catch (_) {}
+
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
   });
 } catch (err) {
   notificationsUnavailableInExpoGo = true;
@@ -120,6 +171,30 @@ export async function ensureNotificationPermissionsAsync() {
  * @param {Object} [param0.data] Additional payload/navigation data
  */
 export async function displayPhoneNotification({ title, body, data = {} }) {
+  const senderId =
+    data?.userId ||
+    data?.params?.userId ||
+    data?.user?.id ||
+    data?.params?.user?.id ||
+    data?.from_user_id ||
+    data?.fromUserId ||
+    data?.match?.id ||
+    data?.match?.user_id;
+
+  // 1. SUPPRESS notification if user is currently in chat with this person
+  if (senderId && isUserInActiveChat(senderId)) {
+    console.log('[PushNotificationService] 🔇 Notification suppressed — user is actively chatting with:', senderId);
+    return false;
+  }
+
+  // 2. DEDUPLICATE: Check if notification was already delivered/shown within the window
+  const notifKey = getNotificationUniqueKey({ title, body, data });
+  if (hasRecentlyShownNotification(notifKey)) {
+    console.log('[PushNotificationService] ⏭️ Skipping duplicate notification:', notifKey);
+    return false;
+  }
+  markNotificationShown(notifKey);
+
   // Gracefully handle Web browsers (use Web Notification API if permitted)
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined') {
@@ -169,7 +244,7 @@ export async function displayPhoneNotification({ title, body, data = {} }) {
 
           const notifOptions = {
             body: body || '',
-            tag: 'hl-' + Date.now(),
+            tag: notifKey,
             requireInteraction: true,
             silent: false,
             data,

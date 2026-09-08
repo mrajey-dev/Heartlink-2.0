@@ -7,16 +7,12 @@ import { eventEmitter, EVENTS } from '../utils/eventEmitter';
 import MatchModal from '../components/MatchModal';
 import { navigationRef, navigate } from '../navigation/navigationRef';
 import { registerForPushNotificationsAsync, ensureNotificationPermissionsAsync, displayPhoneNotification, isExpoGo, Notifications } from '../services/pushNotificationService';
-
-const getActiveChatUserId = () => {
-  if (navigationRef.isReady()) {
-    const currentRoute = navigationRef.getCurrentRoute();
-    if (currentRoute && currentRoute.name === 'ChatDetail') {
-      return currentRoute.params?.userId || currentRoute.params?.user?.id || currentRoute.params?.match?.id || currentRoute.params?.match?.user_id;
-    }
-  }
-  return null;
-};
+import {
+  isUserInActiveChat,
+  hasRecentlyShownNotification,
+  markNotificationShown,
+  getNotificationUniqueKey,
+} from '../services/activeChatManager';
 
 const NotificationContext = createContext({
   bannerVisible: false,
@@ -43,11 +39,39 @@ export const NotificationProvider = ({ children }) => {
   const isFetchingRef = useRef(false);
 
   const triggerNotification = useCallback((data) => {
-    // 1. Always show custom in-app banner
+    const senderId =
+      data?.userId ||
+      data?.params?.userId ||
+      data?.user?.id ||
+      data?.params?.user?.id ||
+      data?.from_user_id ||
+      data?.fromUserId ||
+      data?.fromUser?.id;
+
+    // 1. SUPPRESS if currently chatting with this user
+    if (senderId && isUserInActiveChat(senderId)) {
+      console.log('[NotificationContext] 🔇 In-app notification suppressed — user is in active chat with:', senderId);
+      return;
+    }
+
+    const notifKey = getNotificationUniqueKey({
+      title: data?.title,
+      body: data?.message,
+      data,
+    });
+
+    // 2. DEDUPLICATE: Check if already presented
+    if (hasRecentlyShownNotification(notifKey)) {
+      console.log('[NotificationContext] ⏭️ In-app notification already shown recently:', notifKey);
+      return;
+    }
+    markNotificationShown(notifKey);
+
+    // 3. Show custom in-app banner
     setBannerData(data);
     setBannerVisible(true);
 
-    // 2. Trigger native phone notification
+    // 4. Trigger native phone / web notification
     const targetScreen =
       data?.type === 'chat' || data?.type === 'message'
         ? 'ChatDetail'
@@ -84,11 +108,8 @@ export const NotificationProvider = ({ children }) => {
         apiGetNotifications().catch(() => null),
       ]);
 
-      const activeChatUserId = getActiveChatUserId();
-
       // 1. Check for INCOMING Chat Messages
       if (chatRes?.conversations && Array.isArray(chatRes.conversations)) {
-        let hasNewChat = false;
         chatRes.conversations.forEach((conv) => {
           const userId = conv.id;
           const currentUnread = conv.unread_count || 0;
@@ -96,8 +117,9 @@ export const NotificationProvider = ({ children }) => {
           const msgKey = `${userId}_${lastMsg}_${currentUnread}`;
 
           if (currentUnread > 0 && !seenChatMsgRef.current[msgKey]) {
-            hasNewChat = true;
-            const isCurrentlyChatting = activeChatUserId && String(conv.id) === String(activeChatUserId);
+            seenChatMsgRef.current[msgKey] = true;
+            const isCurrentlyChatting = isUserInActiveChat(userId);
+
             if (!isInitialFetchRef.current && !isCurrentlyChatting) {
               const displayName = conv.display_name || conv.user?.display_name || conv.name || conv.user?.name || 'New Message';
               triggerNotification({
@@ -109,13 +131,8 @@ export const NotificationProvider = ({ children }) => {
                 user: conv.user,
               });
             }
-            seenChatMsgRef.current[msgKey] = true;
           }
         });
-
-        if (hasNewChat && !isInitialFetchRef.current) {
-          eventEmitter.emit(EVENTS.CHAT_UPDATED);
-        }
       }
 
       // 2. Check for INCOMING Match Requests & Date Proposals
@@ -127,7 +144,11 @@ export const NotificationProvider = ({ children }) => {
         pendingList.forEach((r) => {
           const reqId = r.id || r.user_id;
           if (reqId && !seenPendingReqRef.current.has(reqId)) {
-            if (!isInitialFetchRef.current) {
+            seenPendingReqRef.current.add(reqId);
+            const reqUserId = r?.user_id || r?.user?.id;
+            const isCurrentlyChatting = isUserInActiveChat(reqUserId);
+
+            if (!isInitialFetchRef.current && !isCurrentlyChatting) {
               const isProposal = r?.type === 'date_proposal' || r?.request_type === 'date_proposal';
               const displayName = r?.display_name || r?.user?.display_name || r?.name || r?.user?.name || 'Someone';
               triggerNotification({
@@ -139,11 +160,10 @@ export const NotificationProvider = ({ children }) => {
                     : `${displayName} wants to connect with you`)
                   : 'Someone sent you a request',
                 avatar: r?.avatar ? formatImageUrl(r.avatar) : null,
-                userId: r?.user_id || r?.user?.id,
+                userId: reqUserId,
                 user: r?.user,
               });
             }
-            seenPendingReqRef.current.add(reqId);
           }
         });
       }
@@ -164,7 +184,7 @@ export const NotificationProvider = ({ children }) => {
               const fromUser = notif.from_user || notif.fromUser;
               const displayName = fromUser?.display_name || fromUser?.name || 'Your crush';
               const fromUserId = fromUser?.id || notif.from_user_id;
-              const isFromActiveChatUser = activeChatUserId && fromUserId && String(fromUserId) === String(activeChatUserId);
+              const isFromActiveChatUser = isUserInActiveChat(fromUserId);
 
               if (notifType === 'request_accepted' || notifType === 'new_match') {
                 if (fromUser) {
@@ -274,6 +294,30 @@ export const NotificationProvider = ({ children }) => {
 
         foregroundSub = Notifications.addNotificationReceivedListener((notification) => {
           console.log('[NotificationContext] Notification received:', notification);
+          const data = notification?.request?.content?.data || {};
+          const senderId =
+            data?.userId ||
+            data?.params?.userId ||
+            data?.user?.id ||
+            data?.params?.user?.id ||
+            data?.from_user_id ||
+            data?.fromUserId ||
+            data?.match?.id ||
+            data?.match?.user_id;
+
+          // If from active chat user, skip check
+          if (senderId && isUserInActiveChat(senderId)) {
+            return;
+          }
+
+          // Mark notification as shown so subsequent polling doesn't duplicate
+          const notifKey = getNotificationUniqueKey({
+            title: notification?.request?.content?.title,
+            body: notification?.request?.content?.body,
+            data,
+          });
+          markNotificationShown(notifKey);
+
           checkNotifications();
         });
 

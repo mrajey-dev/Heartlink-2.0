@@ -21,11 +21,12 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
+import { setActiveChatUserId } from '../services/activeChatManager';
 import { apiGetMessages, apiSendMessage, apiClearChat, apiUploadImage } from '../services/api';
 import { getEcho } from '../services/echo';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
@@ -116,6 +117,16 @@ export default function SupportChatScreen() {
   const localSupportRepliesRef = useRef([]);
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
+
+  // Suppress support notifications while user is inside Support Chat screen
+  useFocusEffect(
+    useCallback(() => {
+      setActiveChatUserId(SUPPORT_USER_ID);
+      return () => {
+        setActiveChatUserId(null);
+      };
+    }, [])
+  );
 
   const modalFilteredQuestions = useMemo(() => {
     if (!faqSearch.trim()) return SUPPORT_QUESTIONS;
