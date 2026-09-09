@@ -267,7 +267,6 @@ class SubscriptionController extends Controller
 
         $amountInPaise = (int) round($finalAmount * 100);
         $receiptId = 'rcpt_' . time() . '_' . rand(1000, 9999);
-        $orderId = 'order_' . strtoupper(substr(md5(time() . rand()), 0, 14));
 
         try {
             $response = \Illuminate\Support\Facades\Http::withBasicAuth($keyId, $keySecret)
@@ -280,10 +279,29 @@ class SubscriptionController extends Controller
 
             if ($response->successful()) {
                 $orderData = $response->json();
-                $orderId = $orderData['id'] ?? $orderId;
+                $orderId = $orderData['id'] ?? null;
+            } else {
+                $errBody = $response->json();
+                $errDesc = $errBody['error']['description'] ?? $response->body();
+                \Illuminate\Support\Facades\Log::error('Razorpay Order API Failed: ' . $errDesc);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unable to create order with Razorpay: ' . $errDesc,
+                ], 400);
             }
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('Razorpay Order API Warning: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Razorpay Order API Exception: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Razorpay connection error: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        if (empty($orderId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to obtain a valid Order ID from Razorpay.',
+            ], 400);
         }
 
         $serverUrl = url('/');

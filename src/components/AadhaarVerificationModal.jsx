@@ -102,24 +102,24 @@ export default function AadhaarVerificationModal({
 
       const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
       if (!responseOrderId) {
-        throw new Error('No order ID received from server');
+        throw new Error(orderResponse?.message || 'No order ID received from server');
       }
 
       const razorpayKeyId = orderResponse?.key_id || orderResponse?.keyId || 'rzp_live_SsJLwM19hIvB6A';
 
+      const prefill = {};
+      if (user?.email) prefill.email = user.email.trim();
+      if (user?.phone) prefill.contact = user.phone.replace(/[^0-9+]/g, '');
+      if (user?.name) prefill.name = user.name.trim();
+
       const razorpayOptions = {
         description: 'Profile Identity Verification',
-        image: 'https://heartlink.app/logo.png',
         currency: 'INR',
         key: razorpayKeyId,
         amount: orderResponse?.amount ? orderResponse.amount : Math.round(currentAmount * 100), // paise
         name: 'HeartLink',
         order_id: responseOrderId,
-        prefill: {
-          email: user?.email || '',
-          contact: user?.phone || '',
-          name: user?.name || '',
-        },
+        prefill,
         theme: {
           color: '#00C853',
         },

@@ -141,7 +141,7 @@ export default function PaymentGatewayModal({
       const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
 
       if (!responseOrderId) {
-        throw new Error('No order ID received from server');
+        throw new Error(orderResponse?.message || 'No order ID received from server');
       }
 
       setOrderId(responseOrderId);
@@ -149,19 +149,19 @@ export default function PaymentGatewayModal({
       setRazorpayKey(razorpayKeyId);
 
       // Step 2: Open Razorpay Checkout Directly (Web & Native)
+      const prefill = {};
+      if (user?.email) prefill.email = user.email.trim();
+      if (user?.phone) prefill.contact = user.phone.replace(/[^0-9+]/g, '');
+      if (user?.name) prefill.name = user.name.trim();
+
       const razorpayOptions = {
         description: `${planName} - ${durObj.label}`,
-        image: 'https://heartlink.app/logo.png',
         currency: 'INR',
         key: razorpayKeyId,
-        amount: amountInRupees * 100,
-        name: 'HeartLink Dating',
+        amount: Math.round(amountInRupees * 100),
+        name: 'HeartLink',
         order_id: responseOrderId,
-        prefill: {
-          email: user?.email || '',
-          contact: user?.phone || '',
-          name: user?.name || '',
-        },
+        prefill,
         theme: {
           color: '#FF007F',
         },
