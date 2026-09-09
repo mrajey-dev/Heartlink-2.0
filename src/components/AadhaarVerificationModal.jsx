@@ -8,7 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiCreateRazorpayOrder, apiVerifyRazorpayPayment } from '../services/api';
+import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiCreateRazorpayOrder, apiVerifyRazorpayPayment, apiGetVerificationPlan } from '../services/api';
 import { openRazorpayCheckout } from '../utils/razorpayService';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,6 +28,8 @@ export default function AadhaarVerificationModal({
   const [step, setStep] = useState(initialStep);
   const [paying, setPaying] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [planData, setPlanData] = useState(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
 
   // Aadhaar Form State
   const [aadhaarNumber, setAadhaarNumber] = useState('');
@@ -50,8 +52,30 @@ export default function AadhaarVerificationModal({
       setOtpSending(false);
       setErrorMessage('');
       setSuccessMessage('');
+
+      // Fetch dynamic verification plan and price from database
+      const fetchVerificationPlan = async () => {
+        try {
+          setLoadingPlan(true);
+          const res = await apiGetVerificationPlan();
+          if (res?.success && (res?.plan || res?.amount)) {
+            setPlanData(res);
+          }
+        } catch (e) {
+          console.warn('[AadhaarModal] Failed to fetch verification plan:', e);
+        } finally {
+          setLoadingPlan(false);
+        }
+      };
+      fetchVerificationPlan();
     }
   }, [visible, initialStep]);
+
+  // Dynamic price attributes derived from database plan
+  const durationObj = planData?.plan?.durations?.[0] || {};
+  const currentAmount = planData?.amount || planData?.price || durationObj.amount || (durationObj.total ? parseInt(durationObj.total.replace(/[^0-9]/g, ''), 10) : 49) || 49;
+  const currentPriceDisplay = planData?.price_display || durationObj.price || durationObj.total || `₹${currentAmount}`;
+  const currentOriginalPrice = planData?.original_price || durationObj.original_price || '₹99';
 
   if (!visible) return null;
 
@@ -61,16 +85,17 @@ export default function AadhaarVerificationModal({
     try {
       // Create Razorpay Order
       const orderData = {
-        amount: 99,
+        amount: currentAmount,
         currency: 'INR',
-        planId: 'verification_99',
-        planName: 'Profile Identity Verification',
+        planId: 'verification',
+        planName: planData?.plan?.name || 'Profile Identity Verification',
         durationId: 'lifetime',
         durationLabel: 'Lifetime',
         userId: user?.id,
         userEmail: user?.email,
         userPhone: user?.phone,
         userName: user?.name,
+        purpose: 'verification',
       };
 
       const orderResponse = await apiCreateRazorpayOrder(orderData);
@@ -87,7 +112,7 @@ export default function AadhaarVerificationModal({
         image: 'https://heartlink.app/logo.png',
         currency: 'INR',
         key: razorpayKeyId,
-        amount: 99 * 100, // paise
+        amount: orderResponse?.amount ? orderResponse.amount : Math.round(currentAmount * 100), // paise
         name: 'HeartLink',
         order_id: responseOrderId,
         prefill: {
@@ -110,8 +135,9 @@ export default function AadhaarVerificationModal({
               orderId: responseOrderId,
               paymentId: data.razorpay_payment_id,
               signature: data.razorpay_signature,
-              planId: 'verification_99',
+              planId: 'verification',
               durationId: 'lifetime',
+              purpose: 'verification',
               userId: user?.id
             };
 
@@ -258,7 +284,7 @@ export default function AadhaarVerificationModal({
                 <View style={styles.verifyPillBadge}>
                   <LinearGradient colors={['rgba(0, 114, 227, 0.18)', 'rgba(0, 200, 83, 0.18)']} style={styles.pillGrad}>
                     <Ionicons name="shield-checkmark" size={13} color="#00C853" style={{ marginRight: 5 }} />
-                    <Text style={styles.verifyPillTxt}>GOVERNMENT RECOGNIZED e-KYC</Text>
+                    <Text style={styles.verifyPillTxt}>MANDATORY IDENTITY e-KYC</Text>
                   </LinearGradient>
                 </View>
                 <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -280,10 +306,10 @@ export default function AadhaarVerificationModal({
 
               {/* Title & Headline */}
               <Text style={[styles.pitchTitle, { color: theme.textPrimary }]}>
-                Aadhaar Identity Verification
+                Aadhaar Verification (Mandatory)
               </Text>
               <Text style={[styles.pitchSubtitle, { color: theme.textSec }]}>
-                Authenticate your profile via secure UIDAI Aadhaar e-KYC. Gain instant trust, guarantee authenticity, and unlock the official Verified Shield badge!
+                Aadhaar verification is compulsory for all members to ensure 100% genuine profiles and fraud-free dating on HeartLink. Complete instant e-KYC to activate your account and get the Verified Shield badge!
               </Text>
 
               {/* ─── Aadhaar Verification Benefits (Government e-KYC Theme) ───────── */}
@@ -347,7 +373,7 @@ export default function AadhaarVerificationModal({
               <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>₹99</Text>
+                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>{currentPriceDisplay}</Text>
                     <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • One-Time e-KYC Fee</Text>
                   </View>
                   <Text style={[styles.offerDesc, { color: theme.textSec }]}>
@@ -374,7 +400,7 @@ export default function AadhaarVerificationModal({
                     style={styles.gradCtaBtn}
                   >
                     <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.gradCtaBtnTxt}>Proceed to Aadhaar e-KYC (₹99)</Text>
+                    <Text style={styles.gradCtaBtnTxt}>Proceed to Aadhaar e-KYC ({currentPriceDisplay})</Text>
                   </LinearGradient>
                 </TouchableOpacity>
 
@@ -404,11 +430,11 @@ export default function AadhaarVerificationModal({
               </View>
 
               <Text style={[styles.title, { color: theme.textPrimary }]}>
-                Processing ₹99 Payment 💳
+                Processing {currentPriceDisplay} Payment 💳
               </Text>
 
               <Text style={[styles.message, { color: theme.textSec }]}>
-                Payment of ₹99 successful! Opening secure Aadhaar OTP verification...
+                Payment of {currentPriceDisplay} successful! Opening secure Aadhaar OTP verification...
               </Text>
             </View>
 
@@ -424,7 +450,7 @@ export default function AadhaarVerificationModal({
               </Text>
 
               <Text style={[styles.message, { color: theme.textSec }]}>
-                Please complete your ₹99 payment in the secure browser window that opened. Once successful, return here and click the button below.
+                Please complete your {currentPriceDisplay} payment in the secure browser window that opened. Once successful, return here and click the button below.
               </Text>
 
               <TouchableOpacity

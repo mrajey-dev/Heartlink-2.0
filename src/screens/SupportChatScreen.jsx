@@ -118,6 +118,18 @@ export default function SupportChatScreen() {
   const currentUserRef = useRef(currentUser);
   currentUserRef.current = currentUser;
 
+  // Restore active specialist/expert mode from storage if previously unlocked
+  useEffect(() => {
+    const userId = currentUser?.id;
+    if (userId) {
+      AsyncStorage.getItem(`@heartlink_support_expert_mode_${userId}`).then((val) => {
+        if (val === 'true') {
+          setIsExpertMode(true);
+        }
+      }).catch(() => {});
+    }
+  }, [currentUser?.id]);
+
   // Suppress support notifications while user is inside Support Chat screen
   useFocusEffect(
     useCallback(() => {
@@ -141,6 +153,11 @@ export default function SupportChatScreen() {
     setShowConsentModal(false);
     setIsExpertMode(true);
 
+    const userId = currentUserRef.current?.id;
+    if (userId) {
+      AsyncStorage.setItem(`@heartlink_support_expert_mode_${userId}`, 'true').catch(() => {});
+    }
+
     const user = currentUserRef.current;
     const firstName = (user?.display_name || user?.name || '').trim().split(' ')[0] || 'there';
 
@@ -158,13 +175,21 @@ export default function SupportChatScreen() {
 
     setMessages(prev => [...prev, connectNoticeMsg]);
     localSupportRepliesRef.current = [...(localSupportRepliesRef.current || []), connectNoticeMsg];
-    const userId = currentUserRef.current?.id;
     if (userId) {
       AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localSupportRepliesRef.current)).catch(() => {});
     }
 
     scrollToBottom(true);
     triggerToast('Live Expert Chat unlocked');
+  };
+
+  const handleCloseExpertMode = () => {
+    setIsExpertMode(false);
+    const userId = currentUserRef.current?.id;
+    if (userId) {
+      AsyncStorage.removeItem(`@heartlink_support_expert_mode_${userId}`).catch(() => {});
+    }
+    triggerToast('Live Specialist Session closed');
   };
 
   const triggerToast = (msg) => {
@@ -499,8 +524,10 @@ export default function SupportChatScreen() {
     setSelectedImage(null);
     scrollToBottom(true);
 
-    // Show support typing indicator immediately
-    setIsSupportTyping(true);
+    // Show support typing indicator only if not in specialist/expert mode
+    if (!isExpertMode) {
+      setIsSupportTyping(true);
+    }
 
     try {
       let finalPayloadText = txt;
@@ -517,8 +544,12 @@ export default function SupportChatScreen() {
         }
       }
 
-      // Send to server
-      const res = await apiSendMessage(SUPPORT_USER_ID, finalPayloadText);
+      // Send to server with specialist/expert mode flags
+      const res = await apiSendMessage(SUPPORT_USER_ID, finalPayloadText, {
+        is_specialist: isExpertMode,
+        expert_mode: isExpertMode,
+        skip_auto_reply: isExpertMode,
+      });
       eventEmitter.emit(EVENTS.CHAT_UPDATED);
 
       if (res && res.id) {
@@ -527,60 +558,63 @@ export default function SupportChatScreen() {
         setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: res.data.id.toString(), pending: false } : m));
       }
 
-      // Determine the support auto-reply message text
-      let replyContent = null;
-      if (res?.auto_reply?.message) {
-        replyContent = res.auto_reply.message;
-      } else {
-        replyContent = generateSupportAutoReply(currentUserRef.current, finalPayloadText);
-      }
-
-      // Check if this query matches a known question to provide contextual follow-ups
-      const matchedQ = SUPPORT_QUESTIONS.find(
-        q => q.question.toLowerCase().trim() === txt.toLowerCase().trim() ||
-             q.label.toLowerCase().trim() === txt.toLowerCase().trim()
-      );
-      const answeredCategoryId = matchedQ?.categoryId || null;
-      const answeredCategoryTitle = answeredCategoryId
-        ? (CONCIERGE_CATEGORIES.find(c => c.id === answeredCategoryId)?.label || 'Topic')
-        : null;
-
-      // Simulate natural typing duration (1000ms) before the response appears
-      setTimeout(() => {
-        setIsSupportTyping(false);
-
-        if (replyContent) {
-          const replyTime = new Date();
-          const replyMsg = {
-            id: `support-reply-${Date.now()}`,
-            text: replyContent,
-            imageUrl: null,
-            sender: 'support',
-            time: replyTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            dateHeader: null,
-            isRead: true,
-            created_at: replyTime.toISOString(),
-            isLocalAutoReply: true,
-            answeredCategoryId,
-            answeredCategoryTitle,
-          };
-
-          const updatedReplies = [...(localSupportRepliesRef.current || []), replyMsg];
-          localSupportRepliesRef.current = updatedReplies;
-          const userId = currentUserRef.current?.id;
-          if (userId) {
-            AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
-          }
-
-          setMessages(prev => {
-            if (prev.some(m => m.id === replyMsg.id || (m.sender === 'support' && m.text === replyMsg.text))) {
-              return prev;
-            }
-            return [...prev, replyMsg];
-          });
-          scrollToBottom(true);
+      // If user is connected with a live specialist, DO NOT send or generate automatic bot replies
+      if (!isExpertMode) {
+        // Determine the support auto-reply message text
+        let replyContent = null;
+        if (res?.auto_reply?.message) {
+          replyContent = res.auto_reply.message;
+        } else {
+          replyContent = generateSupportAutoReply(currentUserRef.current, finalPayloadText);
         }
-      }, 1000);
+
+        // Check if this query matches a known question to provide contextual follow-ups
+        const matchedQ = SUPPORT_QUESTIONS.find(
+          q => q.question.toLowerCase().trim() === txt.toLowerCase().trim() ||
+               q.label.toLowerCase().trim() === txt.toLowerCase().trim()
+        );
+        const answeredCategoryId = matchedQ?.categoryId || null;
+        const answeredCategoryTitle = answeredCategoryId
+          ? (CONCIERGE_CATEGORIES.find(c => c.id === answeredCategoryId)?.label || 'Topic')
+          : null;
+
+        // Simulate natural typing duration (1000ms) before the response appears
+        setTimeout(() => {
+          setIsSupportTyping(false);
+
+          if (replyContent) {
+            const replyTime = new Date();
+            const replyMsg = {
+              id: `support-reply-${Date.now()}`,
+              text: replyContent,
+              imageUrl: null,
+              sender: 'support',
+              time: replyTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              dateHeader: null,
+              isRead: true,
+              created_at: replyTime.toISOString(),
+              isLocalAutoReply: true,
+              answeredCategoryId,
+              answeredCategoryTitle,
+            };
+
+            const updatedReplies = [...(localSupportRepliesRef.current || []), replyMsg];
+            localSupportRepliesRef.current = updatedReplies;
+            const userId = currentUserRef.current?.id;
+            if (userId) {
+              AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
+            }
+
+            setMessages(prev => {
+              if (prev.some(m => m.id === replyMsg.id || (m.sender === 'support' && m.text === replyMsg.text))) {
+                return prev;
+              }
+              return [...prev, replyMsg];
+            });
+            scrollToBottom(true);
+          }
+        }, 1000);
+      }
 
       await fetchHistory(false);
       scrollToBottom(true);
@@ -588,7 +622,7 @@ export default function SupportChatScreen() {
       setIsSupportTyping(false);
       console.warn('Error sending to support:', error);
       setMessages(prev => prev.filter(m => m.id !== tempId));
-      triggerToast('Failed to send image or message. Please try again.');
+      triggerToast(error?.message || 'Failed to send message. Please retry.');
     } finally {
       setIsSending(false);
     }
@@ -1202,7 +1236,7 @@ export default function SupportChatScreen() {
                 </View>
                 <TouchableOpacity
                   style={styles.exitExpertPill}
-                  onPress={() => setIsExpertMode(false)}
+                  onPress={handleCloseExpertMode}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="close-circle-outline" size={13} color="#F59E0B" style={{ marginRight: 4 }} />

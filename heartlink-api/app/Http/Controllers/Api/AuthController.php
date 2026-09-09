@@ -184,8 +184,8 @@ class AuthController extends Controller
             ->where('expires_at', '>', now())
             ->first();
 
-        if (!$activeSub && $user->subscription_plan !== null) {
-            $user->subscription_plan = null;
+        if (!$activeSub && !empty($user->subscription_plan) && strtolower($user->subscription_plan) !== 'free') {
+            $user->subscription_plan = 'Free';
             $user->save();
         } elseif ($activeSub && $user->subscription_plan !== $activeSub->plan_name) {
             $user->subscription_plan = $activeSub->plan_name;
@@ -193,7 +193,7 @@ class AuthController extends Controller
         }
 
         return response()->json([
-            'user' => $user->load('photos', 'activeSubscription', 'settings'),
+            'user' => $user->load('photos', 'activeSubscription', 'settings', 'aadhaarVerification'),
         ]);
     }
 

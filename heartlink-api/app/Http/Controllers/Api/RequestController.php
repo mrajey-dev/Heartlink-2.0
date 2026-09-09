@@ -33,6 +33,15 @@ class RequestController extends Controller
             return response()->json(['message' => 'User not found'], 404);
         }
 
+        // Compulsory Aadhaar Verification Check
+        if (!$currentUser->is_verified) {
+            return response()->json([
+                'error'                 => 'VERIFICATION_REQUIRED',
+                'message'               => 'Aadhaar verification is compulsory for all users to accept requests. Please verify your profile to continue.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         // Create/update reciprocal like swipe
         Swipe::updateOrCreate(
             ['swiper_id' => $currentId, 'swiped_user_id' => $fromUserId],

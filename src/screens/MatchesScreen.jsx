@@ -10,6 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import ProfileDetail from '../components/discovery/ProfileDetail';
+import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
+import { useAuth } from '../hooks/useAuth';
 import { apiGetMatches, apiGetRequests, apiUnmatchUser, apiBlockUser } from '../services/api';
 import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
@@ -18,11 +20,23 @@ const { width, height } = Dimensions.get('window');
 
 export default function MatchesScreen() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [matches, setMatches] = useState([]);
   const [requestCount, setRequestCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
+
+  const isVerifiedUser =
+    user?.is_verified === true ||
+    user?.is_verified === 1 ||
+    user?.is_verified === '1' ||
+    user?.is_verified === 'true' ||
+    user?.isVerified === true ||
+    user?.isVerified === 1 ||
+    user?.isVerified === '1' ||
+    user?.isVerified === 'true';
 
   const fetchMatches = async (query = search, isBackground = false) => {
     try {
@@ -144,6 +158,10 @@ export default function MatchesScreen() {
   };
 
   const startChat = (id, targetUser) => {
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     const u = targetUser || matches.find(m => m.id === id)?.user || matches.find(m => m.id === id);
     navigation.navigate('ChatDetail', { userId: id, user: u });
   };
@@ -299,6 +317,12 @@ export default function MatchesScreen() {
         }}
         onLike={(prof) => startChat(prof?.id || selectedProfile?.id, prof?.user || selectedProfile?.user || prof || selectedProfile)}
         onPass={unmatch}
+      />
+
+      <AadhaarVerificationModal
+        visible={aadhaarModalVisible}
+        onClose={() => setAadhaarModalVisible(false)}
+        initialStep="verify"
       />
     </LinearGradient>
   );

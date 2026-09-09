@@ -48,6 +48,7 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onSup
   useEffect(() => {
     if (visible) {
       setSheetPhotoIdx(0);
+      translateY.setValue(height);
       Animated.spring(translateY, {
         toValue: 0,
         tension: 40,
@@ -55,18 +56,14 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onSup
         useNativeDriver: true,
       }).start();
     } else {
-      Animated.timing(translateY, {
-        toValue: height,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      translateY.setValue(height);
     }
   }, [visible]);
 
   const handleClose = () => {
     Animated.timing(translateY, {
       toValue: height,
-      duration: 220,
+      duration: 180,
       useNativeDriver: true,
     }).start(() => {
       if (onClose) onClose();
@@ -138,9 +135,14 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onSup
             />
           </View>
 
-          {/* Small Fixed Chevron-Down Close Button */}
-          <TouchableOpacity style={styles.floatingCloseBtn} onPress={handleClose} activeOpacity={0.75}>
+          {/* Small Fixed Chevron-Down Close Button (Left) */}
+          <TouchableOpacity style={styles.floatingCloseBtn} onPress={handleClose} activeOpacity={0.75} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-down" size={20} color="#FFF" />
+          </TouchableOpacity>
+
+          {/* Small Fixed Cross (X) Close Button (Right) */}
+          <TouchableOpacity style={styles.floatingCloseBtnRight} onPress={handleClose} activeOpacity={0.75} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Ionicons name="close" size={20} color="#FFF" />
           </TouchableOpacity>
 
           <ScrollView
@@ -411,10 +413,18 @@ export default function ProfileDetail({ visible, profile, onClose, onLike, onSup
                       style={styles.sheetBtnPass}
                       onPress={() => { handleClose(); onPass(profile.id); }}
                     >
-                      <Ionicons name="close" size={22} color="#FF375F" />
-                      <Text style={styles.sheetBtnPassTxt}>{isMatch ? "Unmatch" : "Pass"}</Text>
+                      <Ionicons name={isMatch ? "close" : "close-outline"} size={22} color={isMatch ? "#FF375F" : theme.textSec} />
+                      <Text style={[styles.sheetBtnPassTxt, !isMatch && { color: theme.textSec }]}>{isMatch ? "Unmatch" : "Close"}</Text>
                     </TouchableOpacity>
-                  ) : null}
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.sheetBtnPass}
+                      onPress={handleClose}
+                    >
+                      <Ionicons name="close-outline" size={22} color={theme.textSec} />
+                      <Text style={[styles.sheetBtnPassTxt, { color: theme.textSec }]}>Close</Text>
+                    </TouchableOpacity>
+                  )}
 
                   {onSuperLike && !isMatch ? (
                     <TouchableOpacity
@@ -477,6 +487,18 @@ const getStyles = (theme) => StyleSheet.create({
     position: 'absolute',
     top: 80,
     left: 16,
+    zIndex: 100,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  floatingCloseBtnRight: {
+    position: 'absolute',
+    top: 80,
+    right: 16,
     zIndex: 100,
     width: 34,
     height: 34,

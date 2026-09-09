@@ -14,6 +14,7 @@ import { useAuth } from '../hooks/useAuth';
 import ProfileDetail from '../components/discovery/ProfileDetail';
 import CustomAlertModal from '../components/CustomAlertModal';
 import MatchModal from '../components/MatchModal';
+import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
 import { apiGetRequests, apiGetSentRequests, apiCancelSentRequest, apiAcceptRequest, apiDeclineRequest, apiRespondDateProposal, apiUnmatchUser } from '../services/api';
 import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpers';
 import { eventEmitter, EVENTS } from '../utils/eventEmitter';
@@ -170,6 +171,17 @@ export default function RequestsScreen() {
 
   const [matchModalVisible, setMatchModalVisible] = useState(false);
   const [acceptedMatchedUser, setAcceptedMatchedUser] = useState(null);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
+
+  const isVerifiedUser =
+    user?.is_verified === true ||
+    user?.is_verified === 1 ||
+    user?.is_verified === '1' ||
+    user?.is_verified === 'true' ||
+    user?.isVerified === true ||
+    user?.isVerified === 1 ||
+    user?.isVerified === '1' ||
+    user?.isVerified === 'true';
 
   const [swipedCardId, setSwipedCardId] = useState(null);
 
@@ -323,6 +335,10 @@ export default function RequestsScreen() {
   );
 
   const accept = async (id) => {
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoadingId(id);
     const targetItem = requests.find(r => r.id === id);
     const targetUserId = targetItem?.user_id || (typeof id === 'string' ? parseInt(id.replace(/[^0-9]/g, ''), 10) : id);
@@ -384,6 +400,10 @@ export default function RequestsScreen() {
 
   const openChatForProfile = (item) => {
     if (!item) return;
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     const rawId = item.id;
     const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '').replace('sent_swipe_', '') : rawId);
     navigation.navigate('ChatDetail', { userId: targetUserId });
@@ -408,6 +428,10 @@ export default function RequestsScreen() {
   };
 
   const acceptDateProposal = async (item) => {
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoadingId(item.id);
     setExpandedIds(prev => ({ ...prev, [item.id]: false }));
     setRequests(prev => sortRequestsList(prev.map(r => r.id === item.id ? { ...r, status: 'accepted' } : r)));
@@ -978,6 +1002,12 @@ export default function RequestsScreen() {
             },
           });
         }}
+      />
+
+      <AadhaarVerificationModal
+        visible={aadhaarModalVisible}
+        onClose={() => setAadhaarModalVisible(false)}
+        initialStep="alert"
       />
     </LinearGradient>
   );

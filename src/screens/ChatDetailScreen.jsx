@@ -26,6 +26,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { renderVerifiedBadge } from '../utils/helpers';
 import ProfileDetail from '../components/discovery/ProfileDetail';
+import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
 import { setActiveChatUserId } from '../services/activeChatManager';
 import { getEcho } from '../services/echo';
 import {
@@ -472,6 +473,7 @@ const MessageBubble = React.memo(function MessageBubble({
 export default function ChatDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -497,6 +499,17 @@ export default function ChatDetailScreen() {
   const [freeMessagesLeft, setFreeMessagesLeft] = useState(null);
   const [isMaleUser, setIsMaleUser] = useState(false);
   const [isPremiumUser, setIsPremiumUser] = useState(false);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
+
+  const isVerifiedUser =
+    user?.is_verified === true ||
+    user?.is_verified === 1 ||
+    user?.is_verified === '1' ||
+    user?.is_verified === 'true' ||
+    user?.isVerified === true ||
+    user?.isVerified === 1 ||
+    user?.isVerified === '1' ||
+    user?.isVerified === 'true';
 
 
 
@@ -1023,6 +1036,11 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    if (!isSupportChat && !isCurrentUserSupport && !isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
+
     if (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
       triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
       return;
@@ -1140,7 +1158,11 @@ export default function ChatDetailScreen() {
       } catch (error) {
         console.log('Error sending message:', error);
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        triggerCustomToast('Failed to send image or message');
+        if (error?.requires_verification || error?.message?.toLowerCase()?.includes('aadhaar') || error?.message?.toLowerCase()?.includes('verification')) {
+          setAadhaarModalVisible(true);
+        } else {
+          triggerCustomToast(error?.message || 'Failed to send image or message');
+        }
       } finally {
         setIsSending(false);
       }
@@ -2080,6 +2102,12 @@ export default function ChatDetailScreen() {
           <Text style={styles.customToastTxt}>{toastText}</Text>
         </Animated.View>
       )}
+
+      <AadhaarVerificationModal
+        visible={aadhaarModalVisible}
+        onClose={() => setAadhaarModalVisible(false)}
+        initialStep="alert"
+      />
     </LinearGradient>
   );
 }

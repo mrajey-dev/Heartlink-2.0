@@ -115,6 +115,36 @@ class SubscriptionPlanSeeder extends Seeder
                 'sort_order'   => 4,
                 'is_active'    => true,
             ],
+            [
+                'plan_key'     => 'verification',
+                'name'         => 'Profile Identity Verification',
+                'tagline'      => 'Mandatory Profile Identity e-KYC Verification',
+                'icon_name'    => 'shield-checkmark',
+                'badge_text'   => 'LIFETIME e-KYC',
+                'accent_color' => '#00C853',
+                'gradient'     => ['#00C853', '#0072E3'],
+                'glow_color'   => 'rgba(0, 200, 83, 0.25)',
+                'durations'    => [
+                    [
+                        'id'             => 'lifetime',
+                        'label'          => 'Lifetime',
+                        'price'          => '₹49',
+                        'total'          => '₹49',
+                        'amount'         => 49,
+                        'unit'           => ' one-time',
+                        'original_price' => '₹99',
+                        'save'           => '50% OFF',
+                        'popular'        => true,
+                    ],
+                ],
+                'features'     => [
+                    ['icon' => 'shield-checkmark-outline', 'title' => 'Official Verified Identity Badge'],
+                    ['icon' => 'lock-closed-outline',       'title' => 'Unlocks Full Swiping & Direct Messaging'],
+                    ['icon' => 'checkmark-circle-outline', 'title' => 'Direct Match Requests & Chat Access'],
+                ],
+                'sort_order'   => 5,
+                'is_active'    => true,
+            ],
         ];
 
         foreach ($plans as $plan) {

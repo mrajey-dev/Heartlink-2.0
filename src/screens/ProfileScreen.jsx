@@ -17,6 +17,7 @@ import { ensureArray, formatImageUrl, renderVerifiedBadge } from '../utils/helpe
 import { ALL_VIBE_NODES, getVibeByName } from '../utils/vibeData';
 
 import CustomAlertModal from '../components/CustomAlertModal';
+import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
@@ -55,6 +56,17 @@ export default function ProfileScreen() {
   const [isFullScreenViewerOpen, setIsFullScreenViewerOpen] = useState(false);
   const [mainPhotoSuccessAlertVisible, setMainPhotoSuccessAlertVisible] = useState(false);
   const [settingMainPhoto, setSettingMainPhoto] = useState(false);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
+
+  const isVerifiedUser =
+    user?.is_verified === true ||
+    user?.is_verified === 1 ||
+    user?.is_verified === '1' ||
+    user?.is_verified === 'true' ||
+    user?.isVerified === true ||
+    user?.isVerified === 1 ||
+    user?.isVerified === '1' ||
+    user?.isVerified === 'true';
 
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
@@ -582,6 +594,42 @@ export default function ProfileScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </View>
+
+          {/* Mandatory Aadhaar Verification Prompt for unverified profiles */}
+          {!isVerifiedUser && (
+            <TouchableOpacity
+              style={{
+                marginBottom: 16,
+                borderRadius: 20,
+                overflow: 'hidden',
+                borderWidth: 1.5,
+                borderColor: '#00C853',
+              }}
+              onPress={() => setAadhaarModalVisible(true)}
+              activeOpacity={0.88}
+            >
+              <LinearGradient
+                colors={isDark ? ['rgba(0, 200, 83, 0.18)', 'rgba(0, 114, 227, 0.18)'] : ['rgba(0, 200, 83, 0.08)', 'rgba(0, 114, 227, 0.08)']}
+                style={{ padding: 14, flexDirection: 'row', alignItems: 'center' }}
+              >
+                <LinearGradient
+                  colors={['#00C853', '#0072E3']}
+                  style={{ width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 12 }}
+                >
+                  <Ionicons name="shield-checkmark" size={20} color="#FFF" />
+                </LinearGradient>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13.5, fontWeight: '900', color: theme.textPrimary }}>Aadhaar Verification (Mandatory)</Text>
+                  <Text style={{ fontSize: 11.5, color: theme.textSec, marginTop: 2 }}>
+                    e-KYC is compulsory to connect and chat on HeartLink.
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: '#00C853', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginLeft: 8 }}>
+                  <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '900' }}>Verify e-KYC</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
 
           {/* Your Vibe Section */}
           {(() => {
@@ -1697,6 +1745,12 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <AadhaarVerificationModal
+        visible={aadhaarModalVisible}
+        onClose={() => setAadhaarModalVisible(false)}
+        initialStep="verify"
+      />
     </LinearGradient>
   );
 }

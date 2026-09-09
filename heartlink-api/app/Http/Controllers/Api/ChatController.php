@@ -327,6 +327,15 @@ class ChatController extends Controller
 
         // If regular user chatting with another regular user, verify active match
         if ((int) $senderId !== 16 && (int) $receiverId !== 16) {
+            // Compulsory Aadhaar Verification Check
+            if (!$user->is_verified) {
+                return response()->json([
+                    'error'                 => 'VERIFICATION_REQUIRED',
+                    'message'               => 'Aadhaar verification is compulsory for all users to send messages. Please verify your profile to continue.',
+                    'requires_verification' => true,
+                ], 403);
+            }
+
             $isMatched = UserMatch::where(function ($q) use ($senderId, $receiverId) {
                 $q->where('user_1_id', $senderId)->where('user_2_id', $receiverId);
             })->orWhere(function ($q) use ($senderId, $receiverId) {
@@ -420,9 +429,10 @@ class ChatController extends Controller
             $newLeft = null;
         }
 
-        // HeartLink Support Automatic Reply (User 16)
+        // HeartLink Support Automatic Reply (User 16) — Suppressed when user is connected with a Live Specialist
         $supportReply = null;
-        if ((int)$receiverId === 16 && (int)$senderId !== 16) {
+        $isSpecialistMode = $request->boolean('is_specialist') || $request->boolean('expert_mode') || $request->boolean('skip_auto_reply');
+        if ((int)$receiverId === 16 && (int)$senderId !== 16 && !$isSpecialistMode) {
             try {
                 $autoReplyService = new SupportAutoReplyService();
                 $replyText = $autoReplyService->generateReply($user, $validated['message']);

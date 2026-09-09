@@ -324,6 +324,15 @@ class DiscoverController extends Controller
             return response()->json(['message' => 'Cannot swipe on yourself.'], 422);
         }
 
+        // Compulsory Aadhaar Verification Check
+        if (!$swiper->is_verified) {
+            return response()->json([
+                'error'                 => 'VERIFICATION_REQUIRED',
+                'message'               => 'Aadhaar verification is compulsory for all users to connect and swipe. Please verify your profile to continue.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         // 1. Reset Checks (Reset every day at 12:00 AM midnight, 30 days for superlikes)
         $tz = 'Asia/Kolkata';
         $nowTz = now()->timezone($tz);

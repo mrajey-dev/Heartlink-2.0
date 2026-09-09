@@ -391,6 +391,7 @@ export const apiRespondDateProposal = (bookingId, status) => apiFetch('/date-boo
 
 // ─── Subscriptions API ───────────────────────────────────────────────
 export const apiGetSubscriptionPlans = () => apiFetch('/subscriptions/plans');
+export const apiGetVerificationPlan = () => apiFetch('/subscriptions/verification-plan');
 export const apiSubscribePlan = (planData) => apiFetch('/subscriptions/subscribe', {
   method: 'POST',
   body: planData,

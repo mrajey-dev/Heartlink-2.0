@@ -11,7 +11,11 @@ class SubscriptionController extends Controller
 {
     public function getPlans()
     {
-        $plans = SubscriptionPlan::active()->get()->map(function ($plan) {
+        $allPlans = SubscriptionPlan::active()->get();
+
+        $verificationPlan = $allPlans->firstWhere('plan_key', 'verification');
+
+        $plans = $allPlans->where('plan_key', '!=', 'verification')->values()->map(function ($plan) {
             $durations = $plan->durations;
             if (is_array($durations) && count($durations) > 0) {
                 // Find 1-month base price
@@ -58,7 +62,61 @@ class SubscriptionController extends Controller
         });
 
         return response()->json([
-            'plans' => $plans,
+            'plans'             => $plans,
+            'verification_plan' => $verificationPlan,
+        ]);
+    }
+
+    public function getVerificationPlan()
+    {
+        $plan = SubscriptionPlan::where('plan_key', 'verification')->first();
+        if (!$plan) {
+            $plan = SubscriptionPlan::firstOrCreate(
+                ['plan_key' => 'verification'],
+                [
+                    'name'         => 'Profile Identity Verification',
+                    'tagline'      => 'Mandatory Profile Identity e-KYC Verification',
+                    'icon_name'    => 'shield-checkmark',
+                    'badge_text'   => 'LIFETIME e-KYC',
+                    'accent_color' => '#00C853',
+                    'gradient'     => ['#00C853', '#0072E3'],
+                    'glow_color'   => 'rgba(0, 200, 83, 0.25)',
+                    'durations'    => [
+                        [
+                            'id'             => 'lifetime',
+                            'label'          => 'Lifetime',
+                            'price'          => '₹49',
+                            'total'          => '₹49',
+                            'amount'         => 49,
+                            'unit'           => ' one-time',
+                            'original_price' => '₹99',
+                            'save'           => '50% OFF',
+                            'popular'        => true,
+                        ],
+                    ],
+                    'features'     => [
+                        ['icon' => 'shield-checkmark-outline', 'title' => 'Official Verified Identity Badge'],
+                        ['icon' => 'lock-closed-outline',       'title' => 'Unlocks Full Swiping & Direct Messaging'],
+                        ['icon' => 'checkmark-circle-outline', 'title' => 'Direct Match Requests & Chat Access'],
+                    ],
+                    'sort_order'   => 5,
+                    'is_active'    => true,
+                ]
+            );
+        }
+
+        $duration = (is_array($plan->durations) && count($plan->durations) > 0) ? $plan->durations[0] : null;
+        $amount = isset($duration['amount']) ? (float)$duration['amount'] : (float) preg_replace('/[^0-9\.]/', '', $duration['total'] ?? $duration['price'] ?? '49');
+        $priceDisplay = $duration['price'] ?? $duration['total'] ?? ('₹' . (int)$amount);
+
+        return response()->json([
+            'success'        => true,
+            'plan'           => $plan,
+            'plan_id'        => 'verification',
+            'amount'         => $amount > 0 ? $amount : 49,
+            'price'          => $amount > 0 ? $amount : 49,
+            'price_display'  => $priceDisplay,
+            'original_price' => $duration['original_price'] ?? '₹99',
         ]);
     }
 
@@ -189,7 +247,25 @@ class SubscriptionController extends Controller
         $keyId = config('services.razorpay.key') ?: env('RAZORPAY_KEY_ID', 'rzp_live_SsJLwM19hIvB6A');
         $keySecret = config('services.razorpay.secret') ?: env('RAZORPAY_KEY_SECRET', 'KPdSRmf0LyD7gdubvpuPIN8m');
 
-        $amountInPaise = (int) round(((float) $validated['amount']) * 100);
+        $planId = strtolower(trim($validated['plan_id'] ?? $validated['planId'] ?? ''));
+        $planName = $validated['plan_name'] ?? $validated['planName'] ?? $validated['plan_id'] ?? $validated['planId'] ?? 'HeartLink Premium';
+        $purpose = strtolower(trim($validated['purpose'] ?? ''));
+
+        $finalAmount = (float) $validated['amount'];
+
+        // If verification plan / purpose, load price dynamically from database
+        if ($planId === 'verification' || str_contains($planId, 'verif') || str_contains(strtolower($planName), 'verif') || $purpose === 'verification') {
+            $verificationPlan = SubscriptionPlan::where('plan_key', 'verification')->where('is_active', true)->first();
+            if ($verificationPlan && is_array($verificationPlan->durations) && count($verificationPlan->durations) > 0) {
+                $dbDuration = $verificationPlan->durations[0];
+                $dbAmount = isset($dbDuration['amount']) ? (float)$dbDuration['amount'] : (float) preg_replace('/[^0-9\.]/', '', $dbDuration['total'] ?? $dbDuration['price'] ?? 0);
+                if ($dbAmount > 0) {
+                    $finalAmount = $dbAmount;
+                }
+            }
+        }
+
+        $amountInPaise = (int) round($finalAmount * 100);
         $receiptId = 'rcpt_' . time() . '_' . rand(1000, 9999);
         $orderId = 'order_' . strtoupper(substr(md5(time() . rand()), 0, 14));
 
@@ -212,10 +288,9 @@ class SubscriptionController extends Controller
 
         $serverUrl = url('/');
         $token = $request->bearerToken() ?? '';
-        $planName = $validated['plan_name'] ?? $validated['planName'] ?? $validated['plan_id'] ?? $validated['planId'] ?? 'HeartLink Premium';
         $duration = $validated['duration_label'] ?? $validated['durationLabel'] ?? $validated['duration'] ?? $validated['duration_id'] ?? $validated['durationId'] ?? '6 Months';
 
-        $checkoutUrl = $serverUrl . '/payment/checkout?order_id=' . urlencode($orderId) . '&amount=' . urlencode($validated['amount']) . '&plan_name=' . urlencode($planName) . '&duration=' . urlencode($duration) . '&token=' . urlencode($token);
+        $checkoutUrl = $serverUrl . '/payment/checkout?order_id=' . urlencode($orderId) . '&amount=' . urlencode($finalAmount) . '&plan_name=' . urlencode($planName) . '&duration=' . urlencode($duration) . '&token=' . urlencode($token);
 
         return response()->json([
             'success'      => true,
@@ -224,6 +299,7 @@ class SubscriptionController extends Controller
             'key_id'       => $keyId,
             'keyId'        => $keyId,
             'amount'       => $amountInPaise,
+            'charge_amount'=> $finalAmount,
             'currency'     => $validated['currency'] ?? 'INR',
             'receipt'      => $receiptId,
             'checkout_url' => $checkoutUrl,
