@@ -42,14 +42,13 @@ class ExpoPushService
             }
 
             $payload = [
-                'to'        => $token,
-                'sound'     => 'default',
-                'title'     => $title,
-                'body'      => $body,
-                'data'      => $data,
-                'priority'  => 'high',
+                'to'       => $token,
+                'sound'    => 'default',
+                'title'    => $title,
+                'body'     => $body,
+                'data'     => $data,
+                'priority' => 'high',
                 'channelId' => 'default',
-                'color'     => '#FF007F',
             ];
 
             Log::info("[ExpoPushService] Sending push notification via Expo Push API to user {$user->id} ({$token}): {$title}");
