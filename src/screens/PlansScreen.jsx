@@ -2,7 +2,7 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   StatusBar, Dimensions, Platform, Animated,
-  ActivityIndicator, Linking, useWindowDimensions,
+  ActivityIndicator, Linking, useWindowDimensions, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,7 +12,14 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import CustomAlertModal from '../components/CustomAlertModal';
 import PaymentGatewayModal from '../components/PaymentGatewayModal';
-import { apiSubscribePlan, apiGetSubscriptionPlans } from '../services/api';
+import { apiSubscribePlan, apiGetSubscriptionPlans, apiVerifyGooglePurchase } from '../services/api';
+import {
+  initializeIAP,
+  setupPurchaseListeners,
+  purchaseSubscriptionPlan,
+  finishPurchaseTransaction,
+  endIAPConnection,
+} from '../services/iapService';
 
 export default function PlansScreen() {
   const navigation = useNavigation();
@@ -41,6 +48,7 @@ export default function PlansScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [successAlertVisible, setSuccessAlertVisible] = useState(false);
   const [purchasedPlanName, setPurchasedPlanName] = useState('');
+  const [purchasingCardId, setPurchasingCardId] = useState(null);
 
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedCardForPayment, setSelectedCardForPayment] = useState(null);
@@ -50,6 +58,47 @@ export default function PlansScreen() {
   const OFFER_DURATION_MS = 24 * 60 * 60 * 1000;
   const [timeLeftMs, setTimeLeftMs] = useState(0);
   const [isOfferEligible, setIsOfferEligible] = useState(false);
+
+  useEffect(() => {
+    let removeListeners = () => {};
+    initializeIAP()
+      .then((ok) => {
+        if (ok) {
+          removeListeners = setupPurchaseListeners(
+            async (purchaseItem) => {
+              try {
+                if (purchaseItem) {
+                  const verifyRes = await apiVerifyGooglePurchase({
+                    purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
+                    product_id: purchaseItem.productId || '',
+                    order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
+                    plan_name: purchaseItem.productId || 'HeartLink Premium',
+                    duration: '1m',
+                  });
+                  await finishPurchaseTransaction(purchaseItem, false);
+                  if (verifyRes?.user) {
+                    await updateUser(verifyRes.user);
+                  }
+                  setPurchasedPlanName('HeartLink Subscription');
+                  setSuccessAlertVisible(true);
+                }
+              } catch (vErr) {
+                console.warn('[IAP Listener] Verify error:', vErr);
+              }
+            },
+            (pErr) => {
+              console.warn('[IAP Listener] Error:', pErr);
+            }
+          );
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      if (removeListeners) removeListeners();
+      endIAPConnection().catch(() => {});
+    };
+  }, []);
 
   useEffect(() => {
     let createdAtTimestamp = null;
@@ -194,7 +243,7 @@ export default function PlansScreen() {
     setCardDurations(prev => ({ ...prev, [cardId]: durationId }));
   };
 
-  const handleSubscribe = (card) => {
+  const handleSubscribe = async (card) => {
     const selectedDurId = cardDurations[card.id] || '6m';
     const selectedDurObj = card.durations?.find(d => d.id === selectedDurId) || card.durations?.[0];
 
@@ -210,8 +259,56 @@ export default function PlansScreen() {
       setCustomOfferPrice(null);
     }
 
-    setSelectedCardForPayment(card);
-    setPaymentModalVisible(true);
+    if (Platform.OS === 'web') {
+      setSelectedCardForPayment(card);
+      setPaymentModalVisible(true);
+      return;
+    }
+
+    setPurchasingCardId(card.id);
+    try {
+      const planKey = (card.plan_key || card.name || '').toLowerCase();
+      const purchaseResult = await purchaseSubscriptionPlan({
+        planKey,
+        durationId: selectedDurId,
+      });
+
+      console.log('[IAP] Purchase result received:', purchaseResult);
+      const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
+
+      if (purchaseItem) {
+        const verifyRes = await apiVerifyGooglePurchase({
+          purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
+          product_id: purchaseItem.productId || planKey,
+          order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
+          plan_name: card.name,
+          plan_key: planKey,
+          duration: selectedDurObj?.label || selectedDurId,
+          duration_id: selectedDurId,
+          price: priceToCharge,
+        });
+
+        await finishPurchaseTransaction(purchaseItem, false);
+
+        if (verifyRes?.user) {
+          await updateUser(verifyRes.user);
+        }
+
+        setPurchasedPlanName(card.name);
+        setSuccessAlertVisible(true);
+      }
+    } catch (err) {
+      console.warn('[IAP] Purchase error / cancellation:', err?.message || err);
+      if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        Alert.alert(
+          'Google Play Billing',
+          `${err?.message || 'Unable to connect to Google Play Store.'}\n\nNote: Google Play Billing requires the app to be installed from the Google Play Internal Testing release build.`,
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      setPurchasingCardId(null);
+    }
   };
 
   const renderCard = ({ item: card, index }) => {
@@ -394,6 +491,7 @@ export default function PlansScreen() {
           <View style={[styles.cardCtaWrap, isSmallDevice && styles.smallCardCtaWrap]}>
             <TouchableOpacity
               onPress={() => handleSubscribe(card)}
+              disabled={purchasingCardId === card.id}
               activeOpacity={0.88}
               style={[styles.cardCtaBtn, { shadowColor: accentCol }]}
             >
@@ -402,10 +500,16 @@ export default function PlansScreen() {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={styles.cardCtaGrad}
               >
-                <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" />
-                <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
-                  Get {card.name} ({selectedDurObj?.price || ''}{selectedDurObj?.unit || ''})
-                </Text>
+                {purchasingCardId === card.id ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
+                      Get {card.name} ({selectedDurObj?.price || ''}{selectedDurObj?.unit || ''})
+                    </Text>
+                  </>
+                )}
               </LinearGradient>
             </TouchableOpacity>
           </View>
@@ -445,6 +549,8 @@ export default function PlansScreen() {
 
             <View style={{ width: 38 }} />
           </View>
+
+
 
           {/* Top 20% Welcome Offer Banner with Countdown Timer for 24-Hour New Users */}
           {isOfferEligible && (
@@ -753,6 +859,34 @@ const getStyles = (theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight)
   },
   smallHeaderSubtitle: {
     fontSize: 9.5,
+  },
+
+  // Maintenance Notice Banner
+  maintenanceBannerWrap: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.3)',
+  },
+  smallMaintenanceBannerWrap: {
+    marginHorizontal: 12,
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  maintenanceBannerGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  maintenanceBannerTxt: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 16,
   },
 
   // Carousel

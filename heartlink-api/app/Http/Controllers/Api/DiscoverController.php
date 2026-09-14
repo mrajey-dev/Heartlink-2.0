@@ -44,9 +44,12 @@ class DiscoverController extends Controller
             ->filter(fn($id) => $id !== $user->id)
             ->unique();
 
-        // 3. Exclude ONLY explicitly blocked users (from UserBlock table)
+        // 3. Exclude explicitly blocked users in BOTH directions (users I blocked & users who blocked me)
         $blockedIds = \App\Models\UserBlock::where('blocker_id', $user->id)
-            ->pluck('blocked_user_id');
+            ->pluck('blocked_user_id')
+            ->merge(\App\Models\UserBlock::where('blocked_user_id', $user->id)->pluck('blocker_id'))
+            ->filter()
+            ->unique();
 
         $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->push(16)->unique();
 
@@ -173,13 +176,18 @@ class DiscoverController extends Controller
         }
         $keywords = array_unique(array_filter($keywords));
 
-        // Exclude swiped, matched, blocked
+        // Exclude swiped, matched, blocked (in both directions)
         $swipedByMeIds = Swipe::where('swiper_id', $user->id)->pluck('swiped_user_id');
         $matchedIds = \App\Models\UserMatch::where('user_1_id', $user->id)
             ->orWhere('user_2_id', $user->id)
             ->get()
             ->flatMap(fn($m) => [$m->user_1_id, $m->user_2_id])
             ->filter(fn($id) => $id !== $user->id)
+            ->unique();
+        $blockedIds = \App\Models\UserBlock::where('blocker_id', $user->id)
+            ->pluck('blocked_user_id')
+            ->merge(\App\Models\UserBlock::where('blocked_user_id', $user->id)->pluck('blocker_id'))
+            ->filter()
             ->unique();
         $excludeIds = $swipedByMeIds->merge($matchedIds)->merge($blockedIds)->push(16)->unique();
 
@@ -322,15 +330,6 @@ class DiscoverController extends Controller
 
         if ($swiperId === $targetId) {
             return response()->json(['message' => 'Cannot swipe on yourself.'], 422);
-        }
-
-        // Compulsory Aadhaar Verification Check
-        if (!$swiper->is_verified) {
-            return response()->json([
-                'error'                 => 'VERIFICATION_REQUIRED',
-                'message'               => 'Aadhaar verification is compulsory for all users to connect and swipe. Please verify your profile to continue.',
-                'requires_verification' => true,
-            ], 403);
         }
 
         // 1. Reset Checks (Reset every day at 12:00 AM midnight, 30 days for superlikes)

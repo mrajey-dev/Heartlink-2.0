@@ -30,6 +30,8 @@ Route::get('/ping', function () {
 Route::prefix('v1')->group(function () {
     // App Version Check & Remote Config (Public)
     Route::get('/app/check-update', [AppUpdateController::class, 'checkUpdate']);
+    Route::get('/app/redirect-playstore', [AppUpdateController::class, 'redirectPlayStore']);
+    Route::post('/app/acknowledge-update', [AppUpdateController::class, 'acknowledgeUpdate']);
     Route::post('/app/broadcast-update', [AppUpdateController::class, 'broadcastUpdateNotification']);
 
     // Public Auth & Upload Routes
@@ -99,11 +101,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/date-bookings',       [DatePlannerController::class, 'createProposal']);
         Route::post('/date-bookings/respond', [DatePlannerController::class, 'respondProposal']);
 
-        // Subscriptions & Razorpay Payments
+        // Subscriptions & Payments (Google Play Billing & Legacy Razorpay)
         Route::get('/subscriptions/plans',             [SubscriptionController::class, 'getPlans']);
         Route::get('/subscriptions/verification-plan', [SubscriptionController::class, 'getVerificationPlan']);
         Route::post('/subscriptions/subscribe',        [SubscriptionController::class, 'subscribe']);
+        Route::post('/payment/verify-google-purchase', [SubscriptionController::class, 'verifyGooglePurchase']);
         Route::post('/payment/create-order',           [SubscriptionController::class, 'createRazorpayOrder']);
         Route::post('/payment/verify-payment',         [SubscriptionController::class, 'verifyRazorpayPayment']);
+        Route::post('/payment/notify-attempt',         [SubscriptionController::class, 'notifyPaymentAttempt']);
     });
 });

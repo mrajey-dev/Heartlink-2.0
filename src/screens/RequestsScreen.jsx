@@ -335,10 +335,6 @@ export default function RequestsScreen() {
   );
 
   const accept = async (id) => {
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
     setActionLoadingId(id);
     const targetItem = requests.find(r => r.id === id);
     const targetUserId = targetItem?.user_id || (typeof id === 'string' ? parseInt(id.replace(/[^0-9]/g, ''), 10) : id);
@@ -400,10 +396,6 @@ export default function RequestsScreen() {
 
   const openChatForProfile = (item) => {
     if (!item) return;
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
     const rawId = item.id;
     const targetUserId = item.user_id || (typeof rawId === 'string' ? rawId.replace('swipe_', '').replace('proposal_', '').replace('sent_swipe_', '') : rawId);
     navigation.navigate('ChatDetail', { userId: targetUserId });
@@ -428,10 +420,6 @@ export default function RequestsScreen() {
   };
 
   const acceptDateProposal = async (item) => {
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
     setActionLoadingId(item.id);
     setExpandedIds(prev => ({ ...prev, [item.id]: false }));
     setRequests(prev => sortRequestsList(prev.map(r => r.id === item.id ? { ...r, status: 'accepted' } : r)));
@@ -983,6 +971,18 @@ export default function RequestsScreen() {
           setSelectedProfile(null);
           unmatchAndRemove(p);
         } : (id) => decline(id)}
+        onBlockUser={(blockedUserId) => {
+          setRequests(prev => prev.filter(r => r.id !== blockedUserId && r.user_id !== blockedUserId && r.user?.id !== blockedUserId && r.from_user?.id !== blockedUserId));
+          setSentRequests(prev => prev.filter(r => r.id !== blockedUserId && r.user_id !== blockedUserId && r.user?.id !== blockedUserId && r.to_user?.id !== blockedUserId));
+          setDetailVisible(false);
+          setSelectedProfile(null);
+        }}
+        onReportUser={(reportedUserId) => {
+          setRequests(prev => prev.filter(r => r.id !== reportedUserId && r.user_id !== reportedUserId && r.user?.id !== reportedUserId && r.from_user?.id !== reportedUserId));
+          setSentRequests(prev => prev.filter(r => r.id !== reportedUserId && r.user_id !== reportedUserId && r.user?.id !== reportedUserId && r.to_user?.id !== reportedUserId));
+          setDetailVisible(false);
+          setSelectedProfile(null);
+        }}
         isMatch={selectedProfile?.status === 'accepted'}
       />
 

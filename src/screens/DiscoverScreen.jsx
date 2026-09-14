@@ -280,9 +280,6 @@ export default function DiscoverScreen() {
       setPhotoIdx(0);
       syncDailySwipeLimit();
       fetchFeed(true);
-      if (user?.id && !isVerifiedUser) {
-        setAadhaarModalVisible(true);
-      }
     });
 
     return () => {
@@ -403,29 +400,12 @@ export default function DiscoverScreen() {
     user?.isVerified === '1' ||
     user?.isVerified === 'true';
 
-  useEffect(() => {
-    let timer;
-    if (user?.id && !isVerifiedUser) {
-      timer = setTimeout(() => {
-        setAadhaarModalVisible(true);
-      }, 600);
-    }
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [user?.id, isVerifiedUser]);
-
   const [superlikeUpgradeModalVisible, setSuperlikeUpgradeModalVisible] = useState(false);
   const [superlikeModalMessage, setSuperlikeModalMessage] = useState('');
   const [isSuperlikeLoading, setIsSuperlikeLoading] = useState(false);
 
   const handleSparkPress = async () => {
     if (isAnimating || isSuperlikeLoading || !currentProfile) return;
-
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
 
     const currentP = currentProfile;
     setIsSuperlikeLoading(true);
@@ -689,13 +669,6 @@ export default function DiscoverScreen() {
 
     const currentP = currentProfile;
     if (!currentP || !currentP.id) return;
-
-    // Compulsory Aadhaar Verification Check
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
-      return;
-    }
 
     // 1. Check if user on free plan without active subscription has already reached 5 daily likes
     if (!hasActivePlan && (swipeType === 'like' || swipeType === 'pass') && swipedCount >= 5) {
@@ -1172,6 +1145,14 @@ export default function DiscoverScreen() {
             handleSparkPress();
           }}
           onPass={() => {
+            closeDetail();
+          }}
+          onBlockUser={(blockedUserId) => {
+            setDbProfiles(prev => prev.filter(p => p.id !== blockedUserId && p.user?.id !== blockedUserId));
+            closeDetail();
+          }}
+          onReportUser={(reportedUserId) => {
+            setDbProfiles(prev => prev.filter(p => p.id !== reportedUserId && p.user?.id !== reportedUserId));
             closeDetail();
           }}
           isMatch={false}

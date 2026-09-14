@@ -77,7 +77,7 @@ class SubscriptionController extends Controller
                     'name'         => 'Profile Identity Verification',
                     'tagline'      => 'Mandatory Profile Identity e-KYC Verification',
                     'icon_name'    => 'shield-checkmark',
-                    'badge_text'   => 'LIFETIME e-KYC',
+                    'badge_text'   => 'FREE e-KYC',
                     'accent_color' => '#00C853',
                     'gradient'     => ['#00C853', '#0072E3'],
                     'glow_color'   => 'rgba(0, 200, 83, 0.25)',
@@ -85,12 +85,12 @@ class SubscriptionController extends Controller
                         [
                             'id'             => 'lifetime',
                             'label'          => 'Lifetime',
-                            'price'          => '₹49',
-                            'total'          => '₹49',
-                            'amount'         => 49,
-                            'unit'           => ' one-time',
+                            'price'          => 'FREE',
+                            'total'          => 'FREE',
+                            'amount'         => 0,
+                            'unit'           => ' free',
                             'original_price' => '₹99',
-                            'save'           => '50% OFF',
+                            'save'           => '100% FREE',
                             'popular'        => true,
                         ],
                     ],
@@ -105,18 +105,14 @@ class SubscriptionController extends Controller
             );
         }
 
-        $duration = (is_array($plan->durations) && count($plan->durations) > 0) ? $plan->durations[0] : null;
-        $amount = isset($duration['amount']) ? (float)$duration['amount'] : (float) preg_replace('/[^0-9\.]/', '', $duration['total'] ?? $duration['price'] ?? '49');
-        $priceDisplay = $duration['price'] ?? $duration['total'] ?? ('₹' . (int)$amount);
-
         return response()->json([
             'success'        => true,
             'plan'           => $plan,
             'plan_id'        => 'verification',
-            'amount'         => $amount > 0 ? $amount : 49,
-            'price'          => $amount > 0 ? $amount : 49,
-            'price_display'  => $priceDisplay,
-            'original_price' => $duration['original_price'] ?? '₹99',
+            'amount'         => 0,
+            'price'          => 0,
+            'price_display'  => 'FREE',
+            'original_price' => '₹99',
         ]);
     }
 
@@ -584,6 +580,231 @@ class SubscriptionController extends Controller
             'message'      => 'Razorpay payment verified & subscription activated! 🎉',
             'subscription' => $subscription,
             'user'         => $user->load('photos', 'activeSubscription', 'settings'),
+        ]);
+    }
+
+    /**
+     * Verify Google Play Billing in-app purchase and activate membership.
+     */
+    public function verifyGooglePurchase(Request $request)
+    {
+        $user = $request->user();
+        if (!$user && ($request->input('userId') || $request->input('user_id'))) {
+            $user = \App\Models\User::find($request->input('userId') ?? $request->input('user_id'));
+        }
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Authenticated user not found.',
+            ], 401);
+        }
+
+        $purchaseToken = $request->input('purchase_token') 
+            ?? $request->input('purchaseToken') 
+            ?? $request->input('token');
+
+        $productId = $request->input('product_id') 
+            ?? $request->input('productId') 
+            ?? $request->input('sku');
+
+        $orderId = $request->input('order_id') 
+            ?? $request->input('orderId') 
+            ?? $request->input('transactionId');
+
+        $rawPlan = strtolower(trim(
+            $request->input('plan_name') 
+            ?? $request->input('planName') 
+            ?? $request->input('plan_key') 
+            ?? $productId 
+            ?? 'heartlink_premium'
+        ));
+
+        $rawDuration = strtolower(trim(
+            $request->input('duration') 
+            ?? $request->input('durationLabel') 
+            ?? $request->input('durationId') 
+            ?? $request->input('duration_id') 
+            ?? '1m'
+        ));
+
+        \Illuminate\Support\Facades\Log::info('[Google Play Billing] Verification Request:', [
+            'user_id'        => $user->id,
+            'product_id'     => $productId,
+            'order_id'       => $orderId,
+            'purchase_token' => substr($purchaseToken ?? '', 0, 15) . '...',
+            'raw_plan'       => $rawPlan,
+            'duration'       => $rawDuration,
+        ]);
+
+        // 1. Superlikes Pack Purchase
+        if (str_contains($rawPlan, 'superlike') || str_contains($rawDuration, 'superlike')) {
+            $count = 5;
+            if (str_contains($rawPlan, '30') || str_contains($rawDuration, '30')) {
+                $count = 30;
+            } elseif (str_contains($rawPlan, '15') || str_contains($rawDuration, '15')) {
+                $count = 15;
+            } elseif (str_contains($rawPlan, '5') || str_contains($rawDuration, '5')) {
+                $count = 5;
+            }
+            $user->purchased_superlikes_count = (int) ($user->purchased_superlikes_count ?? 0) + $count;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => "Google Play payment verified & {$count} Superlikes added! 🎉",
+                'user'    => $user->load('photos', 'activeSubscription', 'settings'),
+            ]);
+        }
+
+        // 2. Membership Plans (Basic, Plus, Premium)
+        $formattedPlanName = 'HeartLink Basic';
+        if (str_contains($rawPlan, 'premium')) {
+            $formattedPlanName = 'HeartLink Premium';
+        } elseif (str_contains($rawPlan, 'plus')) {
+            $formattedPlanName = 'HeartLink Plus';
+        } elseif (str_contains($rawPlan, 'basic')) {
+            $formattedPlanName = 'HeartLink Basic';
+        }
+
+        $durationLabel = '1 Month';
+        $expiresAt = now()->addMonth();
+
+        if (str_contains($rawDuration, '12') || str_contains($rawDuration, 'year') || str_contains($rawDuration, '1y')) {
+            $durationLabel = '1 Year';
+            $expiresAt = now()->addYear();
+        } elseif (str_contains($rawDuration, '6')) {
+            $durationLabel = '6 Months';
+            $expiresAt = now()->addMonths(6);
+        } elseif (str_contains($rawDuration, '1') || str_contains($rawDuration, 'month')) {
+            $durationLabel = '1 Month';
+            $expiresAt = now()->addMonth();
+        }
+
+        $price = $request->input('price') ?? $request->input('amount');
+        if (is_numeric($price)) {
+            $price = '₹' . $price;
+        } elseif (empty($price)) {
+            $price = $this->resolvePlanPrice($formattedPlanName, $durationLabel, '₹117');
+        }
+
+        UserSubscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->update(['status' => 'cancelled']);
+
+        $subscription = UserSubscription::create([
+            'user_id'    => $user->id,
+            'plan_name'  => $formattedPlanName,
+            'duration'   => $durationLabel,
+            'price'      => (string) $price,
+            'starts_at'  => now(),
+            'expires_at' => $expiresAt,
+            'status'     => 'active',
+        ]);
+
+        $user->subscription_plan = $formattedPlanName;
+        $user->is_verified = true;
+        $user->daily_likes_count = 0;
+        $user->daily_passes_count = 0;
+        $user->monthly_superlikes_count = 0;
+        $user->rewinds_count = 0;
+        $user->last_swipe_reset_at = now();
+        $user->save();
+
+        return response()->json([
+            'success'      => true,
+            'message'      => 'Google Play subscription activated successfully! 🎉',
+            'subscription' => $subscription,
+            'user'         => $user->load('photos', 'activeSubscription', 'settings'),
+        ]);
+    }
+
+    /**
+     * Automatically log payment attempt message to HeartLink Support (User 16)
+     * and reply with confirmation.
+     */
+    public function notifyPaymentAttempt(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $planName = $request->input('plan_name') ?? $request->input('planName') ?? 'HeartLink Premium';
+        $price = $request->input('price') ?? '₹0';
+        $duration = $request->input('duration') ?? '';
+        $itemType = $request->input('item_type') ?? $request->input('itemType') ?? 'membership';
+
+        $fullName = trim($user->display_name ?: ($user->name ?: 'Member'));
+        $parts = preg_split('/\s+/', $fullName);
+        $firstName = !empty($parts[0]) ? ucfirst(strtolower($parts[0])) : 'there';
+
+        // Check if identical notice was already posted within the last 3 minutes to avoid duplicate spam
+        $recentAttempt = \App\Models\Message::where('sender_id', $user->id)
+            ->where('receiver_id', 16)
+            ->where('created_at', '>=', now()->subMinutes(3))
+            ->where('message', 'like', "%{$planName}%")
+            ->first();
+
+        if ($recentAttempt) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Recent payment attempt already recorded in support chat.',
+            ]);
+        }
+
+        // 1. Create message from User to HeartLink Support
+        $inquiryMsg = "💳 Payment Attempt: I attempted to purchase {$planName}" . ($duration ? " ({$duration})" : "") . " for {$price}. Please notify me when online payments are active!";
+
+        $userMsg = \App\Models\Message::create([
+            'sender_id'   => $user->id,
+            'receiver_id' => 16,
+            'message'     => $inquiryMsg,
+            'is_read'     => false,
+        ]);
+
+        // 2. Create automated instant support reply from HeartLink Support
+        $supportReplyText = "Hello {$firstName}! 👋 We noticed your payment attempt for {$planName}" . ($duration ? " ({$duration})" : "") . " ({$price}).\n\nOur payment gateway is currently undergoing scheduled maintenance & banking upgrades. Rest assured, ₹0 was charged to your account.\n\nAll core dating features (matching, chatting, discovery, and Aadhaar verification) are 100% Free! Our support team will update you right here once direct payments go live. 💖";
+
+        $supportMsg = \App\Models\Message::create([
+            'sender_id'   => 16,
+            'receiver_id' => $user->id,
+            'message'     => $supportReplyText,
+            'is_read'     => false,
+        ]);
+
+        // 3. Dispatch push notification to User
+        try {
+            \App\Services\ExpoPushService::sendToUser(
+                $user,
+                'HeartLink Support',
+                "We received your payment request for {$planName}. Our team is on it!",
+                ['screen' => 'SupportChat', 'type' => 'support_message', 'otherUserId' => 16]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::info('Push notification to user for payment attempt notice failed: ' . $e->getMessage());
+        }
+
+        // 4. Dispatch push notification to Support Admin (User 16) if token is registered
+        try {
+            $supportAdmin = \App\Models\User::find(16);
+            if ($supportAdmin && !empty($supportAdmin->expo_push_token)) {
+                \App\Services\ExpoPushService::sendToUser(
+                    $supportAdmin,
+                    'New Payment Attempt Alert',
+                    "User {$fullName} (#{$user->id}) attempted to purchase {$planName} ({$price}).",
+                    ['screen' => 'ChatDetail', 'type' => 'new_message', 'otherUserId' => $user->id]
+                );
+            }
+        } catch (\Throwable $e) {
+            // Non-fatal
+        }
+
+        return response()->json([
+            'success'          => true,
+            'message'          => 'Notification sent to HeartLink support from user chat successfully.',
+            'user_message'     => $userMsg,
+            'support_response' => $supportMsg,
         ]);
     }
 

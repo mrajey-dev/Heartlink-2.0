@@ -19,6 +19,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PaymentGatewayModal from './PaymentGatewayModal';
+import { apiVerifyGooglePurchase } from '../services/api';
+import { requestProductPurchase, finishPurchaseTransaction } from '../services/iapService';
 
 const { width } = Dimensions.get('window');
 
@@ -88,8 +90,46 @@ export default function SuperlikeUpgradeModal({
     ],
   };
 
-  const handleBuySuperlikes = () => {
-    setPaymentModalVisible(true);
+  const [isBuying, setIsBuying] = useState(false);
+
+  const handleBuySuperlikes = async () => {
+    if (Platform.OS === 'web') {
+      setPaymentModalVisible(true);
+      return;
+    }
+
+    setIsBuying(true);
+    try {
+      const sku = `superlike_pack_${selectedPack.count}`;
+      const purchaseResult = await requestProductPurchase(sku);
+      const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
+
+      if (purchaseItem) {
+        const verifyRes = await apiVerifyGooglePurchase({
+          purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
+          product_id: purchaseItem.productId || sku,
+          order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
+          plan_name: `${selectedPack.count} Superlikes Pack`,
+          duration: `${selectedPack.count} Superlikes`,
+          price: selectedPack.price,
+        });
+
+        await finishPurchaseTransaction(purchaseItem, true);
+
+        if (verifyRes?.user) {
+          await updateUser(verifyRes.user);
+        }
+
+        handlePaymentSuccess(verifyRes?.user);
+      }
+    } catch (err) {
+      console.warn('[IAP] Superlikes purchase error / cancellation:', err?.message || err);
+      if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        setPaymentModalVisible(true);
+      }
+    } finally {
+      setIsBuying(false);
+    }
   };
 
   const handlePaymentSuccess = (updatedUser) => {
@@ -292,6 +332,14 @@ export default function SuperlikeUpgradeModal({
                       <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>Instant Priority Alert:</Text> Notifies them right away before they browse
                     </Text>
                   </View>
+                </View>
+
+                {/* Maintenance Notice */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255, 149, 0, 0.12)' : 'rgba(255, 149, 0, 0.1)', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255, 149, 0, 0.25)' }}>
+                  <Ionicons name="construct" size={13} color="#FF9500" style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 11, color: isDark ? '#FBBF24' : '#D97706', fontWeight: '700' }}>
+                    Payment Gateway Under Maintenance
+                  </Text>
                 </View>
 
                 {/* Big Golden Action CTA Button */}

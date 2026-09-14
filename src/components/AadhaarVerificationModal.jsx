@@ -1,15 +1,13 @@
-// src/components/AadhaarVerificationModal.jsx — In-App Aadhaar OTP Verification & Profile Identity Modal
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput,
-  ActivityIndicator, ScrollView, Alert, Linking, NativeModules, Platform
+  ActivityIndicator, ScrollView, Alert, Platform
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
-import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiCreateRazorpayOrder, apiVerifyRazorpayPayment, apiGetVerificationPlan } from '../services/api';
-import { openRazorpayCheckout } from '../utils/razorpayService';
+import { apiSendAadhaarOtp, apiVerifyAadhaarOtp } from '../services/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
@@ -24,12 +22,9 @@ export default function AadhaarVerificationModal({
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
 
-  // Steps: 'alert' (or 'verify') -> 'payment' -> 'aadhaar' -> 'success'
-  const [step, setStep] = useState(initialStep);
-  const [paying, setPaying] = useState(false);
+  // Steps: 'alert' (or 'verify') -> 'aadhaar' -> 'success'
+  const [step, setStep] = useState(initialStep === 'verify' ? 'alert' : initialStep);
   const [verifying, setVerifying] = useState(false);
-  const [planData, setPlanData] = useState(null);
-  const [loadingPlan, setLoadingPlan] = useState(false);
 
   // Aadhaar Form State
   const [aadhaarNumber, setAadhaarNumber] = useState('');
@@ -39,11 +34,11 @@ export default function AadhaarVerificationModal({
   const [otpSending, setOtpSending] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const lastSentAadhaarRef = useRef('');
 
   useEffect(() => {
     if (visible) {
       setStep(initialStep === 'verify' ? 'alert' : initialStep);
-      setPaying(false);
       setVerifying(false);
       setAadhaarNumber('');
       setOtp('');
@@ -52,143 +47,20 @@ export default function AadhaarVerificationModal({
       setOtpSending(false);
       setErrorMessage('');
       setSuccessMessage('');
-
-      // Fetch dynamic verification plan and price from database
-      const fetchVerificationPlan = async () => {
-        try {
-          setLoadingPlan(true);
-          const res = await apiGetVerificationPlan();
-          if (res?.success && (res?.plan || res?.amount)) {
-            setPlanData(res);
-          }
-        } catch (e) {
-          console.warn('[AadhaarModal] Failed to fetch verification plan:', e);
-        } finally {
-          setLoadingPlan(false);
-        }
-      };
-      fetchVerificationPlan();
+      lastSentAadhaarRef.current = '';
     }
   }, [visible, initialStep]);
 
-  // Dynamic price attributes derived from database plan
-  const durationObj = planData?.plan?.durations?.[0] || {};
-  const currentAmount = planData?.amount || planData?.price || durationObj.amount || (durationObj.total ? parseInt(durationObj.total.replace(/[^0-9]/g, ''), 10) : 49) || 49;
-  const currentPriceDisplay = planData?.price_display || durationObj.price || durationObj.total || `₹${currentAmount}`;
-  const currentOriginalPrice = planData?.original_price || durationObj.original_price || '₹99';
-
   if (!visible) return null;
 
-  const handleStartPayment = async () => {
-    setPaying(true);
-    setStep('payment');
-    try {
-      // Create Razorpay Order
-      const orderData = {
-        amount: currentAmount,
-        currency: 'INR',
-        planId: 'verification',
-        planName: planData?.plan?.name || 'Profile Identity Verification',
-        durationId: 'lifetime',
-        durationLabel: 'Lifetime',
-        userId: user?.id,
-        userEmail: user?.email,
-        userPhone: user?.phone,
-        userName: user?.name,
-        purpose: 'verification',
-      };
-
-      const orderResponse = await apiCreateRazorpayOrder(orderData);
-
-      const responseOrderId = orderResponse?.orderId || orderResponse?.order_id;
-      if (!responseOrderId) {
-        throw new Error(orderResponse?.message || 'No order ID received from server');
-      }
-
-      const razorpayKeyId = orderResponse?.key_id || orderResponse?.keyId || 'rzp_live_SsJLwM19hIvB6A';
-
-      const prefill = {};
-      if (user?.email) prefill.email = user.email.trim();
-      if (user?.phone) prefill.contact = user.phone.replace(/[^0-9+]/g, '');
-      if (user?.name) prefill.name = user.name.trim();
-
-      const razorpayOptions = {
-        description: 'Profile Identity Verification',
-        currency: 'INR',
-        key: razorpayKeyId,
-        amount: orderResponse?.amount ? orderResponse.amount : Math.round(currentAmount * 100), // paise
-        name: 'HeartLink',
-        order_id: responseOrderId,
-        prefill,
-        theme: {
-          color: '#00C853',
-        },
-        modal: {
-          backdrop: true,
-        }
-      };
-
-      openRazorpayCheckout(razorpayOptions)
-        .then(async (data) => {
-          try {
-            const verificationData = {
-              orderId: responseOrderId,
-              paymentId: data.razorpay_payment_id,
-              signature: data.razorpay_signature,
-              planId: 'verification',
-              durationId: 'lifetime',
-              purpose: 'verification',
-              userId: user?.id
-            };
-
-            const verifyRes = await apiVerifyRazorpayPayment(verificationData);
-            if (verifyRes?.success) {
-              setPaying(false);
-              setStep('aadhaar'); // Payment successful, proceed to aadhaar verification
-            } else {
-              setPaying(false);
-              setStep('alert');
-              Alert.alert('Payment Verification Failed', 'We could not verify your payment. Please contact support.');
-            }
-          } catch (verifyError) {
-            setPaying(false);
-            setStep('alert');
-            Alert.alert('Payment Verification Failed', verifyError.message || 'Unknown error');
-          }
-        })
-        .catch((error) => {
-          if (error.code === 'PAYMENT_CANCELED') {
-            setPaying(false);
-            setStep('alert');
-            return;
-          }
-
-          if (orderResponse?.checkout_url && Platform.OS !== 'web') {
-            console.log('[Payment] Falling back to checkout URL on native...');
-            Linking.openURL(orderResponse.checkout_url).catch(() => { });
-            setPaying(false);
-            setStep('awaiting_payment');
-            return;
-          }
-
-          setPaying(false);
-          setStep('alert');
-          Alert.alert('Payment Failed', error.description || error.message || 'An error occurred during payment processing.');
-        });
-
-    } catch (error) {
-      setPaying(false);
-      setStep('alert');
-      Alert.alert('Payment Error', error.message || 'Failed to initiate payment. Please try again.');
-    }
-  };
-
-  const handleSendOtp = async () => {
-    const cleaned = aadhaarNumber.replace(/\s+/g, '');
+  const handleSendOtp = async (customAadhaar) => {
+    const targetAadhaar = customAadhaar || aadhaarNumber;
+    const cleaned = (targetAadhaar || '').replace(/[^0-9]/g, '');
     if (cleaned.length !== 12) {
       setErrorMessage('Please enter a valid 12-digit Aadhaar number.');
       return;
     }
+    lastSentAadhaarRef.current = cleaned;
     setErrorMessage('');
     setOtpSending(true);
     try {
@@ -197,6 +69,9 @@ export default function AadhaarVerificationModal({
         setRefId(String(res.ref_id));
       }
       setOtpSent(true);
+      if (res?.otp) {
+        setOtp(String(res.otp));
+      }
     } catch (err) {
       console.warn('Aadhaar OTP send error:', err);
       const errMsg = err?.message || err?.response?.data?.message || 'Could not send OTP. Please check your Aadhaar number and try again.';
@@ -208,7 +83,7 @@ export default function AadhaarVerificationModal({
 
   const handleCompleteVerification = async () => {
     if (!otpSent) {
-      setErrorMessage('Please enter your 12-digit Aadhaar number and click "Send OTP" first.');
+      setErrorMessage('Please enter your 12-digit Aadhaar number first.');
       return;
     }
     if (!otp || otp.trim().length < 4) {
@@ -219,7 +94,7 @@ export default function AadhaarVerificationModal({
     setErrorMessage('');
     setVerifying(true);
     try {
-      const cleaned = aadhaarNumber.replace(/\s+/g, '');
+      const cleaned = aadhaarNumber.replace(/[^0-9]/g, '');
       const res = await apiVerifyAadhaarOtp(otp.trim(), refId ? String(refId) : '', cleaned);
       let updatedUser = {
         is_verified: true,
@@ -241,7 +116,7 @@ export default function AadhaarVerificationModal({
     }
   };
 
-  // Format Aadhaar number with spaces (XXXX XXXX XXXX) for display
+  // Format Aadhaar number with spaces (XXXX XXXX XXXX) and auto-send OTP on 12th digit
   const handleAadhaarChange = (text) => {
     const raw = text.replace(/[^0-9]/g, '').slice(0, 12);
     let formatted = raw;
@@ -251,6 +126,11 @@ export default function AadhaarVerificationModal({
       formatted = `${raw.slice(0, 4)} ${raw.slice(4, 8)} ${raw.slice(8)}`;
     }
     setAadhaarNumber(formatted);
+    setErrorMessage('');
+
+    if (raw.length === 12 && lastSentAadhaarRef.current !== raw && !otpSending) {
+      handleSendOtp(raw);
+    }
   };
 
   const isInitialPitchStep = step === 'alert' || step === 'verify';
@@ -369,20 +249,21 @@ export default function AadhaarVerificationModal({
 
               </View>
 
-              {/* ─── Official Verification Processing Notice ──────────────────── */}
+              {/* ─── Official Free Verification Notice ──────────────────── */}
               <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>{currentPriceDisplay}</Text>
-                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • One-Time e-KYC Fee</Text>
+                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>FREE</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14), fontWeight: '700' }}>₹99</Text>
+                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • 100% Free e-KYC</Text>
                   </View>
                   <Text style={[styles.offerDesc, { color: theme.textSec }]}>
-                    Official one-time Aadhaar identity verification and background validation.
+                    Official one-time Aadhaar identity verification at zero in-app cost.
                   </Text>
                 </View>
                 <View style={[styles.valueTag, { backgroundColor: '#00C853' }]}>
                   <Ionicons name="shield-checkmark" size={13} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.valueTagTxt}>UIDAI VERIFIED</Text>
+                  <Text style={styles.valueTagTxt}>100% FREE</Text>
                 </View>
               </View>
 
@@ -390,7 +271,7 @@ export default function AadhaarVerificationModal({
               <View style={styles.btnStack}>
                 <TouchableOpacity
                   style={styles.ctaActionBtn}
-                  onPress={handleStartPayment}
+                  onPress={() => setStep('aadhaar')}
                   activeOpacity={0.88}
                 >
                   <LinearGradient
@@ -400,7 +281,7 @@ export default function AadhaarVerificationModal({
                     style={styles.gradCtaBtn}
                   >
                     <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.gradCtaBtnTxt}>Proceed to Aadhaar e-KYC ({currentPriceDisplay})</Text>
+                    <Text style={styles.gradCtaBtnTxt}>Start Free Aadhaar Verification</Text>
                   </LinearGradient>
                 </TouchableOpacity>
 
@@ -421,57 +302,6 @@ export default function AadhaarVerificationModal({
               </View>
 
             </ScrollView>
-
-          ) : step === 'payment' ? (
-            // ─── STEP 2: Payment Processing Simulation ──────────────────────
-            <View style={styles.contentWrap}>
-              <View style={[styles.iconCircle, { borderColor: '#3897F0', backgroundColor: 'rgba(56, 151, 240, 0.12)' }]}>
-                <ActivityIndicator size="large" color="#3897F0" />
-              </View>
-
-              <Text style={[styles.title, { color: theme.textPrimary }]}>
-                Processing {currentPriceDisplay} Payment 💳
-              </Text>
-
-              <Text style={[styles.message, { color: theme.textSec }]}>
-                Payment of {currentPriceDisplay} successful! Opening secure Aadhaar OTP verification...
-              </Text>
-            </View>
-
-          ) : step === 'awaiting_payment' ? (
-            // ─── STEP 2.5: Web Fallback Payment Verification ──────────────────────
-            <View style={styles.contentWrap}>
-              <View style={[styles.iconCircle, { borderColor: '#FF9500', backgroundColor: 'rgba(255, 149, 0, 0.12)' }]}>
-                <Ionicons name="time" size={32} color="#FF9500" />
-              </View>
-
-              <Text style={[styles.title, { color: theme.textPrimary }]}>
-                Awaiting Payment ⏳
-              </Text>
-
-              <Text style={[styles.message, { color: theme.textSec }]}>
-                Please complete your {currentPriceDisplay} payment in the secure browser window that opened. Once successful, return here and click the button below.
-              </Text>
-
-              <TouchableOpacity
-                style={[styles.ctaActionBtn, { width: '100%' }]}
-                onPress={() => setStep('aadhaar')}
-                activeOpacity={0.88}
-              >
-                <LinearGradient colors={['#FF9500', '#FF2D55']} style={styles.gradCtaBtn}>
-                  <Ionicons name="checkmark-done" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.gradCtaBtnTxt}>I've Paid - Continue to Aadhaar</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.cancelBtn, { marginTop: 12, width: '100%', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }]}
-                onPress={() => setStep('alert')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.cancelBtnTxt, { color: theme.textSec }]}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
 
           ) : step === 'success' ? (
             // ─── STEP 4: Custom Verification Success Screen ──────────────────
@@ -590,7 +420,7 @@ export default function AadhaarVerificationModal({
                   />
                   <TouchableOpacity
                     style={styles.sendOtpBtn}
-                    onPress={handleSendOtp}
+                    onPress={() => handleSendOtp()}
                     disabled={otpSending}
                     activeOpacity={0.8}
                   >
@@ -609,7 +439,9 @@ export default function AadhaarVerificationModal({
                   <View style={styles.otpSection}>
                     <View style={styles.otpStatusBox}>
                       <Ionicons name="checkmark-circle" size={16} color="#00C853" style={{ marginRight: 6 }} />
-                      <Text style={styles.otpStatusTxt}>OTP sent to Aadhaar linked mobile number</Text>
+                      <Text style={styles.otpStatusTxt}>
+                        {user?.phone ? `OTP sent to ${user.phone}` : 'OTP sent to registered mobile number'}
+                      </Text>
                     </View>
 
                     <Text style={[styles.inputLabel, { color: theme.textPrimary, marginTop: 12 }]}>

@@ -158,10 +158,6 @@ export default function MatchesScreen() {
   };
 
   const startChat = (id, targetUser) => {
-    if (!isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
     const u = targetUser || matches.find(m => m.id === id)?.user || matches.find(m => m.id === id);
     navigation.navigate('ChatDetail', { userId: id, user: u });
   };
@@ -317,6 +313,16 @@ export default function MatchesScreen() {
         }}
         onLike={(prof) => startChat(prof?.id || selectedProfile?.id, prof?.user || selectedProfile?.user || prof || selectedProfile)}
         onPass={unmatch}
+        onBlockUser={(blockedUserId) => {
+          setMatches(prev => prev.filter(m => m.id !== blockedUserId && m.user?.id !== blockedUserId));
+          setDetailVisible(false);
+          setSelectedProfile(null);
+        }}
+        onReportUser={(reportedUserId) => {
+          setMatches(prev => prev.filter(m => m.id !== reportedUserId && m.user?.id !== reportedUserId));
+          setDetailVisible(false);
+          setSelectedProfile(null);
+        }}
       />
 
       <AadhaarVerificationModal

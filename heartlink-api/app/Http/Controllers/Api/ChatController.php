@@ -327,15 +327,6 @@ class ChatController extends Controller
 
         // If regular user chatting with another regular user, verify active match
         if ((int) $senderId !== 16 && (int) $receiverId !== 16) {
-            // Compulsory Aadhaar Verification Check
-            if (!$user->is_verified) {
-                return response()->json([
-                    'error'                 => 'VERIFICATION_REQUIRED',
-                    'message'               => 'Aadhaar verification is compulsory for all users to send messages. Please verify your profile to continue.',
-                    'requires_verification' => true,
-                ], 403);
-            }
-
             $isMatched = UserMatch::where(function ($q) use ($senderId, $receiverId) {
                 $q->where('user_1_id', $senderId)->where('user_2_id', $receiverId);
             })->orWhere(function ($q) use ($senderId, $receiverId) {
@@ -652,6 +643,13 @@ class ChatController extends Controller
             $q->where('swiper_id', $blockedUserId)->where('swiped_user_id', $blockerId);
         })->delete();
 
+        // Delete any date proposals / bookings between blocker and blocked user
+        \App\Models\DateBooking::where(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('proposer_id', $blockerId)->where('partner_id', $blockedUserId);
+        })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
+            $q->where('proposer_id', $blockedUserId)->where('partner_id', $blockerId);
+        })->delete();
+
         // Mark all messages and notifications between blocker and blocked user as read
         Message::where(function ($q) use ($blockerId, $blockedUserId) {
             $q->where('sender_id', $blockerId)->where('receiver_id', $blockedUserId);
@@ -663,10 +661,10 @@ class ChatController extends Controller
             $q->where('user_id', $blockerId)->where('from_user_id', $blockedUserId);
         })->orWhere(function ($q) use ($blockerId, $blockedUserId) {
             $q->where('user_id', $blockedUserId)->where('from_user_id', $blockerId);
-        })->update(['is_read' => true]);
+        })->delete();
 
         return response()->json([
-            'message' => 'User blocked and unmatched successfully',
+            'message' => 'User blocked, hidden, and unmatched successfully',
             'block'   => $block,
         ]);
     }

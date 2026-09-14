@@ -433,6 +433,33 @@ export const apiVerifyRazorpayPayment = async (data) => {
   }
 };
 
+export const apiVerifyGooglePurchase = async (data) => {
+  try {
+    console.log('[Google Billing] Verifying purchase with data:', data);
+    const response = await apiFetch('/payment/verify-google-purchase', {
+      method: 'POST',
+      body: data,
+    });
+    console.log('[Google Billing] Verification response:', response);
+    return response;
+  } catch (error) {
+    console.error('[Google Billing] Verify purchase error:', error);
+    throw error;
+  }
+};
+
+export const apiNotifyPaymentAttempt = async (data) => {
+  try {
+    return await apiFetch('/payment/notify-attempt', {
+      method: 'POST',
+      body: data,
+    });
+  } catch (error) {
+    console.warn('[Payment] Notify attempt error (non-fatal):', error?.message);
+    return null;
+  }
+};
+
 // ─── App Version & Compulsory Update Check ───────────────────────────
 export const apiCheckAppUpdate = async ({ platform = 'android', versionCode = 0, versionName = '' } = {}) => {
   try {
@@ -447,4 +474,7 @@ export const apiCheckAppUpdate = async ({ platform = 'android', versionCode = 0,
     return null;
   }
 };
+
+
+
 

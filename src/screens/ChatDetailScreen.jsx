@@ -1036,11 +1036,6 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    if (!isSupportChat && !isCurrentUserSupport && !isVerifiedUser) {
-      setAadhaarModalVisible(true);
-      return;
-    }
-
     if (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
       triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
       return;
@@ -1863,6 +1858,13 @@ export default function ChatDetailScreen() {
         onPass={() => {
           setShowProfileModal(false);
           setShowBlockModal(true);
+        }}
+        onBlockUser={() => {
+          setShowProfileModal(false);
+          navigation.goBack();
+        }}
+        onReportUser={() => {
+          setShowProfileModal(false);
         }}
       />
 
