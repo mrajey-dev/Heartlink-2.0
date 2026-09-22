@@ -17,9 +17,97 @@ import {
   initializeIAP,
   setupPurchaseListeners,
   purchaseSubscriptionPlan,
+  getAvailableSubscriptions,
   finishPurchaseTransaction,
   endIAPConnection,
+  resolveSubscriptionSku,
 } from '../services/iapService';
+
+export const DEFAULT_SUBSCRIPTION_PLANS = [
+  {
+    id: 1,
+    plan_key: 'basic',
+    name: 'HeartLink Basic',
+    tagline: 'Essential Match & Profile Tools',
+    icon_name: 'flash-outline',
+    badge_text: 'BASIC PLAN',
+    accent_color: '#06B6D4',
+    accentColor: '#06B6D4',
+    gradient: ['#06B6D4', '#3B82F6'],
+    glow_color: 'rgba(6, 182, 212, 0.22)',
+    glowColor: 'rgba(6, 182, 212, 0.22)',
+    durations: [
+      { id: '1m', label: '1 Month', price: '₹29.2', unit: '/wk', total: '₹117', save: 'STANDARD' },
+      { id: '6m', label: '6 Months', price: '₹25', unit: '/wk', total: '₹600', save: '15% OFF', popular: true },
+      { id: '12m', label: '1 Year', price: '₹18', unit: '/wk', total: '₹864', save: '38% OFF' },
+    ],
+    features: [
+      { icon: 'heart-outline', title: '10 Profile Likes Daily (24h Reset)' },
+      { icon: 'close-outline', title: '20 Profile Passes Daily (24h Reset)' },
+      { icon: 'reload-outline', title: 'Recheck Up to 3 Passed Profiles' },
+      { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
+      { icon: 'mail-unread-outline', title: 'Unlimited Incoming Match Requests' },
+      { icon: 'rocket-outline', title: '3 Profile Priority Boosts per Month' },
+      { icon: 'options-outline', title: 'Access to Preference Filters in Discover' },
+    ],
+  },
+  {
+    id: 2,
+    plan_key: 'plus',
+    name: 'HeartLink Plus',
+    tagline: 'Expanded Reach & Superlikes',
+    icon_name: 'star-outline',
+    badge_text: 'MOST POPULAR',
+    accent_color: '#A855F7',
+    accentColor: '#A855F7',
+    gradient: ['#A855F7', '#7C3AED'],
+    glow_color: 'rgba(168, 85, 247, 0.28)',
+    glowColor: 'rgba(168, 85, 247, 0.28)',
+    durations: [
+      { id: '1m', label: '1 Month', price: '₹53.5', unit: '/wk', total: '₹214', save: 'FLEX' },
+      { id: '6m', label: '6 Months', price: '₹49', unit: '/wk', total: '₹1,176', save: '8% OFF', popular: true },
+      { id: '12m', label: '1 Year', price: '₹43', unit: '/wk', total: '₹2,064', save: '20% OFF' },
+    ],
+    features: [
+      { icon: 'heart-outline', title: '20 Profile Likes Daily (24h Reset)' },
+      { icon: 'close-outline', title: '30 Profile Passes Daily (24h Reset)' },
+      { icon: 'reload-outline', title: 'Recheck Up to 10 Passed Profiles' },
+      { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
+      { icon: 'flash-outline', title: '5 Superlikes per Month' },
+      { icon: 'mail-unread-outline', title: 'Unlimited Incoming Match Requests' },
+      { icon: 'rocket-outline', title: '5 Profile Priority Boosts per Month' },
+      { icon: 'options-outline', title: 'Access to Preference Filters in Discover' },
+    ],
+  },
+  {
+    id: 3,
+    plan_key: 'premium',
+    name: 'HeartLink Premium',
+    tagline: 'Unlimited Swipes, Golden Tick & Daily Boost',
+    icon_name: 'sparkles-outline',
+    badge_text: 'ULTIMATE PREMIUM',
+    accent_color: '#F59E0B',
+    accentColor: '#F59E0B',
+    gradient: ['#FBBF24', '#F59E0B', '#D97706'],
+    glow_color: 'rgba(245, 158, 11, 0.32)',
+    glowColor: 'rgba(245, 158, 11, 0.32)',
+    durations: [
+      { id: '1m', label: '1 Month', price: '₹99', unit: '/wk', total: '₹396', save: 'ULTIMATE' },
+      { id: '6m', label: '6 Months', price: '₹83', unit: '/wk', total: '₹1,992', save: '16% OFF', popular: true },
+      { id: '12m', label: '1 Year', price: '₹70', unit: '/wk', total: '₹3,360', save: '29% OFF' },
+    ],
+    features: [
+      { icon: 'infinite-outline', title: 'Unlimited Daily Likes & Passes' },
+      { icon: 'reload-outline', title: 'Recheck Unlimited Passed Profiles' },
+      { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
+      { icon: 'checkmark-circle-outline', title: 'Special Golden Tick Badge on Profile' },
+      { icon: 'flash-outline', title: '15 Superlikes per Month' },
+      { icon: 'rocket-outline', title: 'Daily Top Feed Profile Priority Boost' },
+      { icon: 'mail-unread-outline', title: 'Unlimited Incoming Match Requests' },
+      { icon: 'options-outline', title: 'Access to Preference Filters in Discover' },
+    ],
+  },
+];
 
 export default function PlansScreen() {
   const navigation = useNavigation();
@@ -40,10 +128,14 @@ export default function PlansScreen() {
   const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
 
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [plans, setPlans] = useState(DEFAULT_SUBSCRIPTION_PLANS);
+  const [loading, setLoading] = useState(false);
 
-  const [cardDurations, setCardDurations] = useState({});
+  const [cardDurations, setCardDurations] = useState({
+    1: '6m',
+    2: '6m',
+    3: '6m',
+  });
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [successAlertVisible, setSuccessAlertVisible] = useState(false);
@@ -59,35 +151,105 @@ export default function PlansScreen() {
   const [timeLeftMs, setTimeLeftMs] = useState(0);
   const [isOfferEligible, setIsOfferEligible] = useState(false);
 
+  const pendingPurchaseRef = useRef(null);
+  const verifiedTokensRef = useRef(new Set());
+
+  const handleVerifyAndComplete = async (purchaseItem) => {
+    if (!purchaseItem) return;
+    const token = purchaseItem.purchaseToken || purchaseItem.transactionReceipt || purchaseItem.orderId || '';
+    if (token && verifiedTokensRef.current.has(token)) {
+      console.log('[IAP] Purchase token already processed:', token.substring(0, 10));
+      return;
+    }
+    if (token) {
+      verifiedTokensRef.current.add(token);
+    }
+
+    const pending = pendingPurchaseRef.current;
+    const rawProductId = resolveSubscriptionSku(purchaseItem.productId || purchaseItem.id || pending?.card?.plan_key || pending?.planKey);
+
+    let planName = pending?.card?.name;
+    if (!planName) {
+      if (rawProductId.includes('premium')) planName = 'HeartLink Premium';
+      else if (rawProductId.includes('plus')) planName = 'HeartLink Plus';
+      else planName = 'HeartLink Basic';
+    }
+
+    const durationLabel =
+      pending?.selectedDurObj?.label ||
+      (pending?.selectedDurId === '12m' ? '1 Year' : pending?.selectedDurId === '6m' ? '6 Months' : '1 Month');
+    const durationId = pending?.selectedDurId || '6m';
+    const price = pending?.priceToCharge || pending?.selectedDurObj?.total || '₹117';
+
+    try {
+      const verifyRes = await apiVerifyGooglePurchase({
+        purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
+        product_id: rawProductId,
+        order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
+        plan_name: planName,
+        plan_key: pending?.planKey || rawProductId,
+        duration: durationLabel,
+        duration_id: durationId,
+        price: price,
+      });
+
+      await finishPurchaseTransaction(purchaseItem, false);
+
+      if (verifyRes?.user) {
+        await updateUser(verifyRes.user);
+      }
+
+      setPurchasedPlanName(planName);
+      setSuccessAlertVisible(true);
+    } catch (vErr) {
+      console.warn('[IAP] Verification error:', vErr);
+      Alert.alert(
+        'Subscription Verification',
+        'Your payment succeeded with Google Play. We are updating your membership status in the cloud.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      pendingPurchaseRef.current = null;
+      setPurchasingCardId(null);
+    }
+  };
+
+  const handleVerifyAndCompleteRef = useRef(handleVerifyAndComplete);
+  handleVerifyAndCompleteRef.current = handleVerifyAndComplete;
+
   useEffect(() => {
     let removeListeners = () => {};
     initializeIAP()
-      .then((ok) => {
+      .then(async (ok) => {
         if (ok) {
+          try {
+            const subs = await getAvailableSubscriptions();
+            console.log('[PlansScreen] Loaded subscriptions from Google Play:', subs?.length);
+          } catch (e) {
+            console.warn('[PlansScreen] Error preloading subscriptions:', e);
+          }
+
           removeListeners = setupPurchaseListeners(
             async (purchaseItem) => {
               try {
                 if (purchaseItem) {
-                  const verifyRes = await apiVerifyGooglePurchase({
-                    purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
-                    product_id: purchaseItem.productId || '',
-                    order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
-                    plan_name: purchaseItem.productId || 'HeartLink Premium',
-                    duration: '1m',
-                  });
-                  await finishPurchaseTransaction(purchaseItem, false);
-                  if (verifyRes?.user) {
-                    await updateUser(verifyRes.user);
-                  }
-                  setPurchasedPlanName('HeartLink Subscription');
-                  setSuccessAlertVisible(true);
+                  await handleVerifyAndCompleteRef.current?.(purchaseItem);
                 }
               } catch (vErr) {
-                console.warn('[IAP Listener] Verify error:', vErr);
+                console.warn('[IAP Listener] Error:', vErr);
               }
             },
             (pErr) => {
-              console.warn('[IAP Listener] Error:', pErr);
+              console.warn('[IAP Listener] Purchase error:', pErr);
+              setPurchasingCardId(null);
+              pendingPurchaseRef.current = null;
+              if (pErr?.code !== 'E_USER_CANCELLED' && pErr?.message !== 'User canceled the purchase') {
+                Alert.alert(
+                  'Google Play Billing',
+                  `${pErr?.message || 'Google Play Store returned an error (Code: ' + (pErr?.code || 'unknown') + ').'}\n\nPlease check your Google Play account and license testing status.`,
+                  [{ text: 'OK' }]
+                );
+              }
             }
           );
         }
@@ -206,12 +368,9 @@ export default function PlansScreen() {
           initialDurations[plan.id] = defaultDur;
         });
         setCardDurations(prev => ({ ...initialDurations, ...prev }));
-      } else {
-        setPlans([]);
       }
     } catch (e) {
-      console.warn('Fetch plans error:', e);
-      setPlans([]);
+      console.warn('Fetch plans error (keeping defaults):', e);
     } finally {
       setLoading(false);
     }
@@ -260,49 +419,77 @@ export default function PlansScreen() {
     }
 
     if (Platform.OS === 'web') {
-      setSelectedCardForPayment(card);
-      setPaymentModalVisible(true);
+      const planKey = (card.plan_key || card.name || '').toLowerCase();
+      pendingPurchaseRef.current = {
+        card,
+        planKey,
+        selectedDurId,
+        selectedDurObj,
+        priceToCharge,
+      };
+
+      if (__DEV__) {
+        Alert.alert(
+          'Google Play Billing (Android Native Only)',
+          `You are viewing HeartLink in a Web Browser (${Platform.OS}). Google Play Billing native dialogs only open on Android devices with Google Play Store installed.\n\nTo test the actual Google Play checkout UI, run the app on an Android device using:\nnpx expo run:android\n\nWould you like to simulate a successful Google Play purchase for ${card.name} (${selectedDurObj?.label || selectedDurId}) to verify backend activation?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Simulate Google Purchase',
+              onPress: async () => {
+                await handleVerifyAndComplete({
+                  productId: resolveSubscriptionSku(planKey),
+                  purchaseToken: `test_token_web_${Date.now()}`,
+                  orderId: `GPA.TEST-${Date.now()}`,
+                });
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Google Play Billing',
+        'Google Play subscriptions are only supported on Android devices. Please install and open HeartLink on your Android phone to subscribe.',
+        [{ text: 'OK' }]
+      );
       return;
     }
 
     setPurchasingCardId(card.id);
+    const planKey = resolveSubscriptionSku(card.plan_key || card.name);
+    pendingPurchaseRef.current = {
+      card,
+      planKey,
+      selectedDurId,
+      selectedDurObj,
+      priceToCharge,
+    };
+
     try {
-      const planKey = (card.plan_key || card.name || '').toLowerCase();
       const purchaseResult = await purchaseSubscriptionPlan({
         planKey,
         durationId: selectedDurId,
+        isDiscountOffer: isWelcomeDiscount,
       });
 
-      console.log('[IAP] Purchase result received:', purchaseResult);
+      console.log('[IAP] Purchase request completed:', purchaseResult);
       const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
 
-      if (purchaseItem) {
-        const verifyRes = await apiVerifyGooglePurchase({
-          purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
-          product_id: purchaseItem.productId || planKey,
-          order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
-          plan_name: card.name,
-          plan_key: planKey,
-          duration: selectedDurObj?.label || selectedDurId,
-          duration_id: selectedDurId,
-          price: priceToCharge,
-        });
-
-        await finishPurchaseTransaction(purchaseItem, false);
-
-        if (verifyRes?.user) {
-          await updateUser(verifyRes.user);
-        }
-
-        setPurchasedPlanName(card.name);
-        setSuccessAlertVisible(true);
+      if (
+        purchaseItem &&
+        (purchaseItem.purchaseToken || purchaseItem.transactionReceipt || purchaseItem.orderId)
+      ) {
+        await handleVerifyAndComplete(purchaseItem);
       }
     } catch (err) {
       console.warn('[IAP] Purchase error / cancellation:', err?.message || err);
+      pendingPurchaseRef.current = null;
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
         Alert.alert(
           'Google Play Billing',
-          `${err?.message || 'Unable to connect to Google Play Store.'}\n\nNote: Google Play Billing requires the app to be installed from the Google Play Internal Testing release build.`,
+          `${err?.message || 'Unable to connect to Google Play Store.'}`,
           [{ text: 'OK' }]
         );
       }
@@ -506,7 +693,7 @@ export default function PlansScreen() {
                   <>
                     <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" style={{ marginRight: 6 }} />
                     <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
-                      Get {card.name} ({selectedDurObj?.price || ''}{selectedDurObj?.unit || ''})
+                      Get {card.name} ({isWelcomeDiscount ? `${calculateDiscountedPrice(selectedDurObj?.total, 20)} • 20% OFF` : (selectedDurObj?.total || `${selectedDurObj?.price || ''}${selectedDurObj?.unit || ''}`)})
                     </Text>
                   </>
                 )}

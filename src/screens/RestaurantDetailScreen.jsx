@@ -30,15 +30,17 @@ export default function RestaurantDetailScreen() {
   const spot = useMemo(() => {
     return route.params?.spot || {
       id: 'r1',
-      name: 'La Parisienne',
-      cuisine: 'French Bistro',
-      rating: '4.9',
-      price: '$$$',
-      location: 'SoHo, NY',
-      address: '128 Prince St, New York, NY 10012',
-      mapUrl: 'https://maps.google.com/?q=La+Parisienne+SoHo+New+York',
-      image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800',
-      description: 'Charming classical French eatery presenting traditional Parisian bistro fare alongside an exquisite curated French wine list in a cozy, romantically candle-lit atmosphere.',
+      name: 'The Source at Sula (Sula Vineyards)',
+      cuisine: 'Vineyard Resort & Tuscan Dining',
+      category: 'Vineyard Resort & Tuscan Dining',
+      rating: '4.95',
+      price: '$$$$',
+      price_range: '$$$$',
+      location: 'Gangapur Dam, Nashik',
+      address: 'Gat 36/2, Govardhan Village, Gangapur-Savargaon Road, Nashik 422222',
+      mapUrl: 'https://maps.google.com/?q=The+Source+at+Sula+Vineyards+Nashik',
+      image: 'https://images.unsplash.com/photo-1506377247377-2a5b3b417ebb?w=800',
+      description: 'Tuscan-style heritage vineyard resort overlooking lush grape vines and Gangapur lake. Fine wine tasting and candlelight Italian dinners.',
       tag: 'Most Romantic'
     };
   }, [route.params]);

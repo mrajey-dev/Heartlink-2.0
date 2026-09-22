@@ -20,7 +20,13 @@ import { useAuth } from '../hooks/useAuth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PaymentGatewayModal from './PaymentGatewayModal';
 import { apiVerifyGooglePurchase } from '../services/api';
-import { requestProductPurchase, finishPurchaseTransaction } from '../services/iapService';
+import {
+  purchaseSubscriptionPlan,
+  finishPurchaseTransaction,
+  initializeIAP,
+  setupPurchaseListeners,
+  getAvailablePurchases,
+} from '../services/iapService';
 
 const { width } = Dimensions.get('window');
 
@@ -29,31 +35,34 @@ const SUPERLIKE_PACKS = [
     id: '5_superlikes',
     count: 5,
     title: '5 Superlikes',
-    price: '₹109',
-    unitPrice: '₹21.8/ea',
+    price: '₹200',
+    unitPrice: '₹40/ea',
     badge: null,
     save: null,
     popular: false,
+    basePlanId: 'superlikepack5',
   },
   {
     id: '15_superlikes',
     count: 15,
     title: '15 Superlikes',
-    price: '₹207',
-    unitPrice: '₹13.8/ea',
+    price: '₹450',
+    unitPrice: '₹30/ea',
     badge: 'POPULAR',
-    save: 'SAVE 27%',
+    save: 'SAVE 25%',
     popular: true,
+    basePlanId: 'superlikepack15',
   },
   {
     id: '30_superlikes',
     count: 30,
     title: '30 Superlikes',
-    price: '₹349',
-    unitPrice: '₹11.6/ea',
+    price: '₹600',
+    unitPrice: '₹20/ea',
     badge: 'BEST VALUE',
-    save: 'SAVE 43%',
+    save: 'SAVE 50%',
     popular: false,
+    basePlanId: 'superlikepack30',
   },
 ];
 
@@ -69,12 +78,67 @@ export default function SuperlikeUpgradeModal({
 
   const [selectedPackId, setSelectedPackId] = useState('15_superlikes');
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [isBuying, setIsBuying] = useState(false);
+
+  const selectedPack = SUPERLIKE_PACKS.find(p => p.id === selectedPackId) || SUPERLIKE_PACKS[1];
+
+  const handleSuperlikePurchaseCompleted = async (purchaseItem) => {
+    if (!purchaseItem) return;
+    const pId = String(purchaseItem.productId || purchaseItem.id || '').toLowerCase();
+    if (pId.includes('superlike')) {
+      try {
+        const verifyRes = await apiVerifyGooglePurchase({
+          purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
+          product_id: purchaseItem.productId || 'superlike',
+          order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
+          plan_name: `${selectedPack.count} Superlikes Pack`,
+          duration: `${selectedPack.count} Superlikes`,
+          duration_id: selectedPack.id,
+          price: selectedPack.price,
+        });
+
+        await finishPurchaseTransaction(purchaseItem, false);
+
+        if (verifyRes?.user) {
+          updateUser(verifyRes.user);
+        }
+
+        handlePaymentSuccess(verifyRes?.user);
+      } catch (err) {
+        console.warn('[Superlike] Verification error:', err);
+      } finally {
+        setIsBuying(false);
+      }
+    }
+  };
+
+  const handleSuperlikePurchaseCompletedRef = React.useRef(handleSuperlikePurchaseCompleted);
+  handleSuperlikePurchaseCompletedRef.current = handleSuperlikePurchaseCompleted;
+
+  React.useEffect(() => {
+    if (!visible) return;
+
+    const removeListener = setupPurchaseListeners(
+      async (purchaseItem) => {
+        try {
+          await handleSuperlikePurchaseCompletedRef.current(purchaseItem);
+        } catch (e) {}
+      },
+      (err) => {
+        console.warn('[Superlike Listener] Purchase error:', err);
+        setIsBuying(false);
+      }
+    );
+
+    return () => {
+      if (typeof removeListener === 'function') removeListener();
+    };
+  }, [visible]);
 
   if (!visible) return null;
 
   const cardBg = isDark ? '#140E26' : '#FFFFFF';
   const cardBorder = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)';
-  const selectedPack = SUPERLIKE_PACKS.find(p => p.id === selectedPackId) || SUPERLIKE_PACKS[1];
 
   const paymentPlanObj = {
     id: `superlike_${selectedPack.count}`,
@@ -90,42 +154,79 @@ export default function SuperlikeUpgradeModal({
     ],
   };
 
-  const [isBuying, setIsBuying] = useState(false);
-
   const handleBuySuperlikes = async () => {
     if (Platform.OS === 'web') {
+      if (__DEV__) {
+        Alert.alert(
+          'Google Play Billing (Simulation)',
+          `Simulate Google Play purchase of ${selectedPack.title} for ${selectedPack.price}?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Simulate Purchase',
+              onPress: async () => {
+                try {
+                  const verifyRes = await apiVerifyGooglePurchase({
+                    purchase_token: `test_token_superlike_${Date.now()}`,
+                    product_id: 'superlike',
+                    order_id: `GPA.TEST-SUPERLIKE-${Date.now()}`,
+                    plan_name: `${selectedPack.count} Superlikes Pack`,
+                    duration: `${selectedPack.count} Superlikes`,
+                    duration_id: selectedPack.id,
+                    price: selectedPack.price,
+                  });
+                  if (verifyRes?.user) {
+                    await updateUser(verifyRes.user);
+                  }
+                  handlePaymentSuccess(verifyRes?.user);
+                } catch (e) {
+                  Alert.alert('Simulation Error', e?.message || 'Failed');
+                }
+              },
+            },
+          ]
+        );
+        return;
+      }
       setPaymentModalVisible(true);
       return;
     }
 
     setIsBuying(true);
     try {
-      const sku = `superlike_pack_${selectedPack.count}`;
-      const purchaseResult = await requestProductPurchase(sku);
+      // In Google Play Console, superlike is configured as a subscription with product ID 'superlike'
+      // and base plans: superlikepack5, superlikepack15, superlikepack30
+      const purchaseResult = await purchaseSubscriptionPlan({
+        planKey: 'superlike',
+        durationId: selectedPack.id,
+        isDiscountOffer: false, // No 20% discount offer for superlikes
+      });
       const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
 
-      if (purchaseItem) {
-        const verifyRes = await apiVerifyGooglePurchase({
-          purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
-          product_id: purchaseItem.productId || sku,
-          order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
-          plan_name: `${selectedPack.count} Superlikes Pack`,
-          duration: `${selectedPack.count} Superlikes`,
-          price: selectedPack.price,
-        });
-
-        await finishPurchaseTransaction(purchaseItem, true);
-
-        if (verifyRes?.user) {
-          await updateUser(verifyRes.user);
-        }
-
-        handlePaymentSuccess(verifyRes?.user);
+      if (purchaseItem && (purchaseItem.purchaseToken || purchaseItem.transactionReceipt)) {
+        await handleSuperlikePurchaseCompleted(purchaseItem);
+      } else {
+        setTimeout(async () => {
+          try {
+            const available = await getAvailablePurchases();
+            const sSub = available.find((p) => {
+              const id = String(p?.productId || p?.id || '').toLowerCase();
+              return id.includes('superlike');
+            });
+            if (sSub) {
+              await handleSuperlikePurchaseCompletedRef.current(sSub);
+            }
+          } catch (e) {}
+        }, 1500);
       }
     } catch (err) {
       console.warn('[IAP] Superlikes purchase error / cancellation:', err?.message || err);
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
-        setPaymentModalVisible(true);
+        Alert.alert(
+          'Google Play Billing',
+          `${err?.message || 'Unable to connect to Google Play Store for Superlikes.'}`,
+          [{ text: 'OK' }]
+        );
       }
     } finally {
       setIsBuying(false);

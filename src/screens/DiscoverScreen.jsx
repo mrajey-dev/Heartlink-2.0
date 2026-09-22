@@ -166,6 +166,7 @@ export default function DiscoverScreen() {
 
     const cityVal = u.city || u.user?.city || null;
     const cityState = cityVal ? `${cityVal}${u.state ? ', ' + u.state : ''}` : (u.location && u.location !== 'Nearby' ? u.location : 'Nearby');
+    const distanceBadge = u.distance ? `${cityState} • ${u.distance}` : cityState;
 
     const matchRes = calculateMatchPercentage(user, u);
     const dynamicScore = u.compatibility_score || matchRes.percentage;
@@ -200,7 +201,9 @@ export default function DiscoverScreen() {
       bio: u.bio || 'Living life and finding meaningful connections on HeartLink.',
       city: cityVal || 'Nearby',
       location: cityState,
-      distance: showDistanceSetting ? cityState : 'Hidden',
+      distance: showDistanceSetting ? distanceBadge : 'Hidden',
+      distance_km: u.distance_km || null,
+      distance_text: u.distance || null,
       compatibility: dynamicScore,
       images: userPhotos,
       interests: ensureArray(u.interests, ['Travel', 'Coffee', 'Music']),
@@ -243,11 +246,17 @@ export default function DiscoverScreen() {
     } catch (_) { }
   }, [user?.id]);
 
-  const fetchFeed = async (isBackground = false) => {
+  const fetchFeed = useCallback(async (isBackground = false) => {
     try {
       if (!isBackground && dbProfiles.length === 0) setFeedLoading(true);
       await syncDailySwipeLimit();
-      const fRes = await apiGetDiscoveryFeed().catch(() => null);
+      const params = {};
+      if (user?.city) params.city = user.city;
+      if (user?.state) params.state = user.state;
+      if (user?.latitude !== undefined && user?.latitude !== null) params.latitude = user.latitude;
+      if (user?.longitude !== undefined && user?.longitude !== null) params.longitude = user.longitude;
+
+      const fRes = await apiGetDiscoveryFeed(params).catch(() => null);
 
       if (fRes?.profiles && Array.isArray(fRes.profiles)) {
         const formatted = fRes.profiles
@@ -268,14 +277,17 @@ export default function DiscoverScreen() {
     } finally {
       if (!isBackground) setFeedLoading(false);
     }
-  };
+  }, [user?.id, user?.city, user?.state, user?.latitude, user?.longitude, syncDailySwipeLimit]);
 
   useEffect(() => {
-    fetchFeed(false);
-    syncDailySwipeLimit();
+    const timer = setTimeout(() => {
+      fetchFeed(false);
+      syncDailySwipeLimit();
+    }, 0);
 
     const unsubReq = eventEmitter.on(EVENTS.REQUEST_UPDATED, () => fetchFeed(true));
     const unsubMatch = eventEmitter.on(EVENTS.MATCH_UPDATED, () => fetchFeed(true));
+    const unsubLoc = eventEmitter.on(EVENTS.LOCATION_UPDATED, () => fetchFeed(true));
     const unsubscribe = navigation.addListener('focus', () => {
       setPhotoIdx(0);
       syncDailySwipeLimit();
@@ -283,11 +295,13 @@ export default function DiscoverScreen() {
     });
 
     return () => {
+      clearTimeout(timer);
       unsubscribe();
       unsubReq();
       unsubMatch();
+      unsubLoc();
     };
-  }, [navigation, syncDailySwipeLimit]);
+  }, [navigation, fetchFeed, syncDailySwipeLimit]);
 
   const activeProfiles = useMemo(() => {
     const userGender = (user?.gender || 'Man').toLowerCase();

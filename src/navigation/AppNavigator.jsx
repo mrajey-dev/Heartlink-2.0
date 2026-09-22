@@ -21,6 +21,7 @@ import InAppNotificationBanner from '../components/InAppNotificationBanner';
 import WelcomeOfferModal from '../components/WelcomeOfferModal';
 import GoogleReviewModal from '../components/GoogleReviewModal';
 import ForceUpdateModal from '../components/ForceUpdateModal';
+import MandatoryLocationModal from '../components/MandatoryLocationModal';
 
 import { navigationRef } from './navigationRef';
 
@@ -36,13 +37,21 @@ export default function AppNavigator() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      setShowRadar(true);
+      const startTimer = setTimeout(() => {
+        setShowRadar(true);
+      }, 0);
       const timer = setTimeout(() => {
         setShowRadar(false);
       }, 5000);
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(startTimer);
+        clearTimeout(timer);
+      };
     } else {
-      setShowRadar(false);
+      const stopTimer = setTimeout(() => {
+        setShowRadar(false);
+      }, 0);
+      return () => clearTimeout(stopTimer);
     }
   }, [isAuthenticated, isLoading]);
 
@@ -96,6 +105,7 @@ export default function AppNavigator() {
         {isAuthenticated && <WelcomeOfferModal />}
         {isAuthenticated && <GoogleReviewModal />}
         <ForceUpdateModal />
+        <MandatoryLocationModal />
       </NavigationContainer>
     </>
   );

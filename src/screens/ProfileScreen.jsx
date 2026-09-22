@@ -619,13 +619,13 @@ export default function ProfileScreen() {
                   <Ionicons name="shield-checkmark" size={20} color="#FFF" />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13.5, fontWeight: '900', color: theme.textPrimary }}>Aadhaar Verification (Free)</Text>
+                  <Text style={{ fontSize: 13.5, fontWeight: '900', color: theme.textPrimary }}>Aadhaar Verification (₹49)</Text>
                   <Text style={{ fontSize: 11.5, color: theme.textSec, marginTop: 2 }}>
-                    Free e-KYC is compulsory to connect and chat on HeartLink.
+                    e-KYC is compulsory to connect and chat on HeartLink.
                   </Text>
                 </View>
                 <View style={{ backgroundColor: '#00C853', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, marginLeft: 8 }}>
-                  <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '900' }}>Verify Free</Text>
+                  <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '900' }}>Verify ₹49</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>

@@ -74,23 +74,23 @@ class SubscriptionController extends Controller
             $plan = SubscriptionPlan::firstOrCreate(
                 ['plan_key' => 'verification'],
                 [
-                    'name'         => 'Profile Identity Verification',
+                    'name'         => 'Aadhaar Identity Verification',
                     'tagline'      => 'Mandatory Profile Identity e-KYC Verification',
                     'icon_name'    => 'shield-checkmark',
-                    'badge_text'   => 'FREE e-KYC',
+                    'badge_text'   => 'VERIFIED BADGE',
                     'accent_color' => '#00C853',
                     'gradient'     => ['#00C853', '#0072E3'],
                     'glow_color'   => 'rgba(0, 200, 83, 0.25)',
                     'durations'    => [
                         [
-                            'id'             => 'lifetime',
-                            'label'          => 'Lifetime',
-                            'price'          => 'FREE',
-                            'total'          => 'FREE',
-                            'amount'         => 0,
-                            'unit'           => ' free',
+                            'id'             => 'aadharverificaationonetimepurchase',
+                            'label'          => '1 Year',
+                            'price'          => '₹49',
+                            'total'          => '₹49',
+                            'amount'         => 49,
+                            'unit'           => ' / year',
                             'original_price' => '₹99',
-                            'save'           => '100% FREE',
+                            'save'           => '50% OFF',
                             'popular'        => true,
                         ],
                     ],
@@ -109,10 +109,12 @@ class SubscriptionController extends Controller
             'success'        => true,
             'plan'           => $plan,
             'plan_id'        => 'verification',
-            'amount'         => 0,
-            'price'          => 0,
-            'price_display'  => 'FREE',
+            'product_id'     => 'aadharverification',
+            'amount'         => 49,
+            'price'          => 49,
+            'price_display'  => '₹49',
             'original_price' => '₹99',
+            'save'           => '50% OFF',
         ]);
     }
 
@@ -144,21 +146,10 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $userId = $user->id;
 
-        // Cancel previous active subscriptions
-        UserSubscription::where('user_id', $userId)
-            ->where('status', 'active')
-            ->update(['status' => 'cancelled']);
-
         $durationStr = strtolower(trim($durationInput));
-        $expiresAt = now()->addMonth();
-
-        if (str_contains($durationStr, '6 mo') || str_contains($durationStr, '6m') || str_contains($durationStr, '6 month')) {
-            $expiresAt = now()->addMonths(6);
-        } elseif (str_contains($durationStr, '12 mo') || str_contains($durationStr, '12m') || str_contains($durationStr, '1 year') || str_contains($durationStr, '1yr')) {
-            $expiresAt = now()->addYear();
-        }
-
         $rawPlan = strtolower(trim($planInput));
+
+        // 1. Superlike Top-up purchases (non-recurring consumable/topup)
         if (str_contains($rawPlan, 'superlike')) {
             $count = 5;
             if (str_contains($rawPlan, '30') || str_contains($durationStr, '30')) {
@@ -177,6 +168,33 @@ class SubscriptionController extends Controller
                 'subscription' => $user->activeSubscription,
                 'user'         => $user->load('photos', 'activeSubscription', 'settings'),
             ], 200);
+        }
+
+        // 2. Aadhaar / Identity Verification plan (₹49)
+        if (str_contains($rawPlan, 'aadhar') || str_contains($rawPlan, 'verif')) {
+            $user->is_verified = true;
+            $user->email_verified_at = $user->email_verified_at ?: now();
+            $user->save();
+
+            return response()->json([
+                'success'      => true,
+                'message'      => 'Aadhaar Identity Verified successfully! Official Verified Shield badge active. 🎉',
+                'subscription' => $user->activeSubscription,
+                'user'         => $user->load('photos', 'activeSubscription', 'settings'),
+            ], 200);
+        }
+
+        // 3. Regular Membership Subscription Plans (Basic, Plus, Premium)
+        // Cancel previous active subscriptions when switching or upgrading membership tiers
+        UserSubscription::where('user_id', $userId)
+            ->where('status', 'active')
+            ->update(['status' => 'cancelled']);
+
+        $expiresAt = now()->addMonth();
+        if (str_contains($durationStr, '6 mo') || str_contains($durationStr, '6m') || str_contains($durationStr, '6 month')) {
+            $expiresAt = now()->addMonths(6);
+        } elseif (str_contains($durationStr, '12 mo') || str_contains($durationStr, '12m') || str_contains($durationStr, '1 year') || str_contains($durationStr, '1yr')) {
+            $expiresAt = now()->addYear();
         }
 
         $formattedPlanName = 'HeartLink Basic';
@@ -637,7 +655,23 @@ class SubscriptionController extends Controller
             'duration'       => $rawDuration,
         ]);
 
-        // 1. Superlikes Pack Purchase
+        // 1. Identity / Aadhaar Verification
+        if (str_contains($rawPlan, 'aadhar') || str_contains($rawPlan, 'verif') || str_contains(strtolower($productId ?? ''), 'aadhar') || str_contains(strtolower($productId ?? ''), 'verif')) {
+            $user->is_verified = true;
+            $user->email_verified_at = $user->email_verified_at ?? now();
+            if (empty($user->subscription_plan) || strtolower($user->subscription_plan) === 'none') {
+                $user->subscription_plan = 'Free';
+            }
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Aadhaar identity verification successfully completed with Google Play! 🎉',
+                'user'    => $user->load('photos', 'activeSubscription', 'settings'),
+            ]);
+        }
+
+        // 2. Superlikes Pack Purchase
         if (str_contains($rawPlan, 'superlike') || str_contains($rawDuration, 'superlike')) {
             $count = 5;
             if (str_contains($rawPlan, '30') || str_contains($rawDuration, '30')) {

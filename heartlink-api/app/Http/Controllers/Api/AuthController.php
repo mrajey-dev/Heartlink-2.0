@@ -228,6 +228,8 @@ class AuthController extends Controller
             'city'              => 'sometimes|nullable|string',
             'state'             => 'sometimes|nullable|string',
             'country'           => 'sometimes|nullable|string',
+            'latitude'          => 'sometimes|nullable|numeric',
+            'longitude'         => 'sometimes|nullable|numeric',
             'relationship_type' => 'sometimes|nullable|string',
             'age_min'           => 'sometimes|integer',
             'age_max'           => 'sometimes|integer',
