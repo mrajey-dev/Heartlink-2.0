@@ -316,3 +316,47 @@ export const formatMessagePreview = (rawText) => {
   return str;
 };
 
+/**
+ * Checks if a user has an active paid subscription or membership plan
+ */
+export const hasActivePaidPlan = (userObj) => {
+  if (!userObj) return false;
+
+  if (
+    userObj.is_premium === true ||
+    userObj.isPremium === true ||
+    userObj.premium === true ||
+    userObj.isGoldenTick === true
+  ) {
+    return true;
+  }
+
+  const rawPlan = (
+    userObj.subscription_plan ||
+    userObj.plan_name ||
+    userObj.plan ||
+    userObj.activeSubscription?.plan_name ||
+    userObj.active_subscription?.plan_name ||
+    (typeof userObj.subscription === 'string' ? userObj.subscription : userObj.subscription?.plan_name) ||
+    ''
+  ).toString().trim().toLowerCase();
+
+  if (
+    rawPlan &&
+    !['free', 'basic_free', 'none', 'null', 'undefined', 'false', '0'].includes(rawPlan)
+  ) {
+    return true;
+  }
+
+  if (
+    userObj.activeSubscription?.status === 'active' ||
+    userObj.active_subscription?.status === 'active' ||
+    userObj.subscriptionStatus === 'active' ||
+    userObj.subscription_status === 'active'
+  ) {
+    return true;
+  }
+
+  return false;
+};
+

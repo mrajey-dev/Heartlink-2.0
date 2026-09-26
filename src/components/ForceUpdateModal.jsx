@@ -170,7 +170,7 @@ export default function ForceUpdateModal() {
             {/* Main Titles */}
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.versionTag}>
-              Version {latestVersion} is now available
+              New version is now available
             </Text>
 
             {/* Description */}

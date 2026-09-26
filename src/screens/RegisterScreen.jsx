@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Animated, Dimensions, KeyboardAvoidingView, Platform,
-  ScrollView, StatusBar, Image, Alert, Easing, Modal,
-  BackHandler
+  Animated, Platform,
+  ScrollView, StatusBar, Image, Easing,
+  BackHandler, Keyboard
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,7 +12,6 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import { registerUser } from "../services/authService";
-import { createUserProfile } from "../services/userService";
 import { apiUploadImage } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from '../theme/ThemeContext';
@@ -31,27 +30,72 @@ import { ALL_VIBE_NODES } from '../utils/vibeData';
 
 import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
-const { width, height } = SCREEN;
+const { width } = SCREEN;
 const TOTAL_STEPS = 9;
 
 // ─── Data ───────────────────────────────────────────────────────────────────
+const HOBBY_CATEGORIES = [
+  { id: 'all', label: 'All', icon: 'sparkles' },
+  { id: 'creative', label: 'Art & Music', icon: 'color-palette-outline' },
+  { id: 'fitness', label: 'Fitness & Sports', icon: 'fitness-outline' },
+  { id: 'food', label: 'Food & Cafes', icon: 'restaurant-outline' },
+  { id: 'adventure', label: 'Travel & Outdoor', icon: 'compass-outline' },
+  { id: 'entertainment', label: 'Chill & Fun', icon: 'game-controller-outline' },
+  { id: 'lifestyle', label: 'Tech & Mind', icon: 'bulb-outline' },
+];
+
 const HOBBIES = [
-  { name: 'Photography', icon: 'camera-outline' },
-  { name: 'Travel', icon: 'airplane-outline' },
-  { name: 'Music', icon: 'musical-notes-outline' },
-  { name: 'Cooking', icon: 'restaurant-outline' },
-  { name: 'Gaming', icon: 'game-controller-outline' },
-  { name: 'Fitness', icon: 'fitness-outline' },
-  { name: 'Reading', icon: 'book-outline' },
-  { name: 'Art', icon: 'color-palette-outline' },
-  { name: 'Dancing', icon: 'body-outline' },
-  { name: 'Yoga', icon: 'heart-circle-outline' },
-  { name: 'Hiking', icon: 'compass-outline' },
-  { name: 'Movies', icon: 'film-outline' },
-  { name: 'Fashion', icon: 'shirt-outline' },
-  { name: 'Technology', icon: 'hardware-chip-outline' },
-  { name: 'Sports', icon: 'football-outline' },
-  { name: 'Coffee', icon: 'cafe-outline' },
+  // Creative & Music
+  { name: 'Photography', icon: 'camera-outline', category: 'creative', emoji: '📸' },
+  { name: 'Music', icon: 'musical-notes-outline', category: 'creative', emoji: '🎵' },
+  { name: 'Art & Painting', icon: 'color-palette-outline', category: 'creative', emoji: '🎨' },
+  { name: 'Dancing', icon: 'body-outline', category: 'creative', emoji: '💃' },
+  { name: 'Fashion & Style', icon: 'shirt-outline', category: 'creative', emoji: '✨' },
+  { name: 'Writing & Poetry', icon: 'create-outline', category: 'creative', emoji: '✍️' },
+  { name: 'Playing Guitar', icon: 'musical-note-outline', category: 'creative', emoji: '🎸' },
+
+  // Fitness & Sports
+  { name: 'Fitness & Gym', icon: 'barbell-outline', category: 'fitness', emoji: '💪' },
+  { name: 'Yoga & Mindfulness', icon: 'heart-circle-outline', category: 'fitness', emoji: '🧘' },
+  { name: 'Running', icon: 'walk-outline', category: 'fitness', emoji: '🏃' },
+  { name: 'Swimming', icon: 'water-outline', category: 'fitness', emoji: '🏊' },
+  { name: 'Cycling', icon: 'bicycle-outline', category: 'fitness', emoji: '🚴' },
+  { name: 'Cricket', icon: 'baseball-outline', category: 'fitness', emoji: '🏏' },
+  { name: 'Football', icon: 'football-outline', category: 'fitness', emoji: '⚽' },
+  { name: 'Badminton', icon: 'tennisball-outline', category: 'fitness', emoji: '🏸' },
+
+  // Food & Drinks
+  { name: 'Cooking', icon: 'restaurant-outline', category: 'food', emoji: '🍳' },
+  { name: 'Coffee & Cafes', icon: 'cafe-outline', category: 'food', emoji: '☕' },
+  { name: 'Baking & Desserts', icon: 'pizza-outline', category: 'food', emoji: '🥐' },
+  { name: 'Foodie Adventures', icon: 'fast-food-outline', category: 'food', emoji: '🍜' },
+  { name: 'Wine & Cocktails', icon: 'wine-outline', category: 'food', emoji: '🍸' },
+  { name: 'Street Food', icon: 'nutrition-outline', category: 'food', emoji: '🌮' },
+
+  // Travel & Adventure
+  { name: 'Travel & Trips', icon: 'airplane-outline', category: 'adventure', emoji: '✈️' },
+  { name: 'Hiking & Trekking', icon: 'compass-outline', category: 'adventure', emoji: '🏔️' },
+  { name: 'Camping', icon: 'bonfire-outline', category: 'adventure', emoji: '🏕️' },
+  { name: 'Beach Walks', icon: 'sunny-outline', category: 'adventure', emoji: '🏖️' },
+  { name: 'Road Trips', icon: 'car-outline', category: 'adventure', emoji: '🚗' },
+  { name: 'Stargazing', icon: 'moon-outline', category: 'adventure', emoji: '✨' },
+
+  // Chill & Entertainment
+  { name: 'Movies & Cinema', icon: 'film-outline', category: 'entertainment', emoji: '🎬' },
+  { name: 'Gaming', icon: 'game-controller-outline', category: 'entertainment', emoji: '🎮' },
+  { name: 'Reading Books', icon: 'book-outline', category: 'entertainment', emoji: '📚' },
+  { name: 'Anime & Manga', icon: 'sparkles-outline', category: 'entertainment', emoji: '⛩️' },
+  { name: 'Podcasts', icon: 'headset-outline', category: 'entertainment', emoji: '🎙️' },
+  { name: 'Board Games', icon: 'dice-outline', category: 'entertainment', emoji: '🎲' },
+  { name: 'Binge Watching', icon: 'tv-outline', category: 'entertainment', emoji: '🍿' },
+
+  // Tech & Mind
+  { name: 'Technology & AI', icon: 'hardware-chip-outline', category: 'lifestyle', emoji: '💻' },
+  { name: 'Startups & Business', icon: 'briefcase-outline', category: 'lifestyle', emoji: '🚀' },
+  { name: 'Psychology & Mindset', icon: 'bulb-outline', category: 'lifestyle', emoji: '🧠' },
+  { name: 'Astronomy', icon: 'planet-outline', category: 'lifestyle', emoji: '🌌' },
+  { name: 'Volunteering', icon: 'heart-outline', category: 'lifestyle', emoji: '🤝' },
+  { name: 'Meditation & Peace', icon: 'leaf-outline', category: 'lifestyle', emoji: '🌿' },
 ];
 
 const RELATIONSHIP_TYPES = [
@@ -62,6 +106,161 @@ const RELATIONSHIP_TYPES = [
 ];
 
 const GENDERS = ['Man', 'Woman'];
+
+// ─── Postal / ZIP Code Configs by Country ────────────────────────────────────
+function getPostalConfig(country) {
+  const c = (country || '').toLowerCase().trim();
+
+  // India: PIN code (5 to 6 digits)
+  if (c === 'india') {
+    return {
+      name: 'PIN Code',
+      min: 5,
+      max: 6,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '5 or 6 digit PIN code',
+      placeholder: 'e.g. 400001',
+    };
+  }
+
+  // United States: 5 digits
+  if (c === 'united states' || c === 'usa' || c === 'united states of america') {
+    return {
+      name: 'ZIP Code',
+      min: 5,
+      max: 5,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '5 digit ZIP code',
+      placeholder: 'e.g. 90210',
+    };
+  }
+
+  // United Kingdom: 5-8 chars alphanumeric
+  if (c === 'united kingdom' || c === 'uk' || c === 'great britain') {
+    return {
+      name: 'Postal Code',
+      min: 5,
+      max: 8,
+      keyboardType: 'default',
+      numericOnly: false,
+      hint: '5 to 8 characters',
+      placeholder: 'e.g. SW1A 1AA',
+    };
+  }
+
+  // Canada: 6 chars
+  if (c === 'canada') {
+    return {
+      name: 'Postal Code',
+      min: 6,
+      max: 7,
+      keyboardType: 'default',
+      numericOnly: false,
+      hint: '6 alphanumeric characters',
+      placeholder: 'e.g. M5V 2T6',
+    };
+  }
+
+  // Australia: 4 digits
+  if (c === 'australia') {
+    return {
+      name: 'Postal Code',
+      min: 4,
+      max: 4,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '4 digit postal code',
+      placeholder: 'e.g. 2000',
+    };
+  }
+
+  // 5 digits countries
+  if ([
+    'germany', 'france', 'italy', 'spain', 'mexico', 'pakistan', 'turkey',
+    'malaysia', 'saudi arabia', 'kenya', 'egypt', 'south korea', 'korea, south',
+    'indonesia', 'thailand', 'finland', 'greece', 'ukraine', 'serbia', 'morocco',
+    'costa rica', 'cuba', 'dominican republic', 'guatemala', 'iraq', 'jordan',
+    'kuwait', 'nepal', 'sri lanka', 'zambia'
+  ].includes(c)) {
+    return {
+      name: 'Postal Code',
+      min: 5,
+      max: 5,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '5 digit postal code',
+      placeholder: 'e.g. 10115',
+    };
+  }
+
+  // 4 digits countries
+  if ([
+    'new zealand', 'austria', 'belgium', 'switzerland', 'norway', 'denmark',
+    'south africa', 'philippines', 'bangladesh', 'portugal', 'hungary'
+  ].includes(c)) {
+    return {
+      name: 'Postal Code',
+      min: 4,
+      max: 4,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '4 digit postal code',
+      placeholder: 'e.g. 1010',
+    };
+  }
+
+  // 6 digits countries
+  if (['china', 'russia', 'singapore', 'vietnam', 'poland', 'colombia', 'belarus', 'kazakhstan', 'nigeria', 'romania'].includes(c)) {
+    return {
+      name: 'Postal Code',
+      min: 6,
+      max: 6,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '6 digit postal code',
+      placeholder: 'e.g. 100000',
+    };
+  }
+
+  // 7 digits countries
+  if (['japan', 'israel'].includes(c)) {
+    return {
+      name: 'Postal Code',
+      min: 7,
+      max: 8,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '7 digit postal code',
+      placeholder: 'e.g. 1000001',
+    };
+  }
+
+  // 8 digits: Brazil
+  if (c === 'brazil') {
+    return {
+      name: 'CEP',
+      min: 8,
+      max: 9,
+      keyboardType: 'numeric',
+      numericOnly: true,
+      hint: '8 digit CEP',
+      placeholder: 'e.g. 01310930',
+    };
+  }
+
+  // Default fallback
+  return {
+    name: 'Zipcode / Pincode',
+    min: 3,
+    max: 10,
+    keyboardType: 'default',
+    numericOnly: false,
+    hint: '3 to 10 characters',
+    placeholder: 'Enter postal code',
+  };
+}
 
 // ─── Floating Input Component ───────────────────────────────────────────────
 function FloatingInput({ label, icon, value, onChangeText, keyboardType, secureTextEntry, multiline, maxLength, style, onFocusScroll }) {
@@ -195,14 +394,17 @@ function StepOTP({ data, onChange, onFocusScroll }) {
   const { theme, isDark } = useTheme();
   const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [countryCodes, setCountryCodes] = useState([]);
-  const [loadingCodes, setLoadingCodes] = useState(false);
+  const [loadingCodes, setLoadingCodes] = useState(true);
 
   useEffect(() => {
-    setLoadingCodes(true);
+    let active = true;
     fetchCountryCodesApi().then(res => {
-      setCountryCodes(res);
-      setLoadingCodes(false);
+      if (active) {
+        setCountryCodes(res);
+        setLoadingCodes(false);
+      }
     });
+    return () => { active = false; };
   }, []);
 
   const currentCountryCode = data.countryCode || '+91';
@@ -247,29 +449,148 @@ function StepOTP({ data, onChange, onFocusScroll }) {
 function StepHobbies({ data, onChange }) {
   const { theme, isDark } = useTheme();
   const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const toggle = (h) => {
-    const curr = data.hobbies || [];
-    const next = curr.includes(h) ? curr.filter(x => x !== h) : [...curr, h];
+  const [selectedCat, setSelectedCat] = useState('all');
+
+  const selectedList = data.hobbies || [];
+
+  const toggle = (hName) => {
+    const next = selectedList.includes(hName)
+      ? selectedList.filter(x => x !== hName)
+      : [...selectedList, hName];
     onChange('hobbies', next);
   };
+
+  const clearAll = () => {
+    onChange('hobbies', []);
+  };
+
+  const filteredHobbies = useMemo(() => {
+    if (selectedCat === 'all') return HOBBIES;
+    return HOBBIES.filter(item => item.category === selectedCat);
+  }, [selectedCat]);
+
+  const progressPercent = Math.min(100, Math.round((selectedList.length / 3) * 100));
+
   return (
     <View>
-      <StepHeader icon="sparkles-outline" title="Your Interests" sub="Select at least 3 hobbies or interests" />
-      <Text style={sty.selectedCount}>{(data.hobbies || []).length} selected</Text>
+      <StepHeader
+        icon="sparkles-outline"
+        title="Passions & Interests"
+        sub="Pick at least 3 things that spark your excitement"
+      />
+
+      {/* Progress & Chemistry Bar */}
+      <View style={sty.interestStatusCard}>
+        <View style={sty.interestStatusHeader}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={[sty.interestCountPill, selectedList.length >= 3 && sty.interestCountPillComplete]}>
+              <Ionicons
+                name={selectedList.length >= 3 ? "checkmark-circle" : "heart"}
+                size={14}
+                color="#FFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={sty.interestCountPillText}>
+                {selectedList.length}/3 min
+              </Text>
+            </View>
+            <Text style={sty.interestStatusText}>
+              {selectedList.length >= 3 ? "Great picks! High Chemistry ✨" : `Select ${Math.max(1, 3 - selectedList.length)} more`}
+            </Text>
+          </View>
+          {selectedList.length > 0 && (
+            <TouchableOpacity onPress={clearAll} activeOpacity={0.7} style={sty.interestClearBtn}>
+              <Text style={sty.interestClearText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Mini progress track */}
+        <View style={sty.interestProgressTrack}>
+          <LinearGradient
+            colors={selectedList.length >= 3 ? ['#30D158', '#00C853'] : ['#FF007F', '#B5179E']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[sty.interestProgressBar, { width: `${progressPercent}%` }]}
+          />
+        </View>
+      </View>
+
+      {/* Category Pills Bar */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={sty.interestCategoryBar}
+      >
+        {HOBBY_CATEGORIES.map(cat => {
+          const isCatActive = selectedCat === cat.id;
+          return (
+            <TouchableOpacity
+              key={cat.id}
+              style={[sty.interestCatChip, isCatActive && sty.interestCatChipActive]}
+              onPress={() => setSelectedCat(cat.id)}
+              activeOpacity={0.75}
+            >
+              {isCatActive ? (
+                <LinearGradient
+                  colors={['#FF007F', '#B5179E']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={sty.interestCatChipGrad}
+                >
+                  <Ionicons name={cat.icon} size={13} color="#FFF" style={{ marginRight: 4 }} />
+                  <Text style={sty.interestCatTextActive}>{cat.label}</Text>
+                </LinearGradient>
+              ) : (
+                <View style={sty.interestCatChipInner}>
+                  <Ionicons name={cat.icon} size={13} color={theme.textSec} style={{ marginRight: 4 }} />
+                  <Text style={sty.interestCatText}>{cat.label}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+
+      {/* 2 per row Hobbies Grid with identical widths */}
       <View style={sty.chipGrid}>
-        {HOBBIES.map(h => {
-          const active = (data.hobbies || []).includes(h.name);
+        {filteredHobbies.map(h => {
+          const active = selectedList.includes(h.name);
           return (
             <TouchableOpacity
               key={h.name}
               style={[sty.hobbyChip, active && sty.hobbyChipActive]}
               onPress={() => toggle(h.name)}
+              activeOpacity={0.75}
             >
-              <Ionicons name={h.icon} size={14} color={active ? '#FF007F' : theme.textSec} style={{ marginRight: 6 }} />
-              <Text style={[sty.hobbyText, active && sty.hobbyTextActive]}>{h.name}</Text>
+              <View style={sty.hobbyChipLeft}>
+                <Text style={sty.hobbyEmoji}>{h.emoji}</Text>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[sty.hobbyText, active && sty.hobbyTextActive]}
+                >
+                  {h.name}
+                </Text>
+              </View>
+              {active ? (
+                <View style={sty.hobbyCheckCircle}>
+                  <Ionicons name="checkmark" size={11} color="#FFF" />
+                </View>
+              ) : (
+                <View style={sty.hobbyUncheckCircle} />
+              )}
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      {/* Matchmaker Pro Tip */}
+      <View style={sty.interestTipCard}>
+        <Ionicons name="flame" size={17} color="#FF007F" style={{ marginRight: 8, marginTop: 1 }} />
+        <Text style={sty.interestTipText}>
+          Profiles with 5 or more interests spark up to 3x more quality match conversations!
+        </Text>
       </View>
     </View>
   );
@@ -323,40 +644,61 @@ function StepLocation({ data, onChange, onFocusScroll }) {
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
 
-  const [loadingCountries, setLoadingCountries] = useState(false);
+  const [loadingCountries, setLoadingCountries] = useState(true);
   const [loadingStates, setLoadingStates] = useState(false);
   const [loadingCities, setLoadingCities] = useState(false);
 
+  const postalConfig = useMemo(() => getPostalConfig(data.country), [data.country]);
+
   useEffect(() => {
-    setLoadingCountries(true);
+    let active = true;
     fetchCountriesApi().then(res => {
-      setCountries(res);
-      setLoadingCountries(false);
+      if (active) {
+        setCountries(res);
+        setLoadingCountries(false);
+      }
     });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
+    let active = true;
     if (data.country) {
-      setLoadingStates(true);
+      Promise.resolve().then(() => {
+        if (active) setLoadingStates(true);
+      });
       fetchStatesApi(data.country).then(res => {
-        setStates(res);
-        setLoadingStates(false);
+        if (active) {
+          setStates(res);
+          setLoadingStates(false);
+        }
       });
     } else {
-      setStates([]);
+      Promise.resolve().then(() => {
+        if (active) setStates([]);
+      });
     }
+    return () => { active = false; };
   }, [data.country]);
 
   useEffect(() => {
+    let active = true;
     if (data.country && data.state) {
-      setLoadingCities(true);
+      Promise.resolve().then(() => {
+        if (active) setLoadingCities(true);
+      });
       fetchCitiesApi(data.country, data.state).then(res => {
-        setCities(res);
-        setLoadingCities(false);
+        if (active) {
+          setCities(res);
+          setLoadingCities(false);
+        }
       });
     } else {
-      setCities([]);
+      Promise.resolve().then(() => {
+        if (active) setCities([]);
+      });
     }
+    return () => { active = false; };
   }, [data.country, data.state]);
 
   return (
@@ -376,6 +718,7 @@ function StepLocation({ data, onChange, onFocusScroll }) {
           onChange('country', selected);
           onChange('state', '');
           onChange('city', '');
+          onChange('pincode', '');
         }}
       />
 
@@ -410,15 +753,23 @@ function StepLocation({ data, onChange, onFocusScroll }) {
         }}
       />
 
-      {/* Zipcode / Pincode */}
+      {/* Dynamic Postal Code based on selected country */}
       <FloatingInput
-        label="Zipcode / Pincode"
+        label={`${postalConfig.name} (${postalConfig.min === postalConfig.max ? `${postalConfig.max} digits` : `${postalConfig.min}-${postalConfig.max} digits`})`}
         icon="navigate-outline"
         value={data.pincode}
-        onChangeText={v => onChange('pincode', v)}
-        keyboardType="numeric"
+        onChangeText={v => {
+          const clean = postalConfig.numericOnly ? v.replace(/[^0-9]/g, '') : v;
+          onChange('pincode', clean.slice(0, postalConfig.max));
+        }}
+        keyboardType={postalConfig.keyboardType}
+        maxLength={postalConfig.max}
         onFocusScroll={() => onFocusScroll(240)}
       />
+
+      <Text style={sty.postalHintText}>
+        {data.country ? `${data.country}: ${postalConfig.hint}` : 'Select a country first'}
+      </Text>
     </View>
   );
 }
@@ -434,7 +785,7 @@ function StepIdentity({ data, onChange, onFocusScroll }) {
   };
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.58 }}>
+    <View>
       <StepHeader icon="school-outline" title="Personal & Lifestyle" sub="Mother tongue, religion, education & diet" />
 
       {/* Mother Tongue Dropdown */}
@@ -502,7 +853,7 @@ function StepIdentity({ data, onChange, onFocusScroll }) {
           );
         })}
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -511,7 +862,7 @@ function StepLifestyleHabits({ data, onChange }) {
   const { theme, isDark } = useTheme();
   const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   return (
-    <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: height * 0.58 }}>
+    <View>
       <StepHeader icon="wine-outline" title="Lifestyle & Dating Habits" sub="How you are to date (Smoking, Drinking, Clubbing & Diet)" />
 
       {/* Smoking Dropdown */}
@@ -590,10 +941,10 @@ function StepLifestyleHabits({ data, onChange }) {
       <View style={sty.lifestyleNoteCard}>
         <Ionicons name="sparkles" size={16} color="#FF007F" style={{ marginRight: 6 }} />
         <Text style={sty.lifestyleNoteText}>
-          These lifestyle badges help potential matches see what it's like to date you!
+          {"These lifestyle badges help potential matches see what it's like to date you!"}
         </Text>
       </View>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -651,27 +1002,34 @@ function StepPhotos({ data, onChange }) {
   const { theme, isDark } = useTheme();
   const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const images = data.images || [];
+  const validCount = images.filter(Boolean).length;
 
   const pickImage = async (idx) => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.5,
-      base64: true, // Enable Base64 generation for reliable upload
-    });
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 5],
+        quality: 0.6,
+        base64: true, // Enable Base64 generation for reliable upload
+      });
 
-    if (!res.canceled && res.assets[0]?.uri) {
-      const asset = res.assets[0];
-      let photoVal = asset.uri;
-      if (asset.base64) {
-        const mime = asset.mimeType || 'image/jpeg';
-        photoVal = `data:${mime};base64,${asset.base64}`;
+      if (!res.canceled && res.assets[0]?.uri) {
+        const asset = res.assets[0];
+        let photoVal = asset.uri;
+        if (asset.base64) {
+          const mime = asset.mimeType || 'image/jpeg';
+          photoVal = `data:${mime};base64,${asset.base64}`;
+        }
+
+        const next = [...images];
+        next[idx] = photoVal;
+        // Keep photos compacted so primary slot is always intact
+        const compacted = next.filter(Boolean);
+        onChange('images', compacted);
       }
-
-      const next = [...images];
-      next[idx] = photoVal;
-      onChange('images', next);
+    } catch (err) {
+      console.warn('Error launching image picker:', err);
     }
   };
 
@@ -682,28 +1040,160 @@ function StepPhotos({ data, onChange }) {
 
   return (
     <View>
-      <StepHeader icon="camera-outline" title="Show Your Best Self" sub="Add at least 3 photos to complete setup" />
+      <StepHeader
+        icon="camera-outline"
+        title="Show Your Best Self"
+        sub="Add at least 3 photos to complete setup"
+      />
+
+      {/* Progress & Readiness Status */}
+      <View style={sty.photoStatusCard}>
+        <View style={sty.photoStatusHeader}>
+          <View style={[sty.photoCountPill, validCount >= 3 && sty.photoCountPillComplete]}>
+            <Ionicons
+              name={validCount >= 3 ? "checkmark-circle" : "sparkles"}
+              size={scale(12)}
+              color="#FFF"
+              style={{ marginRight: scale(4) }}
+            />
+            <Text style={sty.photoCountPillText}>
+              {validCount} of 6 Added
+            </Text>
+          </View>
+          <Text style={[sty.photoStatusText, validCount >= 3 && sty.photoStatusTextComplete]}>
+            {validCount >= 3 ? 'Looking great! ✨' : `Add at least ${3 - validCount} more`}
+          </Text>
+        </View>
+
+        {/* 6-step progress segments */}
+        <View style={sty.photoProgressSegments}>
+          {Array(6).fill(null).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                sty.photoProgressSegment,
+                i < validCount && sty.photoProgressSegmentActive,
+                i < 3 && i >= validCount && sty.photoProgressSegmentRequired,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* 3 Photos In A Row Grid */}
       <View style={sty.photoGrid}>
         {Array(6).fill(null).map((_, i) => {
           const uri = images[i];
-          return (
-            <View key={i} style={sty.photoSlot}>
-              {uri ? (
-                <View style={{ flex: 1 }}>
-                  <Image source={{ uri }} style={sty.photoImg} />
-                  <TouchableOpacity onPress={() => removeImage(i)} style={sty.photoRemove}>
-                    <Ionicons name="close-circle" size={22} color="#FF375F" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity onPress={() => pickImage(i)} style={sty.photoEmpty}>
-                  <Ionicons name="image-outline" size={20} color="#FF4D94" />
-                  <Ionicons name="add-circle" size={14} color="#FF007F" style={sty.photoAddIcon} />
+          const isMain = i === 0;
+
+          if (uri) {
+            return (
+              <TouchableOpacity
+                key={i}
+                activeOpacity={0.88}
+                onPress={() => pickImage(i)}
+                style={[sty.photoSlot, sty.photoSlotFilled, isMain && sty.photoSlotMain]}
+              >
+                <Image source={{ uri }} style={sty.photoImg} resizeMode="cover" />
+
+                {/* Subtle top shade for crisp contrast on close button */}
+                <LinearGradient
+                  colors={['rgba(0,0,0,0.45)', 'transparent']}
+                  style={sty.photoTopGradient}
+                />
+
+                {/* Remove / Delete Button */}
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    removeImage(i);
+                  }}
+                  style={sty.photoRemoveBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <View style={sty.photoRemoveInner}>
+                    <Ionicons name="close" size={scale(12)} color="#FFFFFF" />
+                  </View>
                 </TouchableOpacity>
+
+                {/* Main Photo Badge on Slot 0 */}
+                {isMain ? (
+                  <LinearGradient
+                    colors={['#FF007F', '#B5179E']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={sty.mainBadge}
+                  >
+                    <Ionicons name="star" size={scale(9)} color="#FFFFFF" style={{ marginRight: 2 }} />
+                    <Text style={sty.mainBadgeText}>Main</Text>
+                  </LinearGradient>
+                ) : (
+                  <View style={sty.slotNumberBadge}>
+                    <Text style={sty.slotNumberText}>{i + 1}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }
+
+          return (
+            <TouchableOpacity
+              key={i}
+              activeOpacity={0.75}
+              onPress={() => pickImage(i)}
+              style={[
+                sty.photoSlot,
+                sty.photoSlotEmpty,
+                isMain && sty.photoSlotEmptyMain,
+                i < 3 && sty.photoSlotEmptyRequired,
+              ]}
+            >
+              <View style={[sty.photoEmptyIconWrap, isMain && sty.photoEmptyIconWrapMain]}>
+                <Ionicons
+                  name={isMain ? "camera" : "add"}
+                  size={isMain ? scale(18) : scale(20)}
+                  color={isMain ? "#FF007F" : (isDark ? "rgba(255,255,255,0.7)" : "#FF007F")}
+                />
+              </View>
+
+              <Text style={[sty.photoEmptyLabel, isMain && sty.photoEmptyLabelMain]}>
+                {isMain ? 'Main Photo' : `Slot ${i + 1}`}
+              </Text>
+
+              {isMain && (
+                <View style={sty.mainRequiredTag}>
+                  <Text style={sty.mainRequiredTagText}>Primary</Text>
+                </View>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })}
+      </View>
+
+      {/* Pro Photo Guidelines Card */}
+      <View style={sty.photoTipsCard}>
+        <View style={sty.photoTipsHeader}>
+          <View style={sty.photoTipsIconBox}>
+            <Ionicons name="sparkles" size={scale(13)} color="#FF007F" />
+          </View>
+          <Text style={sty.photoTipsTitle}>Photo Tips for High Matches</Text>
+        </View>
+        <View style={sty.photoTipsList}>
+          <View style={sty.photoTipRow}>
+            <Ionicons name="checkmark-circle" size={scale(13)} color="#30D158" style={{ marginRight: scale(6), marginTop: 1 }} />
+            <Text style={sty.photoTipText}>
+              <Text style={sty.photoTipBold}>Clear Portrait: </Text>
+              Solo picture smiling with good lighting as your primary photo.
+            </Text>
+          </View>
+          <View style={sty.photoTipRow}>
+            <Ionicons name="checkmark-circle" size={scale(13)} color="#30D158" style={{ marginRight: scale(6), marginTop: 1 }} />
+            <Text style={sty.photoTipText}>
+              <Text style={sty.photoTipBold}>Show Your Vibe: </Text>
+              Add travel, pets, or hobbies to spark real conversations.
+            </Text>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -743,8 +1233,8 @@ export default function RegisterScreen() {
     images: [],
   });
 
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const progressAnim = useRef(new Animated.Value(1 / TOTAL_STEPS)).current;
+  const [slideAnim] = useState(() => new Animated.Value(0));
+  const [progressAnim] = useState(() => new Animated.Value(1 / TOTAL_STEPS));
   const scrollViewRef = useRef(null);
 
   useEffect(() => {
@@ -753,7 +1243,7 @@ export default function RegisterScreen() {
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [step]);
+  }, [step, progressAnim]);
 
   const onChange = (field, val) => {
     setData(p => ({ ...p, [field]: val }));
@@ -768,7 +1258,12 @@ export default function RegisterScreen() {
     if (s === 1) return !!(d.countryCode && d.phone && d.phone.length >= 10);
     if (s === 2) return !!(d.hobbies && d.hobbies.length >= 3);
     if (s === 3) return !!(d.relationshipType && d.maritalStatus);
-    if (s === 4) return !!(d.country && d.state && d.city && d.pincode);
+    if (s === 4) {
+      const pConf = getPostalConfig(d.country);
+      const pin = (d.pincode || '').trim();
+      const pinValid = pin.length >= pConf.min && pin.length <= pConf.max;
+      return !!(d.country && d.state && d.city && pinValid);
+    }
     if (s === 5) return !!(d.motherTongue && d.religion && d.education && d.occupation && d.languagesSpoken && d.languagesSpoken.length >= 1);
     if (s === 6) return !!(d.smoking && d.drinking && d.clubbing && d.diet);
     if (s === 7) return true; // Video Intro is SKIPPABLE!
@@ -785,7 +1280,22 @@ export default function RegisterScreen() {
       case 1: return 'Please select Country Code and enter a valid 10-digit mobile number.';
       case 2: return 'Please select at least 3 hobbies or interests.';
       case 3: return 'Please select your Relationship Goal and Marital Status.';
-      case 4: return 'Please select your Country, State, City, and enter your Zipcode / Pincode.';
+      case 4: {
+        const pConf = getPostalConfig(data.country);
+        const pin = (data.pincode || '').trim();
+        if (!data.country || !data.state || !data.city) {
+          return 'Please select your Country, State, and City.';
+        }
+        if (!pin) {
+          return `Please enter your ${pConf.name}.`;
+        }
+        if (pin.length < pConf.min || pin.length > pConf.max) {
+          return pConf.min === pConf.max
+            ? `${pConf.name} for ${data.country || 'your country'} must be exactly ${pConf.max} digits.`
+            : `${pConf.name} for ${data.country || 'your country'} must be between ${pConf.min} and ${pConf.max} digits.`;
+        }
+        return 'Please select your Country, State, City, and enter your Zipcode / Pincode.';
+      }
       case 5: return 'Please select Mother Tongue, Religion, Education, Occupation, and at least 1 Language Spoken.';
       case 6: return 'Please select your Smoking, Drinking, Clubbing, and Diet preferences.';
       case 7: return '';
@@ -825,7 +1335,7 @@ export default function RegisterScreen() {
           dobString = typeof data.dob === 'string'
             ? data.dob.split('T')[0]
             : new Date(data.dob).toISOString().split('T')[0];
-        } catch (e) {
+        } catch (_e) {
           dobString = '2000-01-01';
         }
       }
@@ -903,7 +1413,7 @@ export default function RegisterScreen() {
     }
   };
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     if (step > 0) {
       Animated.timing(slideAnim, {
         toValue: width,
@@ -926,7 +1436,7 @@ export default function RegisterScreen() {
         navigation.goBack();
       }
     }
-  };
+  }, [step, slideAnim, navigation]);
 
   useEffect(() => {
     const handleHardwareBack = () => {
@@ -939,7 +1449,51 @@ export default function RegisterScreen() {
 
     const backSub = BackHandler.addEventListener('hardwareBackPress', handleHardwareBack);
     return () => backSub.remove();
-  }, [step]);
+  }, [step, goBack]);
+
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [layoutHeight, setLayoutHeight] = useState(0);
+  const [initialHeight, setInitialHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        setIsKeyboardVisible(true);
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleLayout = (e) => {
+    const h = e.nativeEvent.layout.height;
+    if (h > 0) {
+      if (!initialHeight || (!isKeyboardVisible && h > initialHeight)) {
+        setInitialHeight(h);
+      }
+      setLayoutHeight(h);
+    }
+  };
+
+  const windowShrunk = (initialHeight > 0 && layoutHeight > 0)
+    ? Math.max(0, initialHeight - layoutHeight)
+    : 0;
+  const KEYBOARD_GAP = Platform.OS === 'ios' ? verticalScale(10) : verticalScale(14);
+  const effectiveBottomPadding = isKeyboardVisible
+    ? Math.max(0, keyboardHeight - windowShrunk) + KEYBOARD_GAP
+    : 0;
 
   const handleScrollToInput = (yOffset = 100) => {
     setTimeout(() => {
@@ -963,7 +1517,11 @@ export default function RegisterScreen() {
         onClose={() => setValidationAlertVisible(false)}
       />
 
-      <SafeAreaView style={sty.flex}>
+      <SafeAreaView
+        style={sty.flex}
+        edges={['top', 'left', 'right', ...(isKeyboardVisible ? [] : ['bottom'])]}
+        onLayout={handleLayout}
+      >
         {/* Top Header */}
         <View style={sty.topBar}>
           <TouchableOpacity onPress={goBack} style={sty.backBtn}>
@@ -987,18 +1545,23 @@ export default function RegisterScreen() {
           <Text style={sty.stepCounter}>{step + 1}/{TOTAL_STEPS}</Text>
         </View>
 
-        {/* Wizard Card Body */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 20}
-          style={sty.flex}
-        >
+        {/* Wizard Card Body and Bottom Actions */}
+        <View style={[sty.flex, { paddingBottom: effectiveBottomPadding }]}>
           <ScrollView
             ref={scrollViewRef}
-            contentContainerStyle={sty.scrollContent}
+            style={sty.flex}
+            contentContainerStyle={[
+              sty.scrollContent,
+              isKeyboardVisible && { paddingBottom: verticalScale(70) }
+            ]}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets={true}
+            keyboardDismissMode={Platform.OS === 'ios' ? 'on-drag' : 'none'}
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+            bounces={true}
+            alwaysBounceVertical={true}
+            overScrollMode="always"
           >
             <Animated.View style={[sty.card, { transform: [{ translateX: slideAnim }] }]}>
               {step === 0 && <StepCredentials data={data} onChange={onChange} onFocusScroll={handleScrollToInput} />}
@@ -1012,21 +1575,25 @@ export default function RegisterScreen() {
               {step === 8 && <StepPhotos data={data} onChange={onChange} />}
             </Animated.View>
           </ScrollView>
-        </KeyboardAvoidingView>
 
-        {/* Bottom Actions */}
-        <View style={sty.bottomBar}>
-          <TouchableOpacity style={sty.nextBtn} onPress={goNext} activeOpacity={0.85}>
-            <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sty.nextBtnGrad}>
-              <Text style={sty.nextBtnText}>{step === TOTAL_STEPS - 1 ? 'Complete Setup' : 'Continue'}</Text>
-              <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
-            </LinearGradient>
-          </TouchableOpacity>
+          {/* Bottom Actions - Kept right above keypad */}
+          <View style={[sty.bottomBar, isKeyboardVisible && sty.bottomBarWithKeyboard]}>
+            <TouchableOpacity style={sty.nextBtn} onPress={goNext} activeOpacity={0.85}>
+              <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sty.nextBtnGrad}>
+                <Text style={sty.nextBtnText}>{step === TOTAL_STEPS - 1 ? 'Complete Setup' : 'Continue'}</Text>
+                <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
     </LinearGradient>
   );
 }
+
+const PHOTO_GAP = scale(8);
+const PHOTO_SLOT_WIDTH = Math.floor((width - scale(32) - 36 - (PHOTO_GAP * 2)) / 3);
+const PHOTO_SLOT_HEIGHT = Math.round(PHOTO_SLOT_WIDTH * 1.32);
 
 const getStyles = (theme, isDark) => StyleSheet.create({
   root: { flex: 1 },
@@ -1043,7 +1610,12 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   progressTrack: { flex: 1, height: 6, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', borderRadius: 3, marginHorizontal: 12, overflow: 'hidden' },
   progressBar: { height: '100%', backgroundColor: '#FF007F', borderRadius: 3 },
   stepCounter: { fontSize: 12, fontWeight: '700', color: theme.textSec },
-  scrollContent: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 20 },
+  scrollContent: {
+    paddingHorizontal: scale(16),
+    paddingTop: verticalScale(6),
+    paddingBottom: verticalScale(36),
+    flexGrow: 1,
+  },
   card: { backgroundColor: isDark ? '#1C1433' : '#FFFFFF', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
 
   stepHeader: { marginBottom: 14 },
@@ -1074,12 +1646,185 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   otpHintRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
   otpHint: { fontSize: 11.5, color: theme.textFaint },
 
-  selectedCount: { fontSize: 12, fontWeight: '700', color: '#FF007F', marginBottom: 8 },
-  chipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  hobbyChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' },
-  hobbyChipActive: { backgroundColor: 'rgba(255,0,127,0.08)', borderColor: '#FF007F' },
-  hobbyText: { fontSize: 12, color: theme.textSec },
-  hobbyTextActive: { color: '#FF007F', fontWeight: '700' },
+  interestStatusCard: {
+    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+    borderRadius: scale(14),
+    padding: scale(12),
+    marginBottom: verticalScale(12),
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+  },
+  interestStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(8),
+  },
+  interestCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF007F',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(3),
+    borderRadius: scale(12),
+    marginRight: scale(8),
+  },
+  interestCountPillComplete: {
+    backgroundColor: '#30D158',
+  },
+  interestCountPillText: {
+    color: '#FFF',
+    fontSize: fs(11),
+    fontWeight: '800',
+  },
+  interestStatusText: {
+    fontSize: fs(12),
+    fontWeight: '600',
+    color: theme.textPrimary,
+  },
+  interestClearBtn: {
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(2),
+  },
+  interestClearText: {
+    fontSize: fs(11.5),
+    fontWeight: '600',
+    color: theme.textFaint,
+  },
+  interestProgressTrack: {
+    height: verticalScale(5),
+    borderRadius: scale(3),
+    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+  },
+  interestProgressBar: {
+    height: '100%',
+    borderRadius: scale(3),
+  },
+
+  interestCategoryBar: {
+    flexDirection: 'row',
+    gap: scale(6),
+    paddingBottom: verticalScale(12),
+  },
+  interestCatChip: {
+    borderRadius: scale(16),
+    overflow: 'hidden',
+  },
+  interestCatChipActive: {},
+  interestCatChipGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(16),
+  },
+  interestCatChipInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(16),
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+  },
+  interestCatText: {
+    fontSize: fs(11.5),
+    fontWeight: '600',
+    color: theme.textSec,
+  },
+  interestCatTextActive: {
+    fontSize: fs(11.5),
+    fontWeight: '700',
+    color: '#FFF',
+  },
+
+  postalHintText: {
+    fontSize: fs(11.5),
+    color: theme.textFaint,
+    marginTop: -verticalScale(6),
+    marginBottom: verticalScale(10),
+    marginLeft: scale(4),
+  },
+
+  chipGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: verticalScale(9),
+  },
+  hobbyChip: {
+    width: '48.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: scale(10),
+    paddingVertical: verticalScale(10),
+    minHeight: verticalScale(48),
+    borderRadius: scale(14),
+    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)',
+  },
+  hobbyChipActive: {
+    backgroundColor: 'rgba(255,0,127,0.1)',
+    borderColor: '#FF007F',
+  },
+  hobbyChipLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: scale(4),
+  },
+  hobbyEmoji: {
+    fontSize: fs(15),
+    marginRight: scale(7),
+  },
+  hobbyText: {
+    fontSize: fs(12),
+    fontWeight: '600',
+    color: theme.textPrimary,
+    flexShrink: 1,
+  },
+  hobbyTextActive: {
+    color: '#FF007F',
+    fontWeight: '700',
+  },
+  hobbyCheckCircle: {
+    width: scale(18),
+    height: scale(18),
+    borderRadius: scale(9),
+    backgroundColor: '#FF007F',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: scale(2),
+  },
+  hobbyUncheckCircle: {
+    width: scale(18),
+    height: scale(18),
+    borderRadius: scale(9),
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
+    marginLeft: scale(2),
+  },
+
+  interestTipCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,0,127,0.05)',
+    borderRadius: scale(12),
+    padding: scale(12),
+    marginTop: verticalScale(14),
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.12)',
+  },
+  interestTipText: {
+    flex: 1,
+    fontSize: fs(11.5),
+    color: theme.textSec,
+    lineHeight: verticalScale(17),
+  },
 
   prefCard: { flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', marginBottom: 8, overflow: 'hidden' },
   prefCardActive: { borderColor: '#FF007F', backgroundColor: 'rgba(255,0,127,0.04)' },
@@ -1088,12 +1833,238 @@ const getStyles = (theme, isDark) => StyleSheet.create({
   prefLabelActive: { color: '#FF007F' },
   prefDesc: { fontSize: 11, color: theme.textFaint, marginTop: 1 },
 
-  photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 },
-  photoSlot: { width: (width - 72) / 3, height: ((width - 72) / 3) * 1.25, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' },
-  photoImg: { width: '100%', height: '100%' },
-  photoRemove: { position: 'absolute', top: 4, right: 4 },
-  photoEmpty: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  photoAddIcon: { position: 'absolute', bottom: 6, right: 6 },
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: PHOTO_GAP,
+    marginTop: verticalScale(6),
+    marginBottom: verticalScale(12),
+  },
+  photoSlot: {
+    width: PHOTO_SLOT_WIDTH,
+    height: PHOTO_SLOT_HEIGHT,
+    borderRadius: scale(14),
+    overflow: 'hidden',
+  },
+  photoSlotFilled: {
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+    backgroundColor: isDark ? '#261C44' : '#F4F4F6',
+  },
+  photoSlotMain: {
+    borderColor: '#FF007F',
+    borderWidth: 2,
+  },
+  photoSlotEmpty: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)',
+    backgroundColor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+    padding: scale(6),
+  },
+  photoSlotEmptyMain: {
+    borderColor: '#FF007F',
+    backgroundColor: isDark ? 'rgba(255,0,127,0.08)' : 'rgba(255,0,127,0.04)',
+  },
+  photoSlotEmptyRequired: {
+    borderColor: isDark ? 'rgba(255,0,127,0.35)' : 'rgba(255,0,127,0.25)',
+  },
+  photoImg: {
+    width: '100%',
+    height: '100%',
+  },
+  photoTopGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: verticalScale(30),
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: scale(5),
+    right: scale(5),
+    zIndex: 10,
+  },
+  photoRemoveInner: {
+    width: scale(22),
+    height: scale(22),
+    borderRadius: scale(11),
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainBadge: {
+    position: 'absolute',
+    bottom: scale(6),
+    left: scale(6),
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: scale(8),
+  },
+  mainBadgeText: {
+    color: '#FFF',
+    fontSize: fs(9),
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  slotNumberBadge: {
+    position: 'absolute',
+    bottom: scale(6),
+    left: scale(6),
+    width: scale(18),
+    height: scale(18),
+    borderRadius: scale(9),
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  slotNumberText: {
+    color: '#FFF',
+    fontSize: fs(9),
+    fontWeight: '700',
+  },
+  photoEmptyIconWrap: {
+    width: scale(34),
+    height: scale(34),
+    borderRadius: scale(17),
+    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: verticalScale(4),
+  },
+  photoEmptyIconWrapMain: {
+    backgroundColor: 'rgba(255,0,127,0.12)',
+  },
+  photoEmptyLabel: {
+    fontSize: fs(10),
+    fontWeight: '600',
+    color: theme.textSec,
+    textAlign: 'center',
+  },
+  photoEmptyLabelMain: {
+    color: '#FF007F',
+    fontWeight: '700',
+  },
+  mainRequiredTag: {
+    marginTop: verticalScale(4),
+    backgroundColor: 'rgba(255,0,127,0.1)',
+    paddingHorizontal: scale(5),
+    paddingVertical: verticalScale(1.5),
+    borderRadius: scale(6),
+  },
+  mainRequiredTagText: {
+    color: '#FF007F',
+    fontSize: fs(8),
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+
+  // Photo status card
+  photoStatusCard: {
+    backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+    borderRadius: scale(14),
+    padding: scale(12),
+    marginBottom: verticalScale(8),
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+  },
+  photoStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: verticalScale(8),
+  },
+  photoCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF007F',
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(3),
+    borderRadius: scale(12),
+  },
+  photoCountPillComplete: {
+    backgroundColor: '#30D158',
+  },
+  photoCountPillText: {
+    color: '#FFF',
+    fontSize: fs(11),
+    fontWeight: '800',
+  },
+  photoStatusText: {
+    fontSize: fs(11.5),
+    fontWeight: '600',
+    color: theme.textPrimary,
+  },
+  photoStatusTextComplete: {
+    color: '#30D158',
+  },
+  photoProgressSegments: {
+    flexDirection: 'row',
+    gap: scale(5),
+    height: verticalScale(4),
+  },
+  photoProgressSegment: {
+    flex: 1,
+    borderRadius: scale(2),
+    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+  },
+  photoProgressSegmentActive: {
+    backgroundColor: '#FF007F',
+  },
+  photoProgressSegmentRequired: {
+    backgroundColor: 'rgba(255,0,127,0.25)',
+  },
+
+  // Photo tips card
+  photoTipsCard: {
+    backgroundColor: 'rgba(255,0,127,0.04)',
+    borderRadius: scale(14),
+    padding: scale(12),
+    marginTop: verticalScale(4),
+    borderWidth: 1,
+    borderColor: 'rgba(255,0,127,0.12)',
+  },
+  photoTipsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: verticalScale(6),
+  },
+  photoTipsIconBox: {
+    width: scale(22),
+    height: scale(22),
+    borderRadius: scale(11),
+    backgroundColor: 'rgba(255,0,127,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: scale(7),
+  },
+  photoTipsTitle: {
+    fontSize: fs(12),
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
+  photoTipsList: {
+    gap: verticalScale(4),
+  },
+  photoTipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  photoTipText: {
+    flex: 1,
+    fontSize: fs(11),
+    color: theme.textSec,
+    lineHeight: verticalScale(16),
+  },
+  photoTipBold: {
+    fontWeight: '700',
+    color: theme.textPrimary,
+  },
 
   videoCard: { marginVertical: 10 },
   videoUploadBox: { height: 160, borderRadius: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#FF007F', justifyContent: 'center', alignItems: 'center', padding: 16, overflow: 'hidden' },
@@ -1124,6 +2095,10 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     paddingHorizontal: scale(16),
     paddingTop: verticalScale(8),
     paddingBottom: Platform.OS === 'ios' ? verticalScale(24) : verticalScale(16),
+  },
+  bottomBarWithKeyboard: {
+    paddingTop: verticalScale(8),
+    paddingBottom: verticalScale(12),
   },
   nextBtn: { borderRadius: scale(14), overflow: 'hidden' },
   nextBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: verticalScale(12) },

@@ -82,9 +82,10 @@ function CustomTabBar({ state, descriptors, navigation }) {
   const dynamicBottom = Math.max(insets.bottom + 8, Platform.OS === 'ios' ? 24 : 14);
 
   return (
-    <View style={[styles.tabBarContainer, { bottom: dynamicBottom }]}>
+    <View style={[styles.tabBarContainer, { bottom: dynamicBottom, width: tabBarWidth }]}>
       {/* Sliding indicator line at the top, perfectly centered and offset to padding */}
       <Animated.View
+        pointerEvents="none"
         style={[
           styles.slidingIndicator,
           {
@@ -111,11 +112,18 @@ function CustomTabBar({ state, descriptors, navigation }) {
           });
 
           if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
+            navigation.navigate({ name: route.name, merge: true });
           }
         };
 
-        const icons = ICONS[route.name];
+        const onLongPress = () => {
+          navigation.emit({
+            type: 'tabLongPress',
+            target: route.key,
+          });
+        };
+
+        const icons = ICONS[route.name] || { on: 'ellipse', off: 'ellipse-outline' };
         const iconName = isFocused ? icons.on : icons.off;
 
         const iconColor = isFocused 
@@ -136,6 +144,7 @@ function CustomTabBar({ state, descriptors, navigation }) {
             accessibilityLabel={options.tabBarAccessibilityLabel}
             testID={options.tabBarTestID}
             onPress={onPress}
+            onLongPress={onLongPress}
             style={styles.tabItem}
             activeOpacity={0.8}
           >
@@ -165,6 +174,8 @@ function CustomTabBar({ state, descriptors, navigation }) {
 export default function MainTabNavigator() {
   return (
     <Tab.Navigator
+      initialRouteName="Discover"
+      backBehavior="initialRoute"
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
@@ -182,9 +193,7 @@ export default function MainTabNavigator() {
 const getStyles = (theme) => StyleSheet.create({
   tabBarContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 28 : 20,
-    left: 16,
-    right: 16,
+    alignSelf: 'center',
     height: 72,
     flexDirection: 'row',
     backgroundColor: theme.isDark ? 'rgba(14, 14, 20, 1)' : 'rgba(255, 255, 255, 0.96)',
@@ -198,6 +207,7 @@ const getStyles = (theme) => StyleSheet.create({
     shadowOpacity: theme.isDark ? 0.35 : 0.08,
     shadowRadius: 15,
     elevation: 10,
+    zIndex: 999,
   },
   slidingIndicator: {
     position: 'absolute',

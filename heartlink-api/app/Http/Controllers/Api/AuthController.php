@@ -875,14 +875,6 @@ public function savePushToken(Request $request)
         ]);
     }
 
-    public function getUserCount()
-    {
-        $count = User::count();
-        return response()->json([
-            'user_count'  => $count,
-            'target_goal' => 5000,
-        ]);
-    }
 
     /**
      * Trigger a test push notification to the logged-in user
@@ -917,6 +909,29 @@ public function savePushToken(Request $request)
             'status'          => $delivered ? 'success' : 'failed',
             'message'         => $delivered ? 'Test notification dispatched successfully' : 'Failed to dispatch notification. Check logs.',
             'expo_push_token' => $user->expo_push_token,
+        ]);
+    }
+
+    /**
+     * Public endpoint — returns total user count + info for a given user ID.
+     * GET /api/v1/user-count?user_id=16
+     */
+    public function getUserCount(Request $request)
+    {
+        $userId = (int) $request->query('user_id', 16);
+
+        $totalCount = User::count();
+        $user = User::find($userId);
+
+        return response()->json([
+            'success'     => true,
+            'total_users' => $totalCount,
+            'user'        => $user ? [
+                'id'         => $user->id,
+                'name'       => $user->name,
+                'email'      => $user->email,
+                'created_at' => $user->created_at,
+            ] : null,
         ]);
     }
 }

@@ -7,12 +7,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import CustomAlertModal from '../components/CustomAlertModal';
 import PaymentGatewayModal from '../components/PaymentGatewayModal';
 import { apiSubscribePlan, apiGetSubscriptionPlans, apiVerifyGooglePurchase } from '../services/api';
+import { hasActivePaidPlan } from '../utils/helpers';
 import {
   initializeIAP,
   setupPurchaseListeners,
@@ -199,6 +201,13 @@ export default function PlansScreen() {
         await updateUser(verifyRes.user);
       }
 
+      // Permanently suppress 20% off welcome popup and offer banner once user buys a plan
+      const uId = user?.id || user?.email || 'active_user';
+      await AsyncStorage.setItem(`@heartlink_has_purchased_plan_${uId}`, 'true').catch(() => {});
+      await AsyncStorage.setItem(`@heartlink_hide_offer_${uId}`, (Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toString()).catch(() => {});
+      setIsOfferEligible(false);
+      setTimeLeftMs(0);
+
       setPurchasedPlanName(planName);
       setSuccessAlertVisible(true);
     } catch (vErr) {
@@ -263,29 +272,62 @@ export default function PlansScreen() {
   }, []);
 
   useEffect(() => {
-    let createdAtTimestamp = null;
-    if (user?.created_at) {
-      const parsed = new Date(user.created_at).getTime();
-      if (!isNaN(parsed) && parsed > 0) {
-        createdAtTimestamp = parsed;
-      }
-    }
+    let isCancelled = false;
 
-    if (!createdAtTimestamp) {
-      createdAtTimestamp = Date.now();
-    }
-
-    const expiresAt = createdAtTimestamp + OFFER_DURATION_MS;
-    const remainingMs = expiresAt - Date.now();
-
-    if (remainingMs > 0 || route.params?.welcomeDiscount20 || route.params?.discountOffer) {
-      const initialRemaining = remainingMs > 0 ? remainingMs : OFFER_DURATION_MS;
-      setTimeLeftMs(initialRemaining);
-      setIsOfferEligible(true);
-    } else {
+    // Immediately suppress offer if user already has an active plan or subscription
+    if (hasActivePaidPlan(user)) {
       setIsOfferEligible(false);
       setTimeLeftMs(0);
+      return;
     }
+
+    const userId = user?.id || user?.email || 'active_user';
+    const purchasedKey = `@heartlink_has_purchased_plan_${userId}`;
+
+    AsyncStorage.getItem(purchasedKey)
+      .then((hasPurchased) => {
+        if (isCancelled) return;
+        if (hasPurchased === 'true' || hasActivePaidPlan(user)) {
+          setIsOfferEligible(false);
+          setTimeLeftMs(0);
+          return;
+        }
+
+        let createdAtTimestamp = null;
+        if (user?.created_at) {
+          const parsed = new Date(user.created_at).getTime();
+          if (!isNaN(parsed) && parsed > 0) {
+            createdAtTimestamp = parsed;
+          }
+        }
+
+        if (!createdAtTimestamp) {
+          createdAtTimestamp = Date.now();
+        }
+
+        const expiresAt = createdAtTimestamp + OFFER_DURATION_MS;
+        const remainingMs = expiresAt - Date.now();
+
+        if (remainingMs > 0 || route.params?.welcomeDiscount20 || route.params?.discountOffer) {
+          const initialRemaining = remainingMs > 0 ? remainingMs : OFFER_DURATION_MS;
+          setTimeLeftMs(initialRemaining);
+          setIsOfferEligible(true);
+        } else {
+          setIsOfferEligible(false);
+          setTimeLeftMs(0);
+        }
+      })
+      .catch(() => {
+        if (isCancelled) return;
+        if (hasActivePaidPlan(user)) {
+          setIsOfferEligible(false);
+          setTimeLeftMs(0);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [user, route.params]);
 
   useEffect(() => {
@@ -898,10 +940,15 @@ export default function PlansScreen() {
           setCustomOfferPrice(null);
           setOriginalOfferPrice(null);
         }}
-        onPaymentSuccess={() => {
+        onPaymentSuccess={async () => {
           setPaymentModalVisible(false);
           setCustomOfferPrice(null);
           setOriginalOfferPrice(null);
+          const uId = user?.id || user?.email || 'active_user';
+          await AsyncStorage.setItem(`@heartlink_has_purchased_plan_${uId}`, 'true').catch(() => {});
+          await AsyncStorage.setItem(`@heartlink_hide_offer_${uId}`, (Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toString()).catch(() => {});
+          setIsOfferEligible(false);
+          setTimeLeftMs(0);
           navigation.goBack();
         }}
       />

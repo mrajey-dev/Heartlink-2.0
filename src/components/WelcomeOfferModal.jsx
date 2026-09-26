@@ -16,6 +16,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 import { navigate } from '../navigation/navigationRef';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { hasActivePaidPlan } from '../utils/helpers';
 
 const { width } = Dimensions.get('window');
 const OFFER_DURATION_MS = 24 * 60 * 60 * 1000; // 24 Hours
@@ -24,6 +25,8 @@ export default function WelcomeOfferModal() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { isDark } = useTheme();
+
+  const userHasPlan = useMemo(() => hasActivePaidPlan(user), [user]);
 
   // MATCH APP THEME DIRECTLY:
   // App in Dark mode (isDark = true) -> Card is Dark theme (cardIsDark = true)
@@ -37,8 +40,15 @@ export default function WelcomeOfferModal() {
   const [dontShowToday, setDontShowToday] = useState(false);
   const [showCloseBtn, setShowCloseBtn] = useState(false);
 
+  // Automatically dismiss modal if user acquires an active plan or subscription
   useEffect(() => {
-    if (!user) {
+    if (userHasPlan && visible) {
+      setVisible(false);
+    }
+  }, [userHasPlan, visible]);
+
+  useEffect(() => {
+    if (!user || userHasPlan) {
       setVisible(false);
       return;
     }
@@ -47,9 +57,23 @@ export default function WelcomeOfferModal() {
     const userId = user.id || user.email || 'active_user';
     const storageKey = `@heartlink_first_login_${userId}`;
     const hideTodayKey = `@heartlink_hide_offer_${userId}`;
+    const purchasedKey = `@heartlink_has_purchased_plan_${userId}`;
 
     const checkOfferEligibility = async () => {
       try {
+        // 1. Permanently do not show if user already has an active plan or subscription
+        if (hasActivePaidPlan(user)) {
+          if (isMounted) setVisible(false);
+          return;
+        }
+
+        // 2. Permanently do not show if user has previously purchased any plan or subscription
+        const hasPurchased = await AsyncStorage.getItem(purchasedKey);
+        if (hasPurchased === 'true') {
+          if (isMounted) setVisible(false);
+          return;
+        }
+
         // Check if hidden for today
         const hideTimestamp = await AsyncStorage.getItem(hideTodayKey);
         if (hideTimestamp) {
@@ -168,7 +192,7 @@ export default function WelcomeOfferModal() {
     });
   };
 
-  if (!visible) return null;
+  if (!visible || userHasPlan) return null;
 
   return (
     <Modal

@@ -126,7 +126,7 @@ export default function SupportChatScreen() {
         if (val === 'true') {
           setIsExpertMode(true);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [currentUser?.id]);
 
@@ -155,7 +155,7 @@ export default function SupportChatScreen() {
 
     const userId = currentUserRef.current?.id;
     if (userId) {
-      AsyncStorage.setItem(`@heartlink_support_expert_mode_${userId}`, 'true').catch(() => {});
+      AsyncStorage.setItem(`@heartlink_support_expert_mode_${userId}`, 'true').catch(() => { });
     }
 
     const user = currentUserRef.current;
@@ -176,7 +176,7 @@ export default function SupportChatScreen() {
     setMessages(prev => [...prev, connectNoticeMsg]);
     localSupportRepliesRef.current = [...(localSupportRepliesRef.current || []), connectNoticeMsg];
     if (userId) {
-      AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localSupportRepliesRef.current)).catch(() => {});
+      AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localSupportRepliesRef.current)).catch(() => { });
     }
 
     scrollToBottom(true);
@@ -187,7 +187,7 @@ export default function SupportChatScreen() {
     setIsExpertMode(false);
     const userId = currentUserRef.current?.id;
     if (userId) {
-      AsyncStorage.removeItem(`@heartlink_support_expert_mode_${userId}`).catch(() => {});
+      AsyncStorage.removeItem(`@heartlink_support_expert_mode_${userId}`).catch(() => { });
     }
     triggerToast('Live Specialist Session closed');
   };
@@ -261,7 +261,7 @@ export default function SupportChatScreen() {
         localSupportRepliesRef.current = localReplies;
         const userId = currentUserRef.current?.id;
         if (userId) {
-          AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localReplies)).catch(() => {});
+          AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(localReplies)).catch(() => { });
         }
 
         for (const localMsg of localReplies) {
@@ -384,13 +384,13 @@ export default function SupportChatScreen() {
             });
             localSupportRepliesRef.current = validReplies;
             if (validReplies.length !== parsed.length) {
-              AsyncStorage.setItem(storageKey, JSON.stringify(validReplies)).catch(() => {});
+              AsyncStorage.setItem(storageKey, JSON.stringify(validReplies)).catch(() => { });
             }
             fetchHistory(false);
           }
-        } catch (e) {}
+        } catch (e) { }
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, [currentUser?.id, fetchHistory]);
 
   // Connect WebSockets Echo + 2s polling
@@ -417,7 +417,7 @@ export default function SupportChatScreen() {
           console.warn('Support Echo Error:', err?.message);
         }
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     const unsubChat = eventEmitter.on(EVENTS.CHAT_UPDATED, () => fetchHistory(false));
 
@@ -425,7 +425,7 @@ export default function SupportChatScreen() {
       clearInterval(pollTimer);
       unsubChat();
       if (echoSub) {
-        try { echoSub.stopListening('.message.sent'); } catch (err) {}
+        try { echoSub.stopListening('.message.sent'); } catch (err) { }
       }
     };
   }, [fetchHistory, currentUser?.id]);
@@ -571,7 +571,7 @@ export default function SupportChatScreen() {
         // Check if this query matches a known question to provide contextual follow-ups
         const matchedQ = SUPPORT_QUESTIONS.find(
           q => q.question.toLowerCase().trim() === txt.toLowerCase().trim() ||
-               q.label.toLowerCase().trim() === txt.toLowerCase().trim()
+            q.label.toLowerCase().trim() === txt.toLowerCase().trim()
         );
         const answeredCategoryId = matchedQ?.categoryId || null;
         const answeredCategoryTitle = answeredCategoryId
@@ -602,7 +602,7 @@ export default function SupportChatScreen() {
             localSupportRepliesRef.current = updatedReplies;
             const userId = currentUserRef.current?.id;
             if (userId) {
-              AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
+              AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => { });
             }
 
             setMessages(prev => {
@@ -694,7 +694,7 @@ export default function SupportChatScreen() {
         localSupportRepliesRef.current = updatedReplies;
         const userId = currentUserRef.current?.id;
         if (userId) {
-          AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
+          AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => { });
         }
 
         setMessages(prev => [...prev, replyMsg]);
@@ -725,7 +725,7 @@ export default function SupportChatScreen() {
     localSupportRepliesRef.current = updatedReplies;
     const userId = currentUserRef.current?.id;
     if (userId) {
-      AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => {});
+      AsyncStorage.setItem(`@heartlink_support_replies_${userId}`, JSON.stringify(updatedReplies)).catch(() => { });
     }
 
     setMessages(prev => [...prev, replyMsg]);

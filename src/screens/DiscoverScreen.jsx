@@ -89,6 +89,29 @@ export default function DiscoverScreen() {
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastScale = useRef(new Animated.Value(0.85)).current;
 
+  // Skeleton pulse animation for card swapping
+  const skeletonPulseAnim = useRef(new Animated.Value(0.45)).current;
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulseAnim, {
+          toValue: 0.9,
+          duration: 850,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(skeletonPulseAnim, {
+          toValue: 0.45,
+          duration: 850,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, [skeletonPulseAnim]);
+
   // Active Plan Check
   const hasActivePlan = useMemo(() => {
     if (!user) return false;
@@ -886,228 +909,315 @@ export default function DiscoverScreen() {
           </Animated.View>
         )}
 
-        {/* Card Container (Only Current Profile Card Rendered) */}
-        <View
-          style={styles.cardStackContainer}
-          onLayout={(e) => {
-            cardHeightRef.current = e.nativeEvent.layout.height;
-          }}
-        >
-          {!currentProfile || activeProfiles.length === 0 ? (
-            feedLoading ? (
-              <View style={styles.emptyWrap} pointerEvents="none">
-                <ActivityIndicator size="large" color="#FF007F" />
-              </View>
+        {/* Unified Discovery Deck Container (Profile Card Area + Stationary Joined Action Dock) */}
+        <View style={styles.discoverDeckContainer}>
+          <View
+            style={styles.cardStackContainer}
+            onLayout={(e) => {
+              cardHeightRef.current = e.nativeEvent.layout.height;
+            }}
+          >
+            {!currentProfile || activeProfiles.length === 0 ? (
+              feedLoading ? (
+                <View style={styles.skeletonCardBase} pointerEvents="none">
+                  <Animated.View style={[styles.skeletonContent, { opacity: skeletonPulseAnim }]}>
+                    <View style={styles.skeletonTopRow}>
+                      <View style={styles.skeletonPillSmall} />
+                      <View style={styles.skeletonMatchPill} />
+                    </View>
+                    <View style={styles.skeletonCenterEmblem}>
+                      <View style={styles.skeletonEmblemCircle}>
+                        <Ionicons name="sparkles" size={28} color="#CBD5E1" />
+                      </View>
+                    </View>
+                    <View style={styles.skeletonBottomInfo}>
+                      <View style={styles.skeletonNameBar} />
+                      <View style={styles.skeletonPillRow}>
+                        <View style={styles.skeletonPill} />
+                        <View style={styles.skeletonPillWide} />
+                      </View>
+                      <View style={styles.skeletonTagsRow}>
+                        <View style={styles.skeletonTag} />
+                        <View style={styles.skeletonTag} />
+                        <View style={styles.skeletonTag} />
+                      </View>
+                    </View>
+                  </Animated.View>
+                </View>
+              ) : (
+                <View style={styles.emptyWrap}>
+                  <View style={styles.emptyCard}>
+                    <LinearGradient
+                      colors={['#FBBF24', '#F59E0B', '#D97706']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.emptyIconWrap}
+                    >
+                      <Ionicons name="sparkles" size={36} color="#FFF" />
+                    </LinearGradient>
+
+                    <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
+
+                    <View style={styles.emptyRefreshPill}>
+                      <Ionicons name="time-outline" size={13} color="#F59E0B" style={{ marginRight: 5 }} />
+                      <Text style={styles.emptyRefreshPillTxt}>5 Free Likes refresh everyday at 12:00 AM</Text>
+                    </View>
+
+                    {!user?.subscription_plan || user?.subscription_plan === 'Free' || user?.subscription_plan === 'basic_free' ? (
+                      <>
+                        <Text style={styles.emptySub}>
+                          Upgrade to HeartLink Plus or Premium to unlock unlimited daily profile likes, rewinds, and priority matching!
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.emptyBtn}
+                          onPress={() => navigation.navigate('Plans')}
+                          activeOpacity={0.85}
+                        >
+                          <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
+                            <Ionicons name="sparkles" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.emptyBtnTxt}>Upgrade Plan to Unlock Swipes</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.emptySub}>
+                          As an active member ({user?.subscription_plan}), you can reload your feed anytime to explore swiped profiles again!
+                        </Text>
+                        <TouchableOpacity
+                          style={styles.emptyBtn}
+                          onPress={async () => {
+                            try {
+                              setFeedLoading(true);
+                              await apiResetDiscovery();
+                              await fetchFeed();
+                            } catch (err) {
+                              console.warn('Reload feed error:', err);
+                            } finally {
+                              setCurrentIndex(0);
+                              resetCardPositions();
+                              setFeedLoading(false);
+                            }
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
+                            <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
+                            <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              )
             ) : (
-              <View style={styles.emptyWrap}>
-                <View style={styles.emptyCard}>
-                  <LinearGradient
-                    colors={['#FBBF24', '#F59E0B', '#D97706']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.emptyIconWrap}
-                  >
-                    <Ionicons name="sparkles" size={36} color="#FFF" />
-                  </LinearGradient>
+              <>
+                {/* White Background Skeleton Screen (Visible during profile swapping/swiping) */}
+                <View style={styles.skeletonCardBase} pointerEvents="none">
+                  <Animated.View style={[styles.skeletonContent, { opacity: skeletonPulseAnim }]}>
+                    {/* Top badges placeholder */}
+                    <View style={styles.skeletonTopRow}>
+                      <View style={styles.skeletonPillSmall} />
+                      <View style={styles.skeletonMatchPill} />
+                    </View>
 
-                  <Text style={styles.emptyTitle}>You've Swiped All Profiles!</Text>
-
-                  <View style={styles.emptyRefreshPill}>
-                    <Ionicons name="time-outline" size={13} color="#F59E0B" style={{ marginRight: 5 }} />
-                    <Text style={styles.emptyRefreshPillTxt}>5 Free Likes refresh everyday at 12:00 AM</Text>
-                  </View>
-
-                  {!user?.subscription_plan || user?.subscription_plan === 'Free' || user?.subscription_plan === 'basic_free' ? (
-                    <>
-                      <Text style={styles.emptySub}>
-                        Upgrade to HeartLink Plus or Premium to unlock unlimited daily profile likes, rewinds, and priority matching!
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.emptyBtn}
-                        onPress={() => navigation.navigate('Plans')}
-                        activeOpacity={0.85}
-                      >
-                        <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
-                          <Ionicons name="sparkles" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                          <Text style={styles.emptyBtnTxt}>Upgrade Plan to Unlock Swipes</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.emptySub}>
-                        As an active member ({user?.subscription_plan}), you can reload your feed anytime to explore swiped profiles again!
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.emptyBtn}
-                        onPress={async () => {
-                          try {
-                            setFeedLoading(true);
-                            await apiResetDiscovery();
-                            await fetchFeed();
-                          } catch (err) {
-                            console.warn('Reload feed error:', err);
-                          } finally {
-                            setCurrentIndex(0);
-                            resetCardPositions();
-                            setFeedLoading(false);
-                          }
-                        }}
-                        activeOpacity={0.85}
-                      >
-                        <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
-                          <Ionicons name="refresh-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                          <Text style={styles.emptyBtnTxt}>Reload Swiped Feed</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </>
-                  )}
-                </View>
-              </View>
-            )
-          ) : (
-            /* Single focused Card - Action Buttons for profile swiping */
-            <Animated.View
-              {...panResponder.panHandlers}
-              style={[
-                styles.card,
-                styles.cardActive,
-                {
-                  opacity: card1Opacity,
-                  transform: [
-                    { translateX: card1Pos.x },
-                    { translateY: card1Pos.y },
-                    { rotate: rotate },
-                    { scale: card1Scale }
-                  ]
-                }
-              ]}
-            >
-              <Image
-                key={`${currentProfile?.id}_${safePhotoIdx}`}
-                source={{ uri: formatImageUrl(currentProfile?.images?.[safePhotoIdx] || currentProfile?.images?.[0]) }}
-                style={styles.cardPhoto}
-                resizeMode="cover"
-              />
-
-              <LinearGradient colors={['rgba(0,0,0,0.15)', 'transparent']} style={styles.topGrad} />
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.75)']} style={styles.bottomGrad} />
-
-              {/* Dynamic Action Stamps */}
-              <Animated.View style={[styles.stampContainer, styles.likeStamp, { opacity: likeStampOpacity }]} pointerEvents="none">
-                <Text style={styles.likeStampText}>LIKE</Text>
-              </Animated.View>
-
-              <Animated.View style={[styles.stampContainer, styles.nopeStamp, { opacity: nopeStampOpacity }]} pointerEvents="none">
-                <Text style={styles.nopeStampText}>NOPE</Text>
-              </Animated.View>
-
-              <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
-                <Ionicons name="chevron-up" size={17} color="#FDE68A" style={{ marginRight: 4 }} />
-                <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
-              </Animated.View>
-
-              {/* Top-Right Match Percentage Badge */}
-              <LinearGradient
-                colors={['rgba(251, 191, 36, 0.95)', 'rgba(217, 119, 6, 0.95)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.cardMatchBadge}
-                pointerEvents="none"
-              >
-                <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 4 }} />
-                <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
-              </LinearGradient>
-
-              {/* Photo progress dots */}
-              {currentProfile.images.length > 1 && (
-                <View style={styles.photoDotsRow} pointerEvents="none">
-                  {currentProfile.images.map((_, i) => (
-                    <View
-                      key={i}
-                      style={[styles.photoDot, i === safePhotoIdx && styles.photoDotActive]}
-                    />
-                  ))}
-                </View>
-              )}
-
-              {/* Tap zones: left = prev photo, right = next photo, center = detail */}
-              <View style={styles.tapZoneRow} pointerEvents="box-none">
-                <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
-                  <View style={styles.tapZoneSide} />
-                </Pressable>
-                <Pressable onPress={openDetail} style={{ flex: 2 }}>
-                  <View style={styles.tapZoneCenter} />
-                </Pressable>
-                <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
-                  <View style={styles.tapZoneSide} />
-                </Pressable>
-              </View>
-
-              <View style={{ width: '100%', position: 'absolute', bottom: 0 }} pointerEvents="box-none">
-                <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={styles.cardTextOverlayBottomLeft}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={styles.cardProfileName}>
-                      {currentProfile.display_name || currentProfile.displayName || currentProfile.name}
-                      {currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}
-                    </Text>
-                    {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
-                  </View>
-                  <View style={styles.cardGlassPillRow}>
-                    {currentProfile.job ? (
-                      <View style={styles.cardInfoPill}>
-                        <Ionicons name="briefcase-outline" size={12} color="#FDE68A" style={{ marginRight: 5 }} />
-                        <Text style={styles.cardInfoPillTxt} numberOfLines={1}>{currentProfile.job}</Text>
+                    {/* Center subtle spark emblem */}
+                    <View style={styles.skeletonCenterEmblem}>
+                      <View style={styles.skeletonEmblemCircle}>
+                        <Ionicons name="sparkles" size={28} color="#CBD5E1" />
                       </View>
-                    ) : null}
-                    {currentProfile.distance ? (
-                      <View style={styles.cardInfoPill}>
-                        <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
-                        <Text style={styles.cardInfoPillTxt}>{currentProfile.distance}</Text>
+                    </View>
+
+                    {/* Bottom info placeholders */}
+                    <View style={styles.skeletonBottomInfo}>
+                      <View style={styles.skeletonNameBar} />
+                      <View style={styles.skeletonPillRow}>
+                        <View style={styles.skeletonPill} />
+                        <View style={styles.skeletonPillWide} />
                       </View>
-                    ) : null}
+                      <View style={styles.skeletonTagsRow}>
+                        <View style={styles.skeletonTag} />
+                        <View style={styles.skeletonTag} />
+                        <View style={styles.skeletonTag} />
+                      </View>
+                    </View>
+                  </Animated.View>
+                </View>
+
+                {/* Single focused Profile Card (Swipes left/right on gesture) */}
+                <Animated.View
+                  {...panResponder.panHandlers}
+                  style={[
+                    styles.card,
+                    styles.cardActive,
+                    {
+                      opacity: card1Opacity,
+                      transform: [
+                        { translateX: card1Pos.x },
+                        { translateY: card1Pos.y },
+                        { rotate: rotate },
+                        { scale: card1Scale }
+                      ]
+                    }
+                  ]}
+                >
+                <Image
+                  key={`${currentProfile?.id}_${safePhotoIdx}`}
+                  source={{ uri: formatImageUrl(currentProfile?.images?.[safePhotoIdx] || currentProfile?.images?.[0]) }}
+                  style={styles.cardPhoto}
+                  resizeMode="cover"
+                />
+
+                <LinearGradient colors={['rgba(0,0,0,0.2)', 'transparent']} style={styles.topGrad} />
+                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.92)']} style={styles.bottomGrad} />
+
+                {/* Dynamic Action Stamps */}
+                <Animated.View style={[styles.stampContainer, styles.likeStamp, { opacity: likeStampOpacity }]} pointerEvents="none">
+                  <Text style={styles.likeStampText}>LIKE</Text>
+                </Animated.View>
+
+                <Animated.View style={[styles.stampContainer, styles.nopeStamp, { opacity: nopeStampOpacity }]} pointerEvents="none">
+                  <Text style={styles.nopeStampText}>NOPE</Text>
+                </Animated.View>
+
+                <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
+                  <Ionicons name="chevron-up" size={17} color="#FDE68A" style={{ marginRight: 4 }} />
+                  <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
+                </Animated.View>
+
+                {/* Top-Left Photo Counter Pill */}
+                {currentProfile?.images?.length > 1 && (
+                  <View style={styles.cardPhotoCounter} pointerEvents="none">
+                    <Ionicons name="images-outline" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.cardPhotoCounterTxt}>{safePhotoIdx + 1}/{currentProfile.images.length}</Text>
                   </View>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
+                )}
+
+                {/* Top-Right Match Percentage Badge */}
+                <LinearGradient
+                  colors={['rgba(251, 191, 36, 0.95)', 'rgba(217, 119, 6, 0.95)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.cardMatchBadge}
+                  pointerEvents="none"
+                >
+                  <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
+                </LinearGradient>
+
+                {/* Photo progress dots */}
+                {currentProfile.images.length > 1 && (
+                  <View style={styles.photoDotsRow} pointerEvents="none">
+                    {currentProfile.images.map((_, i) => (
+                      <View
+                        key={i}
+                        style={[styles.photoDot, i === safePhotoIdx && styles.photoDotActive]}
+                      />
+                    ))}
+                  </View>
+                )}
+
+                {/* Tap zones: left = prev photo, right = next photo, center = detail */}
+                <View style={styles.tapZoneRow} pointerEvents="box-none">
+                  <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
+                    <View style={styles.tapZoneSide} />
+                  </Pressable>
+                  <Pressable onPress={openDetail} style={{ flex: 2 }}>
+                    <View style={styles.tapZoneCenter} />
+                  </Pressable>
+                  <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
+                    <View style={styles.tapZoneSide} />
+                  </Pressable>
+                </View>
+
+                {/* Profile Identity Details Overlay at Bottom of Profile Card */}
+                <View style={styles.cardTextOverlayBottomLeft} pointerEvents="box-none">
+                  <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={{ width: '100%' }}>
+                    <View style={styles.cardProfileHeaderRow}>
+                      <View style={styles.cardNameRow}>
+                        <Text style={styles.cardProfileName}>
+                          {currentProfile.display_name || currentProfile.displayName || currentProfile.name}
+                          {currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}
+                        </Text>
+                        {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
+                      </View>
+                      <View style={styles.cardInfoBtnGlass}>
+                        <Ionicons name="chevron-up" size={18} color="#FFF" />
+                      </View>
+                    </View>
+
+                    <View style={styles.cardGlassPillRow}>
+                      {currentProfile.job ? (
+                        <View style={styles.cardInfoPill}>
+                          <Ionicons name="briefcase-outline" size={12} color="#FDE68A" style={{ marginRight: 5 }} />
+                          <Text style={styles.cardInfoPillTxt} numberOfLines={1}>{currentProfile.job}</Text>
+                        </View>
+                      ) : null}
+                      {currentProfile.distance ? (
+                        <View style={styles.cardInfoPill}>
+                          <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
+                          <Text style={styles.cardInfoPillTxt}>{currentProfile.distance}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    {/* Interest preview chips */}
+                    {currentProfile.interests && currentProfile.interests.length > 0 && (
+                      <View style={styles.cardInterestsRow}>
+                        {currentProfile.interests.slice(0, 3).map((interest, idx) => (
+                          <View key={idx} style={styles.cardInterestTag}>
+                            <Text style={styles.cardInterestTagTxt}>{interest}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            </>
           )}
-        </View>
+          </View>
 
-        {/* Actions Row */}
-        {currentProfile && activeProfiles.length > 0 && (
-          <View style={styles.actionsRowWrapper}>
-            {passedHistory.length > 0 && (
+          {/* 2. Lower Section: STATIONARY Joined Actions Dock (ZERO GAP - DOES NOT MOVE ON SWIPE!) */}
+          {currentProfile && activeProfiles.length > 0 && (
+            <View style={styles.cardJoinedActionsDock}>
+              {/* 1. Rewind Button */}
               <TouchableOpacity
                 onPress={handleRewindPress}
-                activeOpacity={0.8}
-                style={styles.actionBtnRewindFloating}
-                disabled={isAnimating}
+                activeOpacity={0.75}
+                style={[
+                  styles.actionBtnSmallRound,
+                  styles.actionBtnRewind,
+                  passedHistory.length === 0 && { opacity: 0.35 }
+                ]}
+                disabled={isAnimating || passedHistory.length === 0}
               >
-                <Ionicons name="arrow-undo" size={16} color="#F59E0B" />
+                <Ionicons name="arrow-undo" size={18} color="#F59E0B" />
               </TouchableOpacity>
-            )}
 
-            <View style={styles.actionsRowContainer}>
+              {/* 2. Pass Button (✕) */}
               <TouchableOpacity
                 onPress={moveToPrevious}
                 activeOpacity={0.8}
-                style={styles.actionBtnSmallX}
+                style={styles.actionBtnPass}
                 disabled={isAnimating || isSwipeLoading}
               >
                 <LinearGradient
-                  colors={['#3B82F6', '#1D4ED8']}
+                  colors={['#FF4D6D', '#C9184A']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.actionBtnGradFill}
                 >
-                  <Ionicons name="close" size={24} color="#fff" />
+                  <Ionicons name="close" size={28} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
 
+              {/* 3. Super Spark / Superlike Button (⚡) - Centerpiece HERO */}
               <TouchableOpacity
                 onPress={handleSparkPress}
                 activeOpacity={0.8}
-                style={styles.actionBtnLargeLightning}
+                style={styles.actionBtnSuperlike}
                 disabled={isAnimating || isSuperlikeLoading || isSwipeLoading}
               >
                 <LinearGradient
@@ -1119,29 +1229,40 @@ export default function DiscoverScreen() {
                   {isSuperlikeLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Ionicons name="flash" size={28} color="#fff" />
+                    <Ionicons name="flash" size={30} color="#fff" />
                   )}
                 </LinearGradient>
               </TouchableOpacity>
 
+              {/* 4. Like Button (♥) */}
               <TouchableOpacity
                 onPress={() => moveToNext('like')}
                 activeOpacity={0.8}
-                style={styles.actionBtnSmallHeart}
+                style={styles.actionBtnLike}
                 disabled={isAnimating || isSwipeLoading}
               >
                 <LinearGradient
-                  colors={['#FF007F', '#D90429']}
+                  colors={['#10B981', '#059669']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.actionBtnGradFill}
                 >
-                  <Ionicons name="heart" size={24} color="#fff" />
+                  <Ionicons name="heart" size={26} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
+
+              {/* 5. View Details / Info Button */}
+              <TouchableOpacity
+                onPress={openDetail}
+                activeOpacity={0.75}
+                style={[styles.actionBtnSmallRound, styles.actionBtnInfo]}
+                disabled={isAnimating}
+              >
+                <Ionicons name="information" size={20} color={isDark ? '#C084FC' : '#9333EA'} />
+              </TouchableOpacity>
             </View>
-          </View>
-        )}
+          )}
+        </View>
       </View>
 
       {/* Unified Profile Detail Modal */}
@@ -1417,8 +1538,8 @@ const getStyles = (theme, insets) => {
       shadowColor: '#FF007F',
     },
     reactionIconCirclePass: {
-      backgroundColor: '#4A89FF',
-      shadowColor: '#4A89FF',
+      backgroundColor: '#FF4D6D',
+      shadowColor: '#FF4D6D',
     },
     reactionIconCircleSuperlike: {
       backgroundColor: '#F59E0B',
@@ -1447,13 +1568,114 @@ const getStyles = (theme, insets) => {
       textShadowRadius: 4,
     },
 
+    discoverDeckContainer: {
+      flex: 1,
+      width: Math.min(width - 24, scale(390)),
+      alignSelf: 'center',
+      marginTop: verticalScale(4),
+      marginBottom: verticalScale(8),
+      position: 'relative',
+    },
     cardStackContainer: {
       flex: 1,
-      marginTop: verticalScale(6),
-      marginBottom: verticalScale(6),
-      width: width - 48,
-      alignSelf: 'center',
+      width: '100%',
       position: 'relative',
+    },
+    skeletonCardBase: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: '#FFFFFF',
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+      elevation: 3,
+    },
+    skeletonContent: {
+      width: '100%',
+      height: '100%',
+      justifyContent: 'space-between',
+      padding: scale(18),
+      backgroundColor: isDark ? '#1C1917' : '#FFFFFF',
+    },
+    skeletonTopRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: verticalScale(6),
+    },
+    skeletonPillSmall: {
+      width: scale(65),
+      height: verticalScale(22),
+      borderRadius: scale(11),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#E2E8F0',
+    },
+    skeletonMatchPill: {
+      width: scale(95),
+      height: verticalScale(22),
+      borderRadius: scale(11),
+      backgroundColor: isDark ? 'rgba(251, 191, 36, 0.25)' : '#FDE68A',
+    },
+    skeletonCenterEmblem: {
+      alignSelf: 'center',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    skeletonEmblemCircle: {
+      width: scale(64),
+      height: scale(64),
+      borderRadius: scale(32),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    skeletonBottomInfo: {
+      width: '100%',
+      paddingBottom: verticalScale(10),
+    },
+    skeletonNameBar: {
+      width: '58%',
+      height: verticalScale(24),
+      borderRadius: scale(8),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.18)' : '#CBD5E1',
+      marginBottom: verticalScale(10),
+    },
+    skeletonPillRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: scale(8),
+      marginBottom: verticalScale(10),
+    },
+    skeletonPill: {
+      width: scale(85),
+      height: verticalScale(18),
+      borderRadius: scale(9),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#E2E8F0',
+    },
+    skeletonPillWide: {
+      width: scale(120),
+      height: verticalScale(18),
+      borderRadius: scale(9),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#E2E8F0',
+    },
+    skeletonTagsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: scale(6),
+    },
+    skeletonTag: {
+      width: scale(60),
+      height: verticalScale(16),
+      borderRadius: scale(8),
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9',
     },
     emptyWrap: {
       width: '100%',
@@ -1550,16 +1772,19 @@ const getStyles = (theme, insets) => {
       position: 'absolute',
       width: '100%',
       height: '100%',
-      borderRadius: 36,
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
       overflow: 'hidden',
-      backgroundColor: '#000000',
-      borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(251, 191, 36, 0.22)' : 'rgba(255, 255, 255, 0.85)',
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      borderColor: 'transparent',
       shadowColor: isDark ? '#F59E0B' : '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: isDark ? 0.25 : 0.15,
-      shadowRadius: 18,
-      elevation: 8,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 10,
+      elevation: 6,
     },
     cardActive: {
       zIndex: 3,
@@ -1570,7 +1795,10 @@ const getStyles = (theme, insets) => {
       left: 0,
       width: '100%',
       height: '100%',
-      borderRadius: 36,
+      borderTopLeftRadius: 32,
+      borderTopRightRadius: 32,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
       borderWidth: 0,
       borderColor: 'transparent',
     },
@@ -1586,7 +1814,7 @@ const getStyles = (theme, insets) => {
       bottom: 0,
       left: 0,
       right: 0,
-      height: '40%',
+      height: '55%',
     },
 
     tapZoneRow: {
@@ -1594,7 +1822,7 @@ const getStyles = (theme, insets) => {
       top: 0,
       left: 0,
       right: 0,
-      bottom: 90,
+      bottom: verticalScale(140),
       flexDirection: 'row',
       zIndex: 5,
     },
@@ -1709,10 +1937,62 @@ const getStyles = (theme, insets) => {
       letterSpacing: 1,
     },
 
-    cardTextOverlayBottomLeft: {
-      paddingBottom: 24,
-      paddingHorizontal: 20,
+    cardPhotoCounter: {
+      position: 'absolute',
+      top: 22,
+      left: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      paddingHorizontal: 10,
+      paddingVertical: 4.5,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.25)',
       zIndex: 10,
+    },
+    cardPhotoCounterTxt: {
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+    },
+
+    cardTextOverlayBottomLeft: {
+      position: 'absolute',
+      bottom: 0,
+      left: 0,
+      right: 0,
+      paddingBottom: verticalScale(14),
+      paddingHorizontal: scale(16),
+      zIndex: 10,
+    },
+    cardProfileHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      width: '100%',
+    },
+    cardNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      flexWrap: 'wrap',
+    },
+    cardInfoBtnGlass: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.22)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.4)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginLeft: 10,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.3,
+      shadowRadius: 4,
     },
     cardProfileName: {
       fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
@@ -1730,7 +2010,7 @@ const getStyles = (theme, insets) => {
       alignItems: 'center',
       flexWrap: 'wrap',
       gap: 7,
-      marginTop: 7,
+      marginTop: 6,
     },
     cardInfoPill: {
       flexDirection: 'row',
@@ -1747,6 +2027,26 @@ const getStyles = (theme, insets) => {
       fontWeight: '600',
       color: 'rgba(255, 255, 255, 0.92)',
     },
+    cardInterestsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 8,
+    },
+    cardInterestTag: {
+      backgroundColor: 'rgba(255, 255, 255, 0.18)',
+      paddingHorizontal: 9,
+      paddingVertical: 3.5,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    cardInterestTagTxt: {
+      color: '#FFF',
+      fontSize: 11,
+      fontWeight: '600',
+    },
     cardProfileJob: {
       fontFamily: Platform.OS === 'ios' ? 'Helvetica' : 'sans-serif-light',
       fontSize: fs(13),
@@ -1757,87 +2057,96 @@ const getStyles = (theme, insets) => {
       textShadowRadius: 3,
     },
 
-    actionsRowWrapper: {
-      position: 'relative',
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: verticalScale(2),
-      marginTop: verticalScale(2),
-      marginBottom: verticalScale(6),
-    },
-    actionsRowContainer: {
+    cardJoinedActionsDock: {
       flexDirection: 'row',
-      justifyContent: 'center',
+      justifyContent: 'space-evenly',
       alignItems: 'center',
-      gap: scale(16),
-      paddingHorizontal: scale(20),
-      paddingVertical: verticalScale(7),
-      borderRadius: scale(40),
-      backgroundColor: isDark ? 'rgba(24, 18, 11, 0.82)' : 'rgba(255, 255, 255, 0.88)',
-      borderWidth: 1.5,
-      borderColor: isDark ? 'rgba(245, 158, 11, 0.28)' : 'rgba(255, 255, 255, 0.95)',
+      width: '100%',
+      paddingVertical: verticalScale(11),
+      paddingHorizontal: scale(8),
+      backgroundColor: isDark ? 'rgba(20, 15, 10, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+      borderTopWidth: 1,
+      borderTopColor: isDark ? 'rgba(245, 158, 11, 0.18)' : 'rgba(0, 0, 0, 0.04)',
+      borderBottomLeftRadius: 32,
+      borderBottomRightRadius: 32,
+      borderWidth: 0,
       shadowColor: isDark ? '#F59E0B' : '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: isDark ? 0.35 : 0.12,
-      shadowRadius: 18,
-      elevation: 8,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 10,
+      elevation: 5,
     },
-    actionBtnRewindFloating: {
-      position: 'absolute',
-      left: scale(20),
-      width: scale(38),
-      height: scale(38),
-      borderRadius: scale(19),
-      backgroundColor: isDark ? 'rgba(30, 22, 12, 0.85)' : 'rgba(255, 255, 255, 0.9)',
-      borderWidth: 1,
-      borderColor: 'rgba(245, 158, 11, 0.35)',
+    actionBtnSmallRound: {
+      width: scale(40),
+      height: scale(40),
+      borderRadius: scale(20),
       justifyContent: 'center',
       alignItems: 'center',
+      borderWidth: 1.5,
+    },
+    actionBtnRewind: {
+      backgroundColor: isDark ? 'rgba(30, 22, 12, 0.85)' : 'rgba(254, 243, 199, 0.9)',
+      borderColor: 'rgba(245, 158, 11, 0.4)',
       shadowColor: '#F59E0B',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
+      shadowOpacity: 0.2,
       shadowRadius: 6,
       elevation: 3,
-      zIndex: 10,
     },
-    actionBtnSmallX: {
-      width: scale(48),
-      height: scale(48),
-      borderRadius: scale(24),
+    actionBtnInfo: {
+      backgroundColor: isDark ? 'rgba(30, 18, 40, 0.85)' : 'rgba(243, 232, 255, 0.9)',
+      borderColor: isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(147, 51, 234, 0.3)',
+      shadowColor: '#A855F7',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      elevation: 3,
+    },
+    actionBtnPass: {
+      width: scale(52),
+      height: scale(52),
+      borderRadius: scale(26),
       overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: '#3B82F6',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.35,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    actionBtnLargeLightning: {
-      width: scale(58),
-      height: scale(58),
-      borderRadius: scale(29),
-      overflow: 'hidden',
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: '#F59E0B',
+      borderWidth: 2,
+      borderColor: 'rgba(255, 255, 255, 0.35)',
+      shadowColor: '#FF4D6D',
       shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.5,
-      shadowRadius: 14,
-      elevation: 7,
+      shadowOpacity: 0.4,
+      shadowRadius: 10,
+      elevation: 6,
     },
-    actionBtnSmallHeart: {
-      width: scale(48),
-      height: scale(48),
-      borderRadius: scale(24),
+    actionBtnSuperlike: {
+      width: scale(64),
+      height: scale(64),
+      borderRadius: scale(32),
       overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
-      shadowColor: '#FF007F',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.35,
-      shadowRadius: 8,
-      elevation: 4,
+      marginTop: -verticalScale(4),
+      borderWidth: 3,
+      borderColor: 'rgba(255, 255, 255, 0.55)',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.55,
+      shadowRadius: 16,
+      elevation: 9,
+    },
+    actionBtnLike: {
+      width: scale(52),
+      height: scale(52),
+      borderRadius: scale(26),
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: 'rgba(255, 255, 255, 0.35)',
+      shadowColor: '#10B981',
+      shadowOffset: { width: 0, height: 5 },
+      shadowOpacity: 0.4,
+      shadowRadius: 10,
+      elevation: 6,
     },
     actionBtnGradFill: {
       width: '100%',

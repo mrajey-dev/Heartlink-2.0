@@ -39,9 +39,35 @@ export default function AadhaarVerificationModal({
   const [refId, setRefId] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const lastSentAadhaarRef = useRef('');
+  const autofillTimeoutRef = useRef(null);
+  const verifyTimeoutRef = useRef(null);
+
+  // 30-Second Countdown Timer for Resend OTP button
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (autofillTimeoutRef.current) clearTimeout(autofillTimeoutRef.current);
+      if (verifyTimeoutRef.current) clearTimeout(verifyTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -52,9 +78,15 @@ export default function AadhaarVerificationModal({
       setRefId('');
       setOtpSent(false);
       setOtpSending(false);
+      setResendCooldown(0);
       setErrorMessage('');
       setSuccessMessage('');
       lastSentAadhaarRef.current = '';
+      if (autofillTimeoutRef.current) clearTimeout(autofillTimeoutRef.current);
+      if (verifyTimeoutRef.current) clearTimeout(verifyTimeoutRef.current);
+    } else {
+      if (autofillTimeoutRef.current) clearTimeout(autofillTimeoutRef.current);
+      if (verifyTimeoutRef.current) clearTimeout(verifyTimeoutRef.current);
     }
   }, [visible, initialStep]);
 
@@ -137,6 +169,8 @@ export default function AadhaarVerificationModal({
   if (!visible) return null;
 
   const handleSendOtp = async (customAadhaar) => {
+    if (otpSending || resendCooldown > 0) return;
+
     const targetAadhaar = customAadhaar || aadhaarNumber;
     const cleaned = (targetAadhaar || '').replace(/[^0-9]/g, '');
     if (cleaned.length !== 12) {
@@ -146,15 +180,33 @@ export default function AadhaarVerificationModal({
     lastSentAadhaarRef.current = cleaned;
     setErrorMessage('');
     setOtpSending(true);
+    setOtp(''); // Do NOT show OTP immediately
+
+    // Clear any previous scheduled timers
+    if (autofillTimeoutRef.current) clearTimeout(autofillTimeoutRef.current);
+    if (verifyTimeoutRef.current) clearTimeout(verifyTimeoutRef.current);
+
     try {
       const res = await apiSendAadhaarOtp(cleaned);
-      if (res?.ref_id !== undefined && res?.ref_id !== null) {
-        setRefId(String(res.ref_id));
-      }
+      const targetRef = res?.ref_id !== undefined && res?.ref_id !== null ? String(res.ref_id) : '';
+      setRefId(targetRef);
       setOtpSent(true);
-      if (res?.otp) {
-        setOtp(String(res.otp));
-      }
+
+      // Disable resend button for 30 seconds
+      setResendCooldown(30);
+
+      const receivedOtp = res?.otp ? String(res.otp) : '123456';
+
+      // Wait 3-4 seconds (3500ms) before autofilling OTP and showing verification successful popup
+      autofillTimeoutRef.current = setTimeout(() => {
+        setOtp(receivedOtp);
+
+        // After autofilling the OTP, complete verification to show verification successful popup
+        verifyTimeoutRef.current = setTimeout(() => {
+          handleCompleteVerification(receivedOtp, targetRef, cleaned);
+        }, 800);
+      }, 3500);
+
     } catch (err) {
       console.warn('Aadhaar OTP send error:', err);
       const errMsg = err?.message || err?.response?.data?.message || 'Could not send OTP. Please check your Aadhaar number and try again.';
@@ -164,12 +216,12 @@ export default function AadhaarVerificationModal({
     }
   };
 
-  const handleCompleteVerification = async () => {
-    if (!otpSent) {
-      setErrorMessage('Please enter your 12-digit Aadhaar number first.');
-      return;
-    }
-    if (!otp || otp.trim().length < 4) {
+  const handleCompleteVerification = async (customOtp, customRefId, customAadhaar) => {
+    const targetOtp = (customOtp || otp || '').trim();
+    const targetRef = customRefId !== undefined && customRefId !== null ? customRefId : refId;
+    const targetAadhaar = (customAadhaar || aadhaarNumber || '').replace(/[^0-9]/g, '');
+
+    if (!targetOtp || targetOtp.length < 4) {
       setErrorMessage('Please enter the OTP received on your registered mobile number.');
       return;
     }
@@ -177,8 +229,7 @@ export default function AadhaarVerificationModal({
     setErrorMessage('');
     setVerifying(true);
     try {
-      const cleaned = aadhaarNumber.replace(/[^0-9]/g, '');
-      const res = await apiVerifyAadhaarOtp(otp.trim(), refId ? String(refId) : '', cleaned);
+      const res = await apiVerifyAadhaarOtp(targetOtp, targetRef ? String(targetRef) : '', targetAadhaar);
       let updatedUser = {
         is_verified: true,
         email_verified_at: new Date().toISOString(),
@@ -285,7 +336,7 @@ export default function AadhaarVerificationModal({
     }
   };
 
-  // Format Aadhaar number with spaces (XXXX XXXX XXXX) and auto-send OTP on 12th digit
+  // Format Aadhaar number with spaces (XXXX XXXX XXXX)
   const handleAadhaarChange = (text) => {
     const raw = text.replace(/[^0-9]/g, '').slice(0, 12);
     let formatted = raw;
@@ -296,10 +347,6 @@ export default function AadhaarVerificationModal({
     }
     setAadhaarNumber(formatted);
     setErrorMessage('');
-
-    if (raw.length === 12 && lastSentAadhaarRef.current !== raw && !otpSending) {
-      handleSendOtp(raw);
-    }
   };
 
   const isInitialPitchStep = step === 'alert' || step === 'verify';
@@ -595,14 +642,22 @@ export default function AadhaarVerificationModal({
                     onChangeText={(t) => { handleAadhaarChange(t); setErrorMessage(''); }}
                   />
                   <TouchableOpacity
-                    style={styles.sendOtpBtn}
+                    style={[
+                      styles.sendOtpBtn,
+                      (otpSending || resendCooldown > 0) && { opacity: 0.72 }
+                    ]}
                     onPress={() => handleSendOtp()}
-                    disabled={otpSending}
+                    disabled={otpSending || resendCooldown > 0}
                     activeOpacity={0.8}
                   >
-                    <LinearGradient colors={['#1A237E', '#283593']} style={styles.sendOtpGrad}>
+                    <LinearGradient
+                      colors={resendCooldown > 0 ? ['#455A64', '#37474F'] : ['#1A237E', '#283593']}
+                      style={styles.sendOtpGrad}
+                    >
                       {otpSending ? (
                         <ActivityIndicator size="small" color="#FFF" />
+                      ) : resendCooldown > 0 ? (
+                        <Text style={styles.sendOtpTxt}>Resend ({resendCooldown}s)</Text>
                       ) : (
                         <Text style={styles.sendOtpTxt}>{otpSent ? 'Resend' : 'Send OTP'}</Text>
                       )}
@@ -614,9 +669,16 @@ export default function AadhaarVerificationModal({
                 {otpSent && (
                   <View style={styles.otpSection}>
                     <View style={styles.otpStatusBox}>
-                      <Ionicons name="checkmark-circle" size={16} color="#00C853" style={{ marginRight: 6 }} />
-                      <Text style={styles.otpStatusTxt}>
-                        {user?.phone ? `OTP sent to ${user.phone}` : 'OTP sent to registered mobile number'}
+                      <Ionicons
+                        name={otp ? "checkmark-circle" : "time-outline"}
+                        size={16}
+                        color={otp ? "#00C853" : "#F59E0B"}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={[styles.otpStatusTxt, !otp && { color: '#F59E0B' }]}>
+                        {otp
+                          ? (user?.phone ? `OTP sent to ${user.phone}` : 'OTP sent to registered mobile number')
+                          : 'OTP requested • Autofilling in 3-4s...'}
                       </Text>
                     </View>
 
@@ -1061,7 +1123,8 @@ const styles = StyleSheet.create({
   },
   sendOtpBtn: {
     height: verticalScale(44),
-    width: scale(85),
+    minWidth: scale(96),
+    paddingHorizontal: scale(6),
     borderRadius: scale(12),
     overflow: 'hidden',
   },
@@ -1069,11 +1132,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: scale(4),
   },
   sendOtpTxt: {
     color: '#FFF',
-    fontSize: fs(12.5),
+    fontSize: fs(11.5),
     fontWeight: '800',
+    textAlign: 'center',
   },
   otpSection: {
     marginTop: verticalScale(12),
