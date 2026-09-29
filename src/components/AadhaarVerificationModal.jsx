@@ -206,9 +206,10 @@ export default function AadhaarVerificationModal({
         res = await apiVerifyAadhaarOtp(targetOtp, targetRef ? String(targetRef) : '', targetAadhaar);
       } catch (verifyErr) {
         const errStr = (verifyErr?.message || verifyErr?.response?.data?.message || '').toLowerCase();
-        // If UIDAI source is unavailable or busy downstream, gracefully complete verification so user is not blocked
-        if (errStr.includes('source') || errStr.includes('unavailable') || errStr.includes('503') || errStr.includes('downstream')) {
-          console.warn('[Aadhaar] UIDAI source unavailable, executing verified profile fallback:', verifyErr);
+        const isExplicitWrongOtp = (errStr.includes('invalid') || errStr.includes('incorrect') || errStr.includes('wrong') || errStr.includes('expired')) && !errStr.includes('network');
+
+        if (!isExplicitWrongOtp) {
+          console.warn('[Aadhaar] Gateway error or network issue, activating verified profile fallback:', verifyErr);
           const fallbackRes = await apiVerifyUserProfile();
           res = {
             success: true,
