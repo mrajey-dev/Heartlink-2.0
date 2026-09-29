@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 import { apiSendAadhaarOtp, apiVerifyAadhaarOtp, apiVerifyGooglePurchase, apiVerifyUserProfile } from '../services/api';
 import {
   purchaseSubscriptionPlan,
