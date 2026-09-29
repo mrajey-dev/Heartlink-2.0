@@ -500,10 +500,11 @@ export default function ProfileScreen() {
 
     if (!user?.is_verified) {
       updatedPayload.name = editName.trim();
-      updatedPayload.display_name = editDisplayName.trim() || user?.display_name || (editName.trim() ? editName.trim().split(' ')[0] : 'Member');
       updatedPayload.age = parseInt(editAge, 10) || 25;
       updatedPayload.gender = editGender;
     }
+    // Display name is always updatable
+    updatedPayload.display_name = editDisplayName.trim() || user?.display_name || (editName.trim() ? editName.trim().split(' ')[0] : 'Member');
 
     try {
       const res = await updateUserProfile(user?.id, updatedPayload);
@@ -1017,25 +1018,17 @@ export default function ProfileScreen() {
                 />
               </View>
 
-              {/* Display Name (Locked on Aadhaar Verification) */}
+              {/* Display Name (always editable - user can set their preferred name) */}
               <View style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={styles.inputLabel}>Display Name</Text>
-                  {user?.is_verified && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="lock-closed" size={11} color="#00C853" style={{ marginRight: 3 }} />
-                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#00C853' }}>Verified (Locked)</Text>
-                    </View>
-                  )}
+                  <Text style={{ fontSize: 10, color: theme.textFaint }}>How others see you</Text>
                 </View>
                 <TextInput
-                  style={[
-                    styles.modalInput,
-                    user?.is_verified && { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }
-                  ]}
+                  style={styles.modalInput}
                   value={editDisplayName}
                   onChangeText={setEditDisplayName}
-                  editable={!user?.is_verified}
+                  editable={true}
                   maxLength={25}
                   placeholder="Display Name"
                   placeholderTextColor={theme.textFaint}
