@@ -239,7 +239,7 @@ class AuthController extends Controller
         ]);
 
         if ($user->is_verified) {
-            unset($validated['name'], $validated['dob'], $validated['age'], $validated['gender']);
+            unset($validated['name'], $validated['display_name'], $validated['dob'], $validated['age'], $validated['gender']);
         }
 
         if (isset($validated['gender']) && !empty($validated['gender'])) {
@@ -828,22 +828,39 @@ public function savePushToken(Request $request)
 
             // Auto-update user name, DOB, age, and gender from verified Aadhaar e-KYC data
             if ($extractedKycData) {
-                if (!empty($extractedKycData['name'])) {
-                    $user->name = trim($extractedKycData['name']);
-                    $user->display_name = trim($extractedKycData['name']);
+                // Fetch full name from Aadhaar card and update in users table
+                $kycName = $extractedKycData['name'] ?? $extractedKycData['full_name'] ?? null;
+                if (!empty($kycName)) {
+                    $user->name = trim($kycName);
+                    $user->display_name = trim($kycName);
                 }
-                if (!empty($extractedKycData['date_of_birth'])) {
+
+                // Fetch date of birth and calculate age from Aadhaar card
+                $dobStr = $extractedKycData['date_of_birth'] ?? $extractedKycData['dob'] ?? null;
+                if (!empty($dobStr)) {
                     try {
-                        $carbonDob = \Carbon\Carbon::parse(trim($extractedKycData['date_of_birth']));
+                        $carbonDob = \Carbon\Carbon::parse(trim($dobStr));
                         $user->dob = $carbonDob->format('Y-m-d');
                         $user->age = $carbonDob->age;
                     } catch (\Exception $e) {
                         \Illuminate\Support\Facades\Log::warning('Error parsing Aadhaar DOB: ' . $e->getMessage());
                     }
+                } elseif (!empty($extractedKycData['year_of_birth'])) {
+                    $yob = (int) $extractedKycData['year_of_birth'];
+                    if ($yob > 1900 && $yob <= (int) date('Y')) {
+                        $user->dob = "{$yob}-01-01";
+                        $user->age = (int) date('Y') - $yob;
+                    }
                 }
-                // Map Aadhaar gender code (M/F) to full gender string
-                if (!empty($extractedKycData['gender'])) {
-                    $aadhaarGender = strtoupper(trim($extractedKycData['gender']));
+
+                if (!empty($extractedKycData['age']) && empty($user->age)) {
+                    $user->age = (int) $extractedKycData['age'];
+                }
+
+                // Fetch gender from Aadhaar card (M/F/T/Other) and map to full gender string
+                $rawGender = $extractedKycData['gender'] ?? null;
+                if (!empty($rawGender)) {
+                    $aadhaarGender = strtoupper(trim($rawGender));
                     if ($aadhaarGender === 'M' || $aadhaarGender === 'MALE') {
                         $user->gender = 'Male';
                     } elseif ($aadhaarGender === 'F' || $aadhaarGender === 'FEMALE') {
