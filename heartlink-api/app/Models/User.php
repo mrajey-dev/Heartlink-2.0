@@ -80,10 +80,57 @@ class User extends Authenticatable
     protected $appends = [
         'is_screenshot_allowed',
         'is_verified',
+        'is_aadhaar_verified',
         'is_premium',
         'expires_at',
         'active_subscription',
     ];
+
+    public function getIsAadhaarVerifiedAttribute(): bool
+    {
+        if (!empty($this->attributes['aadhaar_number'])) {
+            return true;
+        }
+        if ($this->relationLoaded('aadhaarVerification')) {
+            $record = $this->getRelation('aadhaarVerification');
+            return $record !== null && ($record->status === 'VERIFIED' || empty($record->status));
+        }
+        return \App\Models\AadhaarVerification::where('user_id', $this->id)
+            ->where(function ($q) {
+                $q->where('status', 'VERIFIED')->orWhereNull('status');
+            })->exists();
+    }
+
+    public function getSubscriptionPlanAttribute(): string
+    {
+        $sub = $this->relationLoaded('activeSubscription') 
+            ? $this->getRelation('activeSubscription') 
+            : $this->activeSubscription()->first();
+
+        if ($sub && $sub->expires_at && \Carbon\Carbon::parse($sub->expires_at)->isFuture()) {
+            return $sub->plan_name;
+        }
+
+        $latestSub = \App\Models\UserSubscription::where('user_id', $this->id)->latest()->first();
+        if ($latestSub && $latestSub->expires_at && \Carbon\Carbon::parse($latestSub->expires_at)->isPast()) {
+            return 'Free';
+        }
+
+        $rawPlan = $this->attributes['subscription_plan'] ?? null;
+        if (!empty($rawPlan)) {
+            $p = strtolower($rawPlan);
+            if (in_array($p, ['free', 'none', 'null', 'basic_free'])) {
+                return 'Free';
+            }
+            $exp = $this->getExpiresAtAttribute();
+            if ($exp && \Carbon\Carbon::parse($exp)->isPast()) {
+                return 'Free';
+            }
+            return $rawPlan;
+        }
+
+        return 'Free';
+    }
 
     public function getExpiresAtAttribute(): ?string
     {
@@ -102,14 +149,6 @@ class User extends Authenticatable
             return $latestSub->expires_at instanceof \Carbon\Carbon 
                 ? $latestSub->expires_at->toISOString() 
                 : (string) $latestSub->expires_at;
-        }
-
-        if (!empty($this->attributes['subscription_plan'])) {
-            $plan = strtolower($this->attributes['subscription_plan']);
-            if (!in_array($plan, ['free', 'none', 'null', 'basic_free'])) {
-                $baseDate = $this->updated_at ? \Carbon\Carbon::parse($this->updated_at) : now();
-                return $baseDate->addMonth()->toISOString();
-            }
         }
 
         return null;
@@ -141,17 +180,34 @@ class User extends Authenticatable
 
     public function getIsVerifiedAttribute(): bool
     {
-        $plan = strtolower($this->attributes['subscription_plan'] ?? '');
-        if (str_contains($plan, 'basic') || str_contains($plan, 'plus') || str_contains($plan, 'premium')) {
+        // 1. Permanent Aadhaar identity verification (Shield tick)
+        if ($this->is_aadhaar_verified) {
             return true;
         }
+
+        // 2. Active non-expired plan verification (Plan tick)
+        $sub = $this->relationLoaded('activeSubscription') 
+            ? $this->getRelation('activeSubscription') 
+            : $this->activeSubscription()->first();
+
+        if ($sub && $sub->expires_at && \Carbon\Carbon::parse($sub->expires_at)->isFuture()) {
+            return true;
+        }
+
+        // 3. Fallback: if user has is_verified flag and no expired paid plan
+        $latestSub = \App\Models\UserSubscription::where('user_id', $this->id)->latest()->first();
+        if ($latestSub && $latestSub->expires_at && \Carbon\Carbon::parse($latestSub->expires_at)->isPast()) {
+            // Plan is expired: Only verified if they have Aadhaar identity verification
+            return $this->is_aadhaar_verified;
+        }
+
         return (bool) ($this->attributes['is_verified'] ?? false);
     }
 
     public function getIsPremiumAttribute(): bool
     {
-        $plan = strtolower($this->attributes['subscription_plan'] ?? '');
-        return !empty($plan) && $plan !== 'free' && $plan !== 'none';
+        $plan = strtolower($this->subscription_plan ?? '');
+        return !empty($plan) && !in_array($plan, ['free', 'none', 'null', 'basic_free']);
     }
 
     public function photos()
@@ -182,7 +238,10 @@ class User extends Authenticatable
 
     public function activeSubscription()
     {
-        return $this->hasOne(UserSubscription::class)->where('status', 'active')->latestOfMany();
+        return $this->hasOne(UserSubscription::class)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->latestOfMany();
     }
 
     public function settings()

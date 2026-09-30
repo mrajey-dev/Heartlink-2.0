@@ -31,6 +31,43 @@ class DiscoverController extends Controller
             $user->save();
         }
 
+        // Determine active plan swipe limits:
+        // Free user (no plan): 10 profile swipes / day
+        // Basic plan: 20 profile swipes / day
+        // Plus plan: 50 profile swipes / day
+        // Premium plan: Unlimited profile swipes / day (999999)
+        $activeSub = \App\Models\UserSubscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where('expires_at', '>', now())
+            ->latest()
+            ->first();
+
+        $planStr = '';
+        if ($activeSub && !empty($activeSub->plan_name)) {
+            $planStr = $activeSub->plan_name;
+        } elseif (!empty($user->subscription_plan)) {
+            $rawPlan = $user->subscription_plan;
+            $planStr = is_string($rawPlan) ? $rawPlan : ($rawPlan['name'] ?? '');
+        }
+        $planName = strtolower($planStr);
+
+        if (str_contains($planName, 'premium') || str_contains($planName, 'gold') || str_contains($planName, 'vip')) {
+            $maxDailySwipes = 999999;
+            $planTier = 'premium';
+        } elseif (str_contains($planName, 'plus')) {
+            $maxDailySwipes = 50;
+            $planTier = 'plus';
+        } elseif (str_contains($planName, 'basic')) {
+            $maxDailySwipes = 20;
+            $planTier = 'basic';
+        } else {
+            $maxDailySwipes = 10;
+            $planTier = 'free';
+        }
+
+        $dailySwipesUsed = (int) $user->daily_likes_count + (int) $user->daily_passes_count;
+        $swipesRemaining = max(0, $maxDailySwipes - $dailySwipesUsed);
+
         // 1. Exclude ALL profiles that the CURRENT USER actively swiped on (whether like, pass, or super_like)
         // so that once you swipe on a profile, they never appear again in Discover feed!
         $swipedByMeIds = Swipe::where('swiper_id', $user->id)
@@ -177,10 +214,13 @@ class DiscoverController extends Controller
         $profiles = $this->sortProfilesByProximity($rawProfiles, $userCity, $userState, $userLat, $userLng);
 
         return response()->json([
-            'profiles' => $profiles,
-            'daily_likes_count' => (int) $user->daily_likes_count,
+            'profiles'           => $profiles,
+            'daily_likes_count'  => (int) $user->daily_likes_count,
             'daily_passes_count' => (int) $user->daily_passes_count,
-            'daily_swipes_limit' => 5,
+            'daily_swipes_used'  => $dailySwipesUsed,
+            'daily_swipes_limit' => $maxDailySwipes,
+            'swipes_remaining'   => $swipesRemaining,
+            'plan_tier'          => $planTier,
         ]);
     }
 
@@ -561,58 +601,57 @@ class DiscoverController extends Controller
 
         $planName = strtolower($planStr);
 
-        // Free plan default is strictly 5 daily likes & passes, refreshed at 12:00 AM
-        $maxLikes = 5;
-        $maxPasses = 5;
-        $maxSuperlikes = 0;
-
-        if (str_contains($planName, 'premium')) {
-            $maxLikes = 999999;
-            $maxPasses = 999999;
+        // Daily Swipe Limits:
+        // Free (no plan): 10 profile swipes / day
+        // Basic plan: 20 profile swipes / day
+        // Plus plan: 50 profile swipes / day
+        // Premium plan: Unlimited profile swipes / day (999999)
+        if (str_contains($planName, 'premium') || str_contains($planName, 'gold') || str_contains($planName, 'vip')) {
+            $maxDailySwipes = 999999;
             $maxSuperlikes = 15;
+            $planTier = 'premium';
         } elseif (str_contains($planName, 'plus')) {
-            $maxLikes = 50;
-            $maxPasses = 50;
+            $maxDailySwipes = 50;
             $maxSuperlikes = 5;
+            $planTier = 'plus';
         } elseif (str_contains($planName, 'basic')) {
-            $maxLikes = 10;
-            $maxPasses = 20;
+            $maxDailySwipes = 20;
             $maxSuperlikes = 0;
+            $planTier = 'basic';
+        } else {
+            $maxDailySwipes = 10;
+            $maxSuperlikes = 0;
+            $planTier = 'free';
         }
 
         $totalSuperlikesLimit = $maxSuperlikes + (int) ($swiper->purchased_superlikes_count ?? 0);
 
-        // 3. Enforce Plan Limits
-        if ($type === 'like' && $swiper->daily_likes_count >= $maxLikes) {
+        // 3. Enforce Daily Profile Swipe Limit
+        $dailySwipesUsed = (int) $swiper->daily_likes_count + (int) $swiper->daily_passes_count;
+        if ($dailySwipesUsed >= $maxDailySwipes) {
+            $planLabel = ucfirst($planTier);
             return response()->json([
-                'error' => 'UPGRADE_PLAN_REQUIRED',
-                'message' => "You have reached your daily limit of {$maxLikes} free profiles for today. Your 5 free likes refresh everyday at 12:00 AM midnight, or upgrade your plan now for unlimited swipes!",
-                'requires_upgrade' => true,
-                'limit_type' => 'like',
-                'daily_likes_count' => (int) $swiper->daily_likes_count,
-                'max_likes' => $maxLikes,
-            ], 403);
-        }
-
-        if ($type === 'pass' && $swiper->daily_passes_count >= $maxPasses) {
-            return response()->json([
-                'error' => 'UPGRADE_PLAN_REQUIRED',
-                'message' => "You have reached your daily limit of {$maxPasses} passes for your current plan. Upgrade your plan to unlock more swipes!",
-                'requires_upgrade' => true,
-                'limit_type' => 'pass',
+                'error'              => 'DAILY_SWIPE_LIMIT_REACHED',
+                'message'            => "You have reached your daily limit of {$maxDailySwipes} profile swipes for today on your {$planLabel} plan. Swipes refresh everyday at 12:00 AM midnight. Upgrade your plan now to unlock more swipes!",
+                'requires_upgrade'   => true,
+                'limit_type'         => 'daily_swipes',
+                'daily_swipes_used'  => $dailySwipesUsed,
+                'daily_swipes_limit' => $maxDailySwipes,
+                'plan_tier'          => $planTier,
+                'resets_at'          => '12:00 AM',
             ], 403);
         }
 
         if ($type === 'super_like') {
             if ($swiper->monthly_superlikes_count >= $totalSuperlikesLimit) {
                 $msg = ($totalSuperlikesLimit === 0)
-                    ? "Superlikes are not included in your Basic plan. Upgrade to HeartLink Plus or Premium to send superlikes!"
+                    ? "Superlikes are not included in your current plan. Upgrade to HeartLink Plus or Premium to send superlikes!"
                     : "You have used all {$totalSuperlikesLimit} monthly superlikes for your plan. Upgrade your plan for more superlikes!";
                 return response()->json([
-                    'error' => 'UPGRADE_PLAN_REQUIRED',
-                    'message' => $msg,
+                    'error'            => 'UPGRADE_PLAN_REQUIRED',
+                    'message'          => $msg,
                     'requires_upgrade' => true,
-                    'limit_type' => 'super_like',
+                    'limit_type'       => 'super_like',
                 ], 403);
             }
         }
@@ -624,6 +663,7 @@ class DiscoverController extends Controller
             $swiper->increment('daily_passes_count');
         } elseif ($type === 'super_like') {
             $swiper->increment('monthly_superlikes_count');
+            $swiper->increment('daily_likes_count');
         }
 
         // Check if either user is blocked
@@ -753,11 +793,17 @@ class DiscoverController extends Controller
             $targetUserObj->image = $img;
         }
 
+        $newDailySwipesUsed = (int) $swiper->daily_likes_count + (int) $swiper->daily_passes_count;
+
         return response()->json([
-            'message'     => 'Swipe recorded',
-            'is_match'    => $isMatch,
-            'match'       => $matchRecord,
-            'target_user' => $targetUserObj,
+            'message'            => 'Swipe recorded',
+            'is_match'           => $isMatch,
+            'match'              => $matchRecord,
+            'target_user'        => $targetUserObj,
+            'daily_swipes_used'  => $newDailySwipesUsed,
+            'daily_swipes_limit' => $maxDailySwipes,
+            'swipes_remaining'   => max(0, $maxDailySwipes - $newDailySwipesUsed),
+            'plan_tier'          => $planTier,
         ]);
     }
 }

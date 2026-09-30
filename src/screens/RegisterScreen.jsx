@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   Animated, Platform,
   ScrollView, StatusBar, Image, Easing,
-  BackHandler, Keyboard
+  BackHandler, Keyboard, ActivityIndicator, Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,12 +12,13 @@ import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
 import { apiUploadImage, apiValidatePersonPhoto } from "../services/api";
+import { registerUser } from "../services/authService";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from '../theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlertModal from '../components/CustomAlertModal';
 import SearchableDropdownModal from '../components/common/SearchableDropdownModal';
-import FaceMappingVerification from '../components/FaceMappingVerification';
+
 import {
   fetchCountryCodesApi, fetchCountriesApi, fetchStatesApi, fetchCitiesApi
 } from '../services/locationApi';
@@ -31,7 +32,7 @@ import { ALL_VIBE_NODES } from '../utils/vibeData';
 import { scale, verticalScale, fs, SCREEN } from '../utils/responsive';
 
 const { width } = SCREEN;
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 8;
 
 // ─── Data ───────────────────────────────────────────────────────────────────
 const HOBBY_CATEGORIES = [
@@ -948,51 +949,15 @@ function StepLifestyleHabits({ data, onChange }) {
   );
 }
 
-// ─── Step 7: Video & 3D Face Mapping Verification ──────────────────────────
-function StepVideoFaceVerification({ data, onChange }) {
-  const { theme, isDark } = useTheme();
 
-  return (
-    <View>
-      <StepHeader
-        icon="scan-outline"
-        title="Video & Face Verification"
-        sub="Verify your identity with our 3D face mapping tool to earn your verified badge"
-      />
-
-      <FaceMappingVerification
-        referenceImage={data.referenceFaceImage || (data.images && data.images[0]) || null}
-        onReferenceImageChange={(uri) => {
-          onChange('referenceFaceImage', uri);
-          if (!data.images || data.images.length === 0) {
-            onChange('images', [uri]);
-          } else {
-            const next = [...data.images];
-            next[0] = uri;
-            onChange('images', next);
-          }
-        }}
-        verificationSelfie={data.verificationSelfie || null}
-        onVerificationSelfieChange={(uri) => onChange('verificationSelfie', uri)}
-        isVerified={!!data.is_verified}
-        onVerificationComplete={(res) => {
-          onChange('is_verified', true);
-          onChange('video_verified', true);
-          if (res.verification_selfie) {
-            onChange('verificationSelfie', res.verification_selfie);
-          }
-        }}
-      />
-    </View>
-  );
-}
 
 // ─── Step 8: Photos ─────────────────────────────────────────────────────────
-function StepPhotos({ data, onChange }) {
+function StepPhotos({ data, onChange, onShowAlert }) {
   const { theme, isDark } = useTheme();
   const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const images = data.images || [];
   const validCount = images.filter(Boolean).length;
+  const [validatingSlot, setValidatingSlot] = useState(null);
 
   const pickImage = async (idx) => {
     try {
@@ -1013,18 +978,33 @@ function StepPhotos({ data, onChange }) {
         }
 
         // Validate that uploaded photo is of a real person
+        setValidatingSlot(idx);
         try {
           const check = await apiValidatePersonPhoto({ image: photoVal });
           if (check && check.has_person === false) {
-            Alert.alert(
-              'Person Photo Required 👤',
-              check.message || 'Please upload a photo of a person. Non-person photos, animals, objects, cars, or scenery are strictly not allowed.'
-            );
+            setValidatingSlot(null);
+            const msg = check.message || 'Please upload a clear photo of a person. No human face was detected.';
+            if (onShowAlert) {
+              onShowAlert('Photo Rejected 👤', msg, true);
+            } else {
+              Alert.alert('Photo Rejected 👤', msg);
+            }
             return;
           }
         } catch (e) {
+          setValidatingSlot(null);
           console.warn('Person check warning:', e?.message);
+          const msg = e?.message || '';
+          if (msg.toLowerCase().includes('face') || msg.toLowerCase().includes('person') || msg.toLowerCase().includes('human') || msg.toLowerCase().includes('clear photo') || msg.toLowerCase().includes('invalid')) {
+            if (onShowAlert) {
+              onShowAlert('Photo Rejected 👤', msg, true);
+            } else {
+              Alert.alert('Photo Rejected 👤', msg);
+            }
+            return;
+          }
         }
+        setValidatingSlot(null);
 
         const next = [...images];
         next[idx] = photoVal;
@@ -1033,6 +1013,7 @@ function StepPhotos({ data, onChange }) {
         onChange('images', compacted);
       }
     } catch (err) {
+      setValidatingSlot(null);
       console.warn('Error launching image picker:', err);
     }
   };
@@ -1089,6 +1070,25 @@ function StepPhotos({ data, onChange }) {
         {Array(6).fill(null).map((_, i) => {
           const uri = images[i];
           const isMain = i === 0;
+
+          if (validatingSlot === i) {
+            return (
+              <View
+                key={i}
+                style={[
+                  sty.photoSlot,
+                  sty.photoSlotEmpty,
+                  isMain && sty.photoSlotEmptyMain,
+                  { justifyContent: 'center', alignItems: 'center' },
+                ]}
+              >
+                <ActivityIndicator size="small" color="#FF007F" />
+                <Text style={[sty.photoEmptyLabel, { marginTop: 6, fontSize: 10, textAlign: 'center' }]}>
+                  Checking Face...
+                </Text>
+              </View>
+            );
+          }
 
           if (uri) {
             return (
@@ -1270,13 +1270,22 @@ export default function RegisterScreen() {
     }
     if (s === 5) return !!(d.motherTongue && d.religion && d.education && d.occupation && d.languagesSpoken && d.languagesSpoken.length >= 1);
     if (s === 6) return !!(d.smoking && d.drinking && d.clubbing && d.diet);
-    if (s === 7) return !!(d.is_verified || d.video_verified); // Face verification is MANDATORY!
-    if (s === 8) return !!(d.images && d.images.filter(x => !!x).length >= 3);
+    if (s === 7) return !!(d.images && d.images.filter(x => !!x).length >= 3);
     return false;
   };
 
+  const [validationAlertTitle, setValidationAlertTitle] = useState('Incomplete Step');
   const [validationAlertMsg, setValidationAlertMsg] = useState('');
   const [validationAlertVisible, setValidationAlertVisible] = useState(false);
+  const [validationAlertDanger, setValidationAlertDanger] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const showAlert = (title, message, isDanger = false) => {
+    setValidationAlertTitle(title);
+    setValidationAlertMsg(message);
+    setValidationAlertDanger(isDanger);
+    setValidationAlertVisible(true);
+  };
 
   const getValidationMessage = (s) => {
     switch (s) {
@@ -1302,16 +1311,16 @@ export default function RegisterScreen() {
       }
       case 5: return 'Please select Mother Tongue, Religion, Education, Occupation, and at least 1 Language Spoken.';
       case 6: return 'Please select your Smoking, Drinking, Clubbing, and Diet preferences.';
-      case 7: return 'Face Verification is mandatory. Please complete face matching between your portrait and live selfie to proceed.';
-      case 8: return 'Please upload at least 3 profile photos to continue.';
+      case 7: return 'Please upload at least 3 profile photos to continue.';
       default: return 'Please complete all required fields for this step.';
     }
   };
 
   const goNext = () => {
+    if (isSubmitting) return;
+
     if (!validateStep(step, data)) {
-      setValidationAlertMsg(getValidationMessage(step));
-      setValidationAlertVisible(true);
+      showAlert('Incomplete Step', getValidationMessage(step), false);
       return;
     }
 
@@ -1345,9 +1354,26 @@ export default function RegisterScreen() {
       }
 
       const rawImages = (data.images || []).filter(x => !!x);
+      if (rawImages.length < 3) {
+        showAlert('Photos Required', 'Please upload at least 3 photos to complete registration.', true);
+        return;
+      }
+
+      setIsSubmitting(true);
       Promise.all(rawImages.map(img => apiUploadImage(img, { email: data.email, user_id: data.email ? data.email.split('@')[0] : null, require_person: true })))
         .then((uploadedPhotos) => {
           const validPhotos = uploadedPhotos.filter(img => typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://')));
+          
+          if (validPhotos.length < 3) {
+            setIsSubmitting(false);
+            showAlert(
+              'Photo Verification Failed 👤',
+              'Please upload at least 3 clear photos of a person. Photos without a detectable human face cannot be accepted.',
+              true
+            );
+            return;
+          }
+
           const avatarUrl = validPhotos[0] || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
 
           const registrationPayload = {
@@ -1382,15 +1408,11 @@ export default function RegisterScreen() {
             pincode: data.pincode || '',
             relationship_type: data.relationshipType || 'Long-term',
             interests: data.hobbies || [],
-            is_verified: !!data.is_verified,
-            video_verified: !!data.video_verified,
-            verification_selfie: data.verificationSelfie || '',
-            photos: (data.referenceFaceImage && !validPhotos.includes(data.referenceFaceImage))
-              ? [data.referenceFaceImage, ...validPhotos]
-              : validPhotos,
+            photos: validPhotos,
           };
 
           return registerUser(registrationPayload).then((res) => {
+            setIsSubmitting(false);
             const serverUser = res.user || {};
 
             // Extract photos from backend response if it returned them
@@ -1416,8 +1438,9 @@ export default function RegisterScreen() {
           });
         })
         .catch((err) => {
-          setValidationAlertMsg(err.message || 'Registration completed!');
-          setValidationAlertVisible(true);
+          setIsSubmitting(false);
+          const errorMsg = err?.message || 'Please upload a clear photo of a person. No human face was detected.';
+          showAlert('Photo Verification Failed 👤', errorMsg, true);
         });
     }
   };
@@ -1519,9 +1542,9 @@ export default function RegisterScreen() {
 
       <CustomAlertModal
         visible={validationAlertVisible}
-        title="Incomplete Step"
+        title={validationAlertTitle}
         message={validationAlertMsg}
-        type="warning"
+        isDanger={validationAlertDanger}
         onConfirm={() => setValidationAlertVisible(false)}
         onClose={() => setValidationAlertVisible(false)}
       />
@@ -1580,56 +1603,44 @@ export default function RegisterScreen() {
               {step === 4 && <StepLocation data={data} onChange={onChange} onFocusScroll={handleScrollToInput} />}
               {step === 5 && <StepIdentity data={data} onChange={onChange} onFocusScroll={handleScrollToInput} />}
               {step === 6 && <StepLifestyleHabits data={data} onChange={onChange} />}
-              {step === 7 && <StepVideoFaceVerification data={data} onChange={onChange} />}
-              {step === 8 && <StepPhotos data={data} onChange={onChange} />}
+              {step === 7 && <StepPhotos data={data} onChange={onChange} onShowAlert={showAlert} />}
             </Animated.View>
           </ScrollView>
 
           {/* Bottom Actions - Kept right above keypad */}
           <View style={[sty.bottomBar, isKeyboardVisible && sty.bottomBarWithKeyboard]}>
-            {step === 7 && !data.is_verified ? (
-              <TouchableOpacity
-                style={[sty.nextBtn, { opacity: 0.65 }]}
-                onPress={() => {
-                  setValidationAlertMsg('Face Verification is mandatory. Please complete face matching between your portrait and live selfie to proceed.');
-                  setValidationAlertVisible(true);
-                }}
-                activeOpacity={0.8}
+            <TouchableOpacity 
+              style={[sty.nextBtn, isSubmitting && { opacity: 0.7 }]} 
+              onPress={goNext} 
+              activeOpacity={0.85}
+              disabled={isSubmitting}
+            >
+              <LinearGradient
+                colors={['#FF007F', '#B5179E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={sty.nextBtnGrad}
               >
-                <LinearGradient
-                  colors={['#3D1E35', '#24142B']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[sty.nextBtnGrad, { borderWidth: 1, borderColor: 'rgba(255, 0, 127, 0.4)' }]}
-                >
-                  <Ionicons name="lock-closed" size={16} color="#FF007F" style={{ marginRight: 6 }} />
-                  <Text style={[sty.nextBtnText, { color: '#CBD5E1' }]}>Verify Face to Continue</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity style={sty.nextBtn} onPress={goNext} activeOpacity={0.85}>
-                <LinearGradient
-                  colors={step === 7 && data.is_verified ? ['#00E5FF', '#0072FF'] : ['#FF007F', '#B5179E']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={sty.nextBtnGrad}
-                >
-                  <Text style={sty.nextBtnText}>
-                    {step === TOTAL_STEPS - 1
-                      ? 'Complete Setup'
-                      : step === 7 && data.is_verified
-                      ? 'Verified! Continue'
-                      : 'Continue'}
-                  </Text>
-                  <Ionicons
-                    name={step === 7 && data.is_verified ? 'checkmark-circle' : 'arrow-forward'}
-                    size={16}
-                    color="#fff"
-                    style={{ marginLeft: 6 }}
-                  />
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
+                {isSubmitting ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={sty.nextBtnText}>Verifying Photos...</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={sty.nextBtnText}>
+                      {step === TOTAL_STEPS - 1 ? 'Complete Setup' : 'Continue'}
+                    </Text>
+                    <Ionicons
+                      name="arrow-forward"
+                      size={16}
+                      color="#fff"
+                      style={{ marginLeft: 6 }}
+                    />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </SafeAreaView>
@@ -1663,6 +1674,7 @@ const getStyles = (theme, isDark) => StyleSheet.create({
     flexGrow: 1,
   },
   card: { backgroundColor: isDark ? '#1C1433' : '#FFFFFF', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.05)', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
+
 
   stepHeader: { marginBottom: 14 },
   stepIconWrap: { width: 42, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,0,127,0.08)', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },

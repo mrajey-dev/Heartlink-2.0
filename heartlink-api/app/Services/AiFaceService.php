@@ -10,6 +10,8 @@ class AiFaceService
 
     /**
      * Validate if an image contains a human face/person
+     * Uses multi-scale sliding window scanning, multi-ethnic skin locus,
+     * and facial structure/contrast verification.
      */
     public static function detectPerson($imageInput): array
     {
@@ -29,52 +31,173 @@ class AiFaceService
             return [
                 'has_person' => false,
                 'confidence' => 0,
-                'message'    => 'Image too small to detect a face.',
+                'message'    => 'Image resolution too small to detect a face.',
             ];
         }
 
-        // Scale to 64×64 for analysis
-        $s = imagecreatetruecolor(64, 64);
-        imagecopyresampled($s, $im, 0, 0, 0, 0, 64, 64, $w, $h);
+        // Scale to 96×96 grid for fast, accurate multi-scale spatial analysis
+        $gridSize = 96;
+        $s = imagecreatetruecolor($gridSize, $gridSize);
+        imagecopyresampled($s, $im, 0, 0, 0, 0, $gridSize, $gridSize, $w, $h);
         imagedestroy($im);
 
-        $skinPixels = 0;
-        $total      = 0;
+        // Build skin map and luminance map across the entire image
+        $skinMap = [];
+        $lumMap  = [];
+        $totalSkin = 0;
+        $totalPixels = $gridSize * $gridSize;
 
-        for ($y = 8; $y < 56; $y++) {
-            for ($x = 8; $x < 56; $x++) {
+        for ($y = 0; $y < $gridSize; $y++) {
+            $skinMap[$y] = [];
+            $lumMap[$y]  = [];
+            for ($x = 0; $x < $gridSize; $x++) {
                 $rgb = imagecolorat($s, $x, $y);
-                $r   = ($rgb >> 16) & 0xFF;
-                $g   = ($rgb >>  8) & 0xFF;
-                $b   =  $rgb        & 0xFF;
+                $r = ($rgb >> 16) & 0xFF;
+                $g = ($rgb >>  8) & 0xFF;
+                $b =  $rgb        & 0xFF;
 
+                $lum = 0.299 * $r + 0.587 * $g + 0.114 * $b;
+                $lumMap[$y][$x] = $lum;
+
+                // YCbCr components
                 $cb = 128 - 0.168736 * $r - 0.331264 * $g + 0.5 * $b;
                 $cr = 128 + 0.5 * $r - 0.418688 * $g - 0.081312 * $b;
 
-                // Standard YCbCr skin locus (Chai & Ngan)
-                $isSkin = ($cb >= 77 && $cb <= 127 && $cr >= 133 && $cr <= 173)
-                       || ($r > 60 && $g > 40 && $b > 20 && max($r,$g,$b) - min($r,$g,$b) > 15 && $r > $g && $r > $b);
+                // Broad, multi-ethnic skin tone locus (fair, medium, olive, tan, deep)
+                $isSkinYCbCr = ($cb >= 65 && $cb <= 142 && $cr >= 124 && $cr <= 185);
 
-                $total++;
-                if ($isSkin) $skinPixels++;
+                // RGB color balance for human skin under different lighting temperatures
+                $isSkinRGB = ($r > 38 && $g > 22 && $b > 14 && $r >= ($g - 4) && ($r - $b) > 8);
+
+                // Exclude artificial saturated graphics (e.g. pure yellow, pure neon red)
+                $maxC = max($r, $g, $b);
+                $minC = min($r, $g, $b);
+                $sat  = $maxC > 0 ? ($maxC - $minC) / $maxC : 0;
+                $isRealisticSaturation = ($sat >= 0.06 && $sat <= 0.88);
+
+                $isSkin = ($isSkinYCbCr || $isSkinRGB) && $isRealisticSaturation;
+
+                $skinMap[$y][$x] = $isSkin ? 1 : 0;
+                if ($isSkin) {
+                    $totalSkin++;
+                }
+            }
+        }
+        imagedestroy($s);
+
+        $globalSkinRatio = $totalSkin / $totalPixels;
+
+        // Multi-scale sliding window scanning across the grid
+        // Window sizes cover close-up portraits, selfies, half-body, and headshots
+        $maxLocalDensity = 0.0;
+        $bestFaceScore   = 0.0;
+        $windowSizes     = [32, 44, 56];
+
+        foreach ($windowSizes as $winSize) {
+            $step = (int)($winSize / 3);
+            // Search upper 75% of the frame where heads/faces are situated
+            $maxY = min($gridSize - $winSize, (int)($gridSize * 0.72));
+            for ($wy = 2; $wy <= $maxY; $wy += $step) {
+                for ($wx = 2; $wx <= $gridSize - $winSize - 2; $wx += $step) {
+                    $winSkin  = 0;
+                    $winTotal = $winSize * $winSize;
+                    $lums     = [];
+
+                    for ($dy = 0; $dy < $winSize; $dy++) {
+                        for ($dx = 0; $dx < $winSize; $dx++) {
+                            $py = $wy + $dy;
+                            $px = $wx + $dx;
+                            if ($skinMap[$py][$px]) {
+                                $winSkin++;
+                            }
+                            $lums[] = $lumMap[$py][$px];
+                        }
+                    }
+
+                    $density = $winSkin / $winTotal;
+                    if ($density > $maxLocalDensity) {
+                        $maxLocalDensity = $density;
+                    }
+
+                    // Candidate face window with significant skin concentration
+                    if ($density >= 0.14) {
+                        // Check facial structure: eye band contrast vs forehead & cheeks
+                        $h1 = (int)($winSize * 0.30);
+                        $h2 = (int)($winSize * 0.55);
+                        $h3 = (int)($winSize * 0.80);
+
+                        $lumForehead = 0; $cntF = 0;
+                        $lumEyes     = 0; $cntE = 0;
+                        $lumCheeks   = 0; $cntC = 0;
+
+                        for ($dy = (int)($winSize * 0.10); $dy < $h1; $dy++) {
+                            for ($dx = (int)($winSize * 0.20); $dx < (int)($winSize * 0.80); $dx++) {
+                                $lumForehead += $lumMap[$wy + $dy][$wx + $dx];
+                                $cntF++;
+                            }
+                        }
+                        for ($dy = $h1; $dy < $h2; $dy++) {
+                            for ($dx = (int)($winSize * 0.15); $dx < (int)($winSize * 0.85); $dx++) {
+                                $lumEyes += $lumMap[$wy + $dy][$wx + $dx];
+                                $cntE++;
+                            }
+                        }
+                        for ($dy = $h2; $dy < $h3; $dy++) {
+                            for ($dx = (int)($winSize * 0.20); $dx < (int)($winSize * 0.80); $dx++) {
+                                $lumCheeks += $lumMap[$wy + $dy][$wx + $dx];
+                                $cntC++;
+                            }
+                        }
+
+                        $avgF = $cntF > 0 ? $lumForehead / $cntF : 128;
+                        $avgE = $cntE > 0 ? $lumEyes / $cntE : 128;
+                        $avgC = $cntC > 0 ? $lumCheeks / $cntC : 128;
+
+                        // Luminance standard deviation inside window (ensures texture, not flat color)
+                        $meanLum = array_sum($lums) / count($lums);
+                        $varSum = 0;
+                        foreach ($lums as $l) {
+                            $varSum += ($l - $meanLum) * ($l - $meanLum);
+                        }
+                        $stdDev = sqrt($varSum / count($lums));
+
+                        $hasStructure   = ($stdDev >= 6.5 && $stdDev <= 85.0);
+                        $hasEyeContrast = ($avgE <= $avgF + 10) || ($avgE <= $avgC + 10);
+
+                        $score = $density * 50 + ($hasStructure ? 30 : 0) + ($hasEyeContrast ? 20 : 0);
+                        if ($score > $bestFaceScore) {
+                            $bestFaceScore = $score;
+                        }
+                    }
+                }
             }
         }
 
-        imagedestroy($s);
+        // Decision logic:
+        // 1. Strong localized face cluster with structure
+        $hasFaceCluster = ($bestFaceScore >= 52.0 && $maxLocalDensity >= 0.16);
 
-        $skinRatio = $total > 0 ? $skinPixels / $total : 0;
+        // 2. Close-up portrait or selfie with high skin presence
+        $hasHighSkin = ($globalSkinRatio >= 0.12 && $maxLocalDensity >= 0.20);
 
-        if ($skinRatio < 0.10) {
+        // 3. Medium skin presence in upper/mid body with local cluster (half-body/full-body portraits)
+        $hasPortraitPresence = ($globalSkinRatio >= 0.035 && $maxLocalDensity >= 0.18);
+
+        $isPerson = $hasFaceCluster || $hasHighSkin || $hasPortraitPresence;
+
+        if (!$isPerson) {
+            $conf = round(max($globalSkinRatio * 100, $maxLocalDensity * 100), 1);
             return [
                 'has_person' => false,
-                'confidence' => round($skinRatio * 100, 1),
+                'confidence' => $conf,
                 'message'    => 'No human face detected. Please upload a clear photo of yourself.',
             ];
         }
 
+        $finalConfidence = min(99.0, round(60 + $bestFaceScore * 0.35 + $maxLocalDensity * 20, 1));
         return [
             'has_person' => true,
-            'confidence' => min(98.0, round(55 + $skinRatio * 43, 1)),
+            'confidence' => $finalConfidence,
             'message'    => 'Person detected.',
         ];
     }
@@ -381,15 +504,17 @@ class AiFaceService
         if (empty($input)) return null;
 
         if (str_starts_with((string)$input, 'data:image')) {
-            $parts = explode(',', $input, 2);
+            $parts = explode(',', (string)$input, 2);
             if (count($parts) === 2) {
-                $raw = base64_decode($parts[1]);
+                $clean = preg_replace('/\s+/', '', $parts[1]);
+                $raw = base64_decode($clean);
                 if ($raw) return @imagecreatefromstring($raw);
             }
         }
 
         if (strlen((string)$input) > 200 && !str_starts_with((string)$input, 'http') && !file_exists((string)$input)) {
-            $raw = base64_decode($input);
+            $clean = preg_replace('/\s+/', '', (string)$input);
+            $raw = base64_decode($clean);
             if ($raw) {
                 $im = @imagecreatefromstring($raw);
                 if ($im) return $im;

@@ -28,8 +28,7 @@ class SubscriptionPlanSeeder extends Seeder
                     ['id' => '1m',  'label' => '1 Month',  'price' => '₹29.2',  'unit' => '/wk', 'total' => '₹117', 'save' => 'STANDARD'],
                 ],
                 'features'     => [
-                    ['icon' => 'heart-outline',        'title' => '10 Profile Likes Daily (24h Reset)'],
-                    ['icon' => 'close-outline',        'title' => '20 Profile Passes Daily (24h Reset)'],
+                    ['icon' => 'heart-outline',        'title' => '20 Profile Swipes Daily (Refreshes at 12:00 AM)'],
                     ['icon' => 'reload-outline',       'title' => 'Recheck Up to 3 Passed Profiles'],
                     ['icon' => 'chatbubbles-outline',  'title' => 'Unlimited Chatting with Matches'],
                     ['icon' => 'mail-unread-outline',  'title' => 'Unlimited Incoming Match Requests'],
@@ -54,8 +53,7 @@ class SubscriptionPlanSeeder extends Seeder
                     ['id' => '1m',  'label' => '1 Month',  'price' => '₹53.5', 'unit' => '/wk', 'total' => '₹214',   'save' => 'FLEX'],
                 ],
                 'features'     => [
-                    ['icon' => 'heart-outline',        'title' => '20 Profile Likes Daily (24h Reset)'],
-                    ['icon' => 'close-outline',        'title' => '30 Profile Passes Daily (24h Reset)'],
+                    ['icon' => 'heart-outline',        'title' => '50 Profile Swipes Daily (Refreshes at 12:00 AM)'],
                     ['icon' => 'reload-outline',       'title' => 'Recheck Up to 10 Passed Profiles'],
                     ['icon' => 'chatbubbles-outline',  'title' => 'Unlimited Chatting with Matches'],
                     ['icon' => 'flash-outline',        'title' => '5 Superlikes per Month'],
@@ -81,7 +79,7 @@ class SubscriptionPlanSeeder extends Seeder
                     ['id' => '1m',  'label' => '1 Month',  'price' => '₹99',   'unit' => '/wk', 'total' => '₹396',   'save' => 'ULTIMATE'],
                 ],
                 'features'     => [
-                    ['icon' => 'infinite-outline',     'title' => 'Unlimited Daily Likes & Passes'],
+                    ['icon' => 'infinite-outline',     'title' => 'Unlimited Daily Profile Swipes'],
                     ['icon' => 'reload-outline',       'title' => 'Recheck Unlimited Passed Profiles'],
                     ['icon' => 'chatbubbles-outline',  'title' => 'Unlimited Chatting with Matches'],
                     ['icon' => 'checkmark-circle-outline','title' => 'Special Golden Tick Badge on Profile'],

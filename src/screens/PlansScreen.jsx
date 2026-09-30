@@ -44,8 +44,7 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
       { id: '12m', label: '1 Year', price: '₹18', unit: '/wk', total: '₹864', save: '38% OFF' },
     ],
     features: [
-      { icon: 'heart-outline', title: '10 Profile Likes Daily (24h Reset)' },
-      { icon: 'close-outline', title: '20 Profile Passes Daily (24h Reset)' },
+      { icon: 'heart-outline', title: '20 Profile Swipes Daily (Refreshes at 12:00 AM)' },
       { icon: 'reload-outline', title: 'Recheck Up to 3 Passed Profiles' },
       { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
       { icon: 'mail-unread-outline', title: 'Unlimited Incoming Match Requests' },
@@ -71,8 +70,7 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
       { id: '12m', label: '1 Year', price: '₹43', unit: '/wk', total: '₹2,064', save: '20% OFF' },
     ],
     features: [
-      { icon: 'heart-outline', title: '20 Profile Likes Daily (24h Reset)' },
-      { icon: 'close-outline', title: '30 Profile Passes Daily (24h Reset)' },
+      { icon: 'heart-outline', title: '50 Profile Swipes Daily (Refreshes at 12:00 AM)' },
       { icon: 'reload-outline', title: 'Recheck Up to 10 Passed Profiles' },
       { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
       { icon: 'flash-outline', title: '5 Superlikes per Month' },
@@ -99,7 +97,7 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
       { id: '12m', label: '1 Year', price: '₹70', unit: '/wk', total: '₹3,360', save: '29% OFF' },
     ],
     features: [
-      { icon: 'infinite-outline', title: 'Unlimited Daily Likes & Passes' },
+      { icon: 'infinite-outline', title: 'Unlimited Daily Profile Swipes' },
       { icon: 'reload-outline', title: 'Recheck Unlimited Passed Profiles' },
       { icon: 'chatbubbles-outline', title: 'Unlimited Chatting with Matches' },
       { icon: 'checkmark-circle-outline', title: 'Special Golden Tick Badge on Profile' },

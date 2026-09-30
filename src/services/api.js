@@ -149,11 +149,10 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
         console.log('[Upload Image Base64 Data Success]:', res.url);
         return res.url;
       }
+      throw new Error(res?.message || 'Server did not return image URL');
     } catch (b64Err) {
-      if (b64Err?.message?.includes('Inappropriate') || b64Err?.message?.includes('NSFW')) {
-        throw b64Err;
-      }
       console.warn('[Upload Image Base64 Data Error]:', b64Err?.message);
+      throw b64Err;
     }
   }
 
@@ -174,6 +173,7 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
 
       if (extraParams.user_id) formData.append('user_id', extraParams.user_id);
       if (extraParams.email) formData.append('email', extraParams.email);
+      if (extraParams.require_person !== undefined) formData.append('require_person', extraParams.require_person);
 
       const res = await apiFetch('/upload-image', {
         method: 'POST',
@@ -185,7 +185,7 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
         return res.url;
       }
     } catch (fdErr) {
-      if (fdErr?.message?.includes('Inappropriate') || fdErr?.message?.includes('NSFW')) {
+      if (fdErr?.message?.includes('Inappropriate') || fdErr?.message?.includes('NSFW') || fdErr?.message?.includes('person') || fdErr?.message?.includes('face') || fdErr?.message?.includes('human') || fdErr?.message?.includes('Please upload')) {
         throw fdErr;
       }
       console.warn('[Upload Image FormData Warning, trying base64]:', fdErr?.message);
@@ -259,11 +259,8 @@ export const apiUploadImage = async (imageUri, extraParams = {}) => {
     console.warn('[Upload Image]: Server response missing image url');
     return null;
   } catch (err) {
-    if (err?.message?.includes('Inappropriate') || err?.message?.includes('NSFW')) {
-      throw err;
-    }
     console.warn('[Upload Image Warning]:', err?.message);
-    return null;
+    throw err;
   }
 };
 

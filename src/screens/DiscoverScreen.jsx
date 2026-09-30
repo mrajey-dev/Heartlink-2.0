@@ -84,6 +84,10 @@ export default function DiscoverScreen() {
   const [swipedCount, setSwipedCount] = useState(0);
   const [isSwipeLoading, setIsSwipeLoading] = useState(false);
   const [freeLimitModalVisible, setFreeLimitModalVisible] = useState(false);
+  const [swipeLimitModalInfo, setSwipeLimitModalInfo] = useState({
+    title: 'Daily Swipe Limit Reached',
+    message: 'You have reached your daily limit of 10 profile swipes for today. Your swipes refresh everyday at 12:00 AM midnight. Upgrade your plan now to unlock more swipes!',
+  });
   const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
   const [noRewindModalVisible, setNoRewindModalVisible] = useState(false);
   const [rewindUsed, setRewindUsed] = useState(false);
@@ -119,33 +123,47 @@ export default function DiscoverScreen() {
     return () => pulse.stop();
   }, [skeletonPulseAnim]);
 
-  // Active Plan Check
-  const hasActivePlan = useMemo(() => {
-    if (!user) return false;
+  // Active Plan & Daily Swipe Limits:
+  // Free (no plan): 10 profile swipes / day
+  // Basic plan: 20 profile swipes / day
+  // Plus plan: 50 profile swipes / day
+  // Premium plan: Unlimited profile swipes / day (999999)
+  const userPlanTier = useMemo(() => {
     const raw = (
-      user.activeSubscription?.plan_name ||
-      user.active_subscription?.plan_name ||
-      user.subscription_plan ||
-      user.plan_name ||
-      user.plan ||
+      user?.activeSubscription?.plan_name ||
+      user?.active_subscription?.plan_name ||
+      user?.subscription_plan ||
+      user?.plan_name ||
+      user?.plan ||
       ''
     );
     const planName = (typeof raw === 'string' ? raw : (raw?.name || raw?.plan_key || raw?.plan_name || '')).toLowerCase();
-
-    return !!(
-      (planName && planName !== 'free' && planName !== 'basic_free' && planName !== 'none') ||
-      user.premium === true ||
-      user.isPremium === true ||
-      user.subscription === 'active' ||
-      user.subscriptionStatus === 'active'
-    );
+    if (planName.includes('premium') || planName.includes('gold') || planName.includes('vip') || user?.premium || user?.isPremium) {
+      return 'premium';
+    }
+    if (planName.includes('plus')) {
+      return 'plus';
+    }
+    if (planName.includes('basic')) {
+      return 'basic';
+    }
+    return 'free';
   }, [user]);
+
+  const userDailySwipeLimit = useMemo(() => {
+    if (userPlanTier === 'premium') return 999999;
+    if (userPlanTier === 'plus') return 50;
+    if (userPlanTier === 'basic') return 20;
+    return 10; // Free / no plan
+  }, [userPlanTier]);
+
+  const hasActivePlan = useMemo(() => {
+    return userPlanTier !== 'free';
+  }, [userPlanTier]);
 
   const isFreePlan = useMemo(() => {
-    const raw = user?.subscription_plan || '';
-    const plan = (typeof raw === 'string' ? raw : (raw?.name || raw?.plan_key || raw?.plan_name || '')).toLowerCase();
-    return plan === 'free' || plan === 'basic_free' || plan === '' || plan === 'none';
-  }, [user]);
+    return userPlanTier === 'free';
+  }, [userPlanTier]);
 
   const cardHeightRef = useRef(height * 0.5);
 
@@ -294,12 +312,16 @@ export default function DiscoverScreen() {
           .map(formatApiProfile);
         setDbProfiles(formatted);
       }
-      if (typeof fRes?.daily_likes_count === 'number') {
-        setSwipedCount(fRes.daily_likes_count);
+      const totalUsed = typeof fRes?.daily_swipes_used === 'number'
+        ? fRes.daily_swipes_used
+        : ((typeof fRes?.daily_likes_count === 'number' ? fRes.daily_likes_count : 0) + (typeof fRes?.daily_passes_count === 'number' ? fRes.daily_passes_count : 0));
+
+      if (typeof totalUsed === 'number' && !isNaN(totalUsed)) {
+        setSwipedCount(totalUsed);
         if (user?.id) {
           const today = getTodayKey();
           AsyncStorage.setItem(`@heartlink_swipe_date_${user.id}`, today).catch(() => { });
-          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(fRes.daily_likes_count)).catch(() => { });
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(totalUsed)).catch(() => { });
         }
       }
     } catch (err) {
@@ -725,8 +747,19 @@ export default function DiscoverScreen() {
     const currentP = currentProfile;
     if (!currentP || !currentP.id) return;
 
-    // 1. Check if user on free plan without active subscription has already reached 5 daily likes
-    if (!hasActivePlan && (swipeType === 'like' || swipeType === 'pass') && swipedCount >= 5) {
+    // 1. Enforce Daily Profile Swipe Quota: Free=10, Basic=20, Plus=50, Premium=Unlimited
+    if (swipedCount >= userDailySwipeLimit && userDailySwipeLimit < 999999) {
+      const planCap = userDailySwipeLimit;
+      const planMsg = userPlanTier === 'free'
+        ? `You have reached your daily limit of ${planCap} profile swipes for today. Your free swipes refresh everyday at 12:00 AM midnight. Upgrade to Basic (20 swipes), Plus (50 swipes), or Premium (unlimited swipes)!`
+        : userPlanTier === 'basic'
+        ? `You have reached your daily limit of ${planCap} profile swipes for today. Your swipes refresh everyday at 12:00 AM midnight. Upgrade to Plus (50 swipes) or Premium (unlimited swipes)!`
+        : `You have reached your daily limit of ${planCap} profile swipes for today. Your swipes refresh everyday at 12:00 AM midnight. Upgrade to Premium for unlimited swipes!`;
+
+      setSwipeLimitModalInfo({
+        title: 'Daily Swipe Limit Reached',
+        message: planMsg,
+      });
       setFreeLimitModalVisible(true);
       Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
       return;
@@ -739,13 +772,20 @@ export default function DiscoverScreen() {
       setIsSwipeLoading(false);
 
       // Increment daily counter and persist for today
-      setSwipedCount(prev => {
-        const next = prev + 1;
+      if (typeof res?.daily_swipes_used === 'number') {
+        setSwipedCount(res.daily_swipes_used);
         if (user?.id) {
-          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(next)).catch(() => { });
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(res.daily_swipes_used)).catch(() => { });
         }
-        return next;
-      });
+      } else {
+        setSwipedCount(prev => {
+          const next = prev + 1;
+          if (user?.id) {
+            AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(next)).catch(() => { });
+          }
+          return next;
+        });
+      }
 
       // Execute animated card exit and advance to next profile
       executeSwipeTransition(direction, swipeType, currentP, res);
@@ -757,11 +797,21 @@ export default function DiscoverScreen() {
 
       if (err?.message?.includes('not verified') || err?.requires_verification) {
         setAadhaarModalVisible(true);
-      } else if (err?.message?.includes('limit') || err?.requires_upgrade || err?.error === 'UPGRADE_PLAN_REQUIRED') {
-        setSwipedCount(5);
+      } else if (
+        err?.error === 'DAILY_SWIPE_LIMIT_REACHED' ||
+        err?.error === 'UPGRADE_PLAN_REQUIRED' ||
+        err?.message?.includes('limit') ||
+        err?.requires_upgrade
+      ) {
+        const limitVal = err?.daily_swipes_limit || userDailySwipeLimit;
+        setSwipedCount(limitVal);
         if (user?.id) {
-          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, '5').catch(() => { });
+          AsyncStorage.setItem(`@heartlink_daily_swipes_${user.id}`, String(limitVal)).catch(() => { });
         }
+        setSwipeLimitModalInfo({
+          title: 'Daily Swipe Limit Reached',
+          message: err?.message || `You have reached your daily limit of ${limitVal} profile swipes for today. Swipes refresh everyday at 12:00 AM midnight. Upgrade your plan now to unlock more swipes!`,
+        });
         setFreeLimitModalVisible(true);
       } else {
         console.warn('Swipe error:', err?.message);
@@ -978,7 +1028,11 @@ export default function DiscoverScreen() {
 
                     <View style={styles.emptyRefreshPill}>
                       <Ionicons name="time-outline" size={13} color="#F59E0B" style={{ marginRight: 5 }} />
-                      <Text style={styles.emptyRefreshPillTxt}>5 Free Likes refresh everyday at 12:00 AM</Text>
+                      <Text style={styles.emptyRefreshPillTxt}>
+                        {userDailySwipeLimit >= 999999
+                          ? 'Unlimited Daily Swipes'
+                          : `${userDailySwipeLimit} Daily Swipes refresh everyday at 12:00 AM`}
+                      </Text>
                     </View>
 
                     {!user?.subscription_plan || user?.subscription_plan === 'Free' || user?.subscription_plan === 'basic_free' ? (
@@ -1305,8 +1359,8 @@ export default function DiscoverScreen() {
 
       <CustomAlertModal
         visible={freeLimitModalVisible}
-        title="Free Profiles Exhausted"
-        message="You have reached your daily limit of 5 free profiles for today. Your 5 free likes refresh everyday at 12:00 AM midnight. Upgrade your plan now to unlock unlimited likes and discover more connections!"
+        title={swipeLimitModalInfo.title}
+        message={swipeLimitModalInfo.message}
         icon="lock-closed-outline"
         iconColor="#F59E0B"
         confirmText="Upgrade Plan"

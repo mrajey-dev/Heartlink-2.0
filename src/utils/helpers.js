@@ -15,7 +15,22 @@ export const getVerifiedBadgeInfo = (item) => {
 
   const userObj = item.user || item;
 
-  const isVerified =
+  // 1. Identity / Aadhaar Verification (Permanent Shield Tick)
+  const isAadhaarVerified = Boolean(
+    userObj.is_aadhaar_verified === true ||
+    userObj.is_aadhaar_verified === 1 ||
+    userObj.is_aadhaar_verified === '1' ||
+    userObj.isAadhaarVerified === true ||
+    userObj.has_aadhaar === true ||
+    userObj.hasAadhaar === true ||
+    (userObj.aadhaar_number && String(userObj.aadhaar_number).trim().length > 0) ||
+    item.is_aadhaar_verified === true ||
+    item.isAadhaarVerified === true ||
+    item.has_aadhaar === true ||
+    (item.aadhaar_number && String(item.aadhaar_number).trim().length > 0)
+  );
+
+  const rawIsVerified = Boolean(
     userObj.is_verified === true ||
     userObj.is_verified === 1 ||
     userObj.is_verified === '1' ||
@@ -31,7 +46,42 @@ export const getVerifiedBadgeInfo = (item) => {
     item.isVerified === true ||
     item.isVerified === 1 ||
     item.isVerified === '1' ||
-    item.isVerified === 'true';
+    item.isVerified === 'true'
+  );
+
+  // 2. Check if the user's subscription plan has expired
+  const expiresAt =
+    userObj.expires_at ||
+    userObj.activeSubscription?.expires_at ||
+    userObj.active_subscription?.expires_at ||
+    item.expires_at ||
+    item.activeSubscription?.expires_at ||
+    item.active_subscription?.expires_at ||
+    null;
+
+  let isPlanExpired = false;
+  if (expiresAt) {
+    try {
+      const expTime = new Date(expiresAt).getTime();
+      if (!isNaN(expTime) && expTime <= Date.now()) {
+        isPlanExpired = true;
+      }
+    } catch (_) {}
+  }
+
+  const subStatus = (
+    userObj.activeSubscription?.status ||
+    userObj.active_subscription?.status ||
+    userObj.subscription_status ||
+    item.activeSubscription?.status ||
+    item.active_subscription?.status ||
+    item.subscription_status ||
+    ''
+  ).toLowerCase();
+
+  if (subStatus === 'expired' || subStatus === 'cancelled' || subStatus === 'inactive') {
+    isPlanExpired = true;
+  }
 
   const rawPlan = (
     userObj.subscription_plan ||
@@ -45,20 +95,8 @@ export const getVerifiedBadgeInfo = (item) => {
     ''
   ).toString().toLowerCase();
 
-  const isPremiumPlan =
-    rawPlan.includes('premium') ||
-    rawPlan.includes('black') ||
-    rawPlan.includes('platinum') ||
-    userObj.isGoldenTick === true ||
-    item.isGoldenTick === true;
-
-  const isPlusPlan =
-    rawPlan.includes('plus') ||
-    rawPlan.includes('access') ||
-    rawPlan.includes('gold');
-
-  const isBasicPlan =
-    rawPlan.includes('basic');
+  const isFreePlanStr = !rawPlan || rawPlan === 'free' || rawPlan === 'none' || rawPlan === 'basic_free' || rawPlan === 'null';
+  const hasActivePaidPlan = !isPlanExpired && !isFreePlanStr;
 
   const isSupport =
     userObj.is_support === true ||
@@ -78,35 +116,55 @@ export const getVerifiedBadgeInfo = (item) => {
     };
   }
 
-  // Tier badges for users who purchased paid plans:
-  if (isPremiumPlan) {
-    return {
-      isVerified: true,
-      iconName: 'check-decagram',
-      iconLibrary: 'MaterialCommunityIcons',
-      color: '#B8860B',
-      planName: 'Premium',
-    };
-  } else if (isPlusPlan) {
-    return {
-      isVerified: true,
-      iconName: 'check-decagram',
-      iconLibrary: 'MaterialCommunityIcons',
-      color: '#9D4EDD',
-      planName: 'Plus',
-    };
-  } else if (isBasicPlan) {
-    // Official Blue Verified Tick for HeartLink Basic Plan subscribers!
-    return {
-      isVerified: true,
-      iconName: 'check-decagram',
-      iconLibrary: 'MaterialCommunityIcons',
-      color: '#0095F6',
-      planName: 'HeartLink Basic',
-    };
-  } else if (isVerified) {
-    // Only Aadhaar verified (Free user who completed Aadhaar identity verification):
-    // Use official Blue Shield Checkmark badge!
+  // 3. Paid plan ticks (check-decagram): only active while subscription is NOT expired
+  if (hasActivePaidPlan) {
+    const isPremiumPlan =
+      rawPlan.includes('premium') ||
+      rawPlan.includes('black') ||
+      rawPlan.includes('platinum') ||
+      userObj.isGoldenTick === true ||
+      item.isGoldenTick === true;
+
+    const isPlusPlan =
+      rawPlan.includes('plus') ||
+      rawPlan.includes('access') ||
+      rawPlan.includes('gold');
+
+    const isBasicPlan = rawPlan.includes('basic');
+
+    if (isPremiumPlan) {
+      return {
+        isVerified: true,
+        iconName: 'check-decagram',
+        iconLibrary: 'MaterialCommunityIcons',
+        color: '#B8860B',
+        planName: 'Premium',
+      };
+    } else if (isPlusPlan) {
+      return {
+        isVerified: true,
+        iconName: 'check-decagram',
+        iconLibrary: 'MaterialCommunityIcons',
+        color: '#9D4EDD',
+        planName: 'Plus',
+      };
+    } else if (isBasicPlan) {
+      return {
+        isVerified: true,
+        iconName: 'check-decagram',
+        iconLibrary: 'MaterialCommunityIcons',
+        color: '#0095F6',
+        planName: 'HeartLink Basic',
+      };
+    }
+  }
+
+  // 4. When plan is expired (or Free user):
+  // Plan tick (check-decagram) is automatically removed!
+  // BUT the shield tick (shield-checkmark) is preserved for identity-verified users!
+  const hasShieldVerification = isAadhaarVerified || (rawIsVerified && (isPlanExpired || isFreePlanStr));
+
+  if (hasShieldVerification) {
     return {
       isVerified: true,
       iconName: 'shield-checkmark',
@@ -116,6 +174,7 @@ export const getVerifiedBadgeInfo = (item) => {
     };
   }
 
+  // User has no active paid plan and no Aadhaar identity verification -> no tick
   return {
     isVerified: false,
     iconName: 'shield-checkmark',

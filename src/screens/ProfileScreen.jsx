@@ -181,10 +181,10 @@ export default function ProfileScreen() {
     const cityState = userCity ? `${userCity}${u.state ? ', ' + u.state : ''}` : (u.location && u.location !== 'Nearby' ? u.location : 'Nearby');
 
     return {
-      name: u.name || 'Alex Rivera',
-      display_name: u.display_name || u.name || 'Alex',
-      displayName: u.display_name || u.name || 'Alex',
-      age: u.age || 26,
+      name: u.name || 'Member',
+      display_name: u.display_name || u.name || 'Member',
+      displayName: u.display_name || u.name || 'Member',
+      age: u.age || 24,
       gender: u.gender || 'Male',
       job: u.occupation || u.job || 'Professional',
       city: userCity || 'Nearby',

@@ -62,68 +62,114 @@ export function AuthProvider({ children }) {
     const restoreSession = async () => {
       try {
         const savedToken = await AsyncStorage.getItem(TOKEN_STORAGE_KEY);
-        const savedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
+        const savedUserStr = await AsyncStorage.getItem(USER_STORAGE_KEY);
 
-        let localUser = null;
-        if (savedUser) {
-          localUser = JSON.parse(savedUser);
-          setUser(localUser);
-          setIsAuthenticated(true);
+        // Require both savedToken AND savedUser to even attempt restoring session
+        if (!savedToken || !savedUserStr) {
+          await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]);
+          setAuthToken(null);
+          setUser(null);
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          return;
         }
 
-        if (savedToken) {
-          setAuthToken(savedToken);
-          // Sync fresh profile in background with 12s timeout for reliable sync on mobile/cellular
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile sync timeout')), 12000)
-          );
-          try {
-            const res = await Promise.race([apiGetProfile(), timeoutPromise]);
-            if (res?.user) {
-              const freshUser = res.user;
+        let localUser = null;
+        try {
+          localUser = JSON.parse(savedUserStr);
+        } catch (_) {
+          localUser = null;
+        }
 
-              // Backend may return photos as DB objects [{id, photo_url, user_id}] or strings or null
-              const rawBackendPhotos = Array.isArray(freshUser.photos)
-                ? freshUser.photos
-                  .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
-                  .filter(Boolean)
-                : [];
+        // Validate localUser structure — if it's the dummy "Alex Rivera" or missing real user identifiers, clear it
+        if (!localUser || !localUser.id || !localUser.email || (localUser.name === 'Alex Rivera' && !localUser.email.includes('@'))) {
+          console.log('[useAuth] Clearing default or invalid placeholder session data');
+          await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]);
+          setAuthToken(null);
+          setUser(null);
+          setIsAuthenticated(false);
+          setIsLoading(false);
+          return;
+        }
 
-              // Local photos stored during registration or previous add-photo
-              const localPhotos = Array.isArray(localUser?.photos)
-                ? localUser.photos
-                  .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
-                  .filter(Boolean)
-                : [];
-              const localImages = Array.isArray(localUser?.images)
-                ? localUser.images.filter(p => typeof p === 'string' && p.startsWith('http'))
-                : [];
+        // Set token for API requests
+        setAuthToken(savedToken);
 
-              // Merge: backend updates profile fields, but preserve local photos if backend has none
-              const mergedUser = {
-                ...(localUser || {}),
-                ...freshUser,
-                photos: rawBackendPhotos.length > 0
-                  ? rawBackendPhotos
-                  : localPhotos.length > 0
-                    ? localPhotos
-                    : localImages,
-                images: localImages.length > 0 ? localImages : rawBackendPhotos,
-                avatar: freshUser.avatar || localUser?.avatar || null,
-              };
+        // Verify with backend that this token is valid
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Profile sync timeout')), 8000)
+        );
 
-              console.log('[useAuth] Synced. photos:', mergedUser.photos?.length, mergedUser.photos?.slice(0, 1));
-              setUser(mergedUser);
+        try {
+          const res = await Promise.race([apiGetProfile(), timeoutPromise]);
+          if (res?.user) {
+            const freshUser = res.user;
+
+            // Backend may return photos as DB objects [{id, photo_url, user_id}] or strings or null
+            const rawBackendPhotos = Array.isArray(freshUser.photos)
+              ? freshUser.photos
+                .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                .filter(Boolean)
+              : [];
+
+            // Local photos stored during registration or previous add-photo
+            const localPhotos = Array.isArray(localUser?.photos)
+              ? localUser.photos
+                .map(p => (typeof p === 'string' ? p : (p?.photo_url || p?.uri || null)))
+                .filter(Boolean)
+              : [];
+            const localImages = Array.isArray(localUser?.images)
+              ? localUser.images.filter(p => typeof p === 'string' && p.startsWith('http'))
+              : [];
+
+            // Merge: backend updates profile fields, but preserve local photos if backend has none
+            const mergedUser = {
+              ...(localUser || {}),
+              ...freshUser,
+              photos: rawBackendPhotos.length > 0
+                ? rawBackendPhotos
+                : localPhotos.length > 0
+                  ? localPhotos
+                  : localImages,
+              images: localImages.length > 0 ? localImages : rawBackendPhotos,
+              avatar: freshUser.avatar || localUser?.avatar || null,
+            };
+
+            setUser(mergedUser);
+            setIsAuthenticated(true);
+            await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mergedUser));
+          } else {
+            throw new Error('Invalid user profile response');
+          }
+        } catch (apiErr) {
+          const errMsg = (apiErr?.message || '').toLowerCase();
+          // If token is invalid, expired, or unauthenticated, clear session completely
+          if (errMsg.includes('unauthenticated') || errMsg.includes('401') || errMsg.includes('token') || errMsg.includes('invalid user')) {
+            console.log('[useAuth] Session expired or invalid on backend. Logging out to show login screen.');
+            await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]);
+            setAuthToken(null);
+            setUser(null);
+            setIsAuthenticated(false);
+          } else {
+            // Temporary network timeout / offline mode:
+            // Only keep authenticated if localUser has legitimate user info with email & id
+            if (localUser && localUser.id && localUser.email && localUser.email !== 'alex@heartlink.com') {
+              setUser(localUser);
               setIsAuthenticated(true);
-              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mergedUser));
+            } else {
+              await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]);
+              setAuthToken(null);
+              setUser(null);
+              setIsAuthenticated(false);
             }
-          } catch (apiErr) {
-            console.warn('[useAuth] Backend DB sync warning:', apiErr?.message);
-            // Keep localUser as-is — do NOT overwrite with empty data
           }
         }
       } catch (e) {
         console.warn('[Session Storage] Failed to restore user session:', e);
+        await AsyncStorage.multiRemove([TOKEN_STORAGE_KEY, USER_STORAGE_KEY]).catch(() => {});
+        setAuthToken(null);
+        setUser(null);
+        setIsAuthenticated(false);
       } finally {
         setIsLoading(false);
       }
@@ -134,26 +180,27 @@ export function AuthProvider({ children }) {
 
 
   const login = async (userData, token = null) => {
-    const activeUser = userData || {
-      id: 1,
-      name: 'Alex Rivera',
-      age: 26,
-      bio: 'Living life, chasing dreams, and making meaningful connections.',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400',
-      interests: ['Design', 'Photography', 'Travel', 'Coffee', 'Music'],
-    };
+    // Strictly require real user data and token from backend response
+    if (!userData || !token) {
+      console.warn('[useAuth] Refusing login: real userData and access_token are required.');
+      return;
+    }
+
+    // Never accept mock Alex Rivera credentials
+    if (userData.name === 'Alex Rivera' && (!userData.email || userData.email === 'alex@heartlink.com')) {
+      console.warn('[useAuth] Refusing login with placeholder credentials.');
+      return;
+    }
 
     try {
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(activeUser));
-      if (token) {
-        await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
-        setAuthToken(token);
-      }
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
+      await AsyncStorage.setItem(TOKEN_STORAGE_KEY, token);
+      setAuthToken(token);
     } catch (e) {
       console.warn('[Session Storage] Failed to store login session:', e);
     }
 
-    setUser(activeUser);
+    setUser(userData);
     setIsAuthenticated(true);
   };
 

@@ -11,7 +11,7 @@ const Stack = createStackNavigator();
 export default function AuthNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="Landing"
+      initialRouteName="Login"
       screenOptions={{
         headerShown: false,
         cardStyle: { backgroundColor: '#080010' },
