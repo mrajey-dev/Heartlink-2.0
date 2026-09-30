@@ -1257,7 +1257,7 @@ export default function RegisterScreen() {
     }
     if (s === 5) return !!(d.motherTongue && d.religion && d.education && d.occupation && d.languagesSpoken && d.languagesSpoken.length >= 1);
     if (s === 6) return !!(d.smoking && d.drinking && d.clubbing && d.diet);
-    if (s === 7) return true; // Video Intro is SKIPPABLE!
+    if (s === 7) return !!(d.is_verified || d.video_verified); // Face verification is MANDATORY!
     if (s === 8) return !!(d.images && d.images.filter(x => !!x).length >= 3);
     return false;
   };
@@ -1289,7 +1289,7 @@ export default function RegisterScreen() {
       }
       case 5: return 'Please select Mother Tongue, Religion, Education, Occupation, and at least 1 Language Spoken.';
       case 6: return 'Please select your Smoking, Drinking, Clubbing, and Diet preferences.';
-      case 7: return '';
+      case 7: return 'Face Verification is mandatory. Please complete face matching between your portrait and live selfie to proceed.';
       case 8: return 'Please upload at least 3 profile photos to continue.';
       default: return 'Please complete all required fields for this step.';
     }
@@ -1574,12 +1574,49 @@ export default function RegisterScreen() {
 
           {/* Bottom Actions - Kept right above keypad */}
           <View style={[sty.bottomBar, isKeyboardVisible && sty.bottomBarWithKeyboard]}>
-            <TouchableOpacity style={sty.nextBtn} onPress={goNext} activeOpacity={0.85}>
-              <LinearGradient colors={['#FF007F', '#B5179E']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sty.nextBtnGrad}>
-                <Text style={sty.nextBtnText}>{step === TOTAL_STEPS - 1 ? 'Complete Setup' : 'Continue'}</Text>
-                <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
-              </LinearGradient>
-            </TouchableOpacity>
+            {step === 7 && !data.is_verified ? (
+              <TouchableOpacity
+                style={[sty.nextBtn, { opacity: 0.65 }]}
+                onPress={() => {
+                  setValidationAlertMsg('Face Verification is mandatory. Please complete face matching between your portrait and live selfie to proceed.');
+                  setValidationAlertVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#3D1E35', '#24142B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[sty.nextBtnGrad, { borderWidth: 1, borderColor: 'rgba(255, 0, 127, 0.4)' }]}
+                >
+                  <Ionicons name="lock-closed" size={16} color="#FF007F" style={{ marginRight: 6 }} />
+                  <Text style={[sty.nextBtnText, { color: '#CBD5E1' }]}>Verify Face to Continue</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={sty.nextBtn} onPress={goNext} activeOpacity={0.85}>
+                <LinearGradient
+                  colors={step === 7 && data.is_verified ? ['#00E5FF', '#0072FF'] : ['#FF007F', '#B5179E']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={sty.nextBtnGrad}
+                >
+                  <Text style={sty.nextBtnText}>
+                    {step === TOTAL_STEPS - 1
+                      ? 'Complete Setup'
+                      : step === 7 && data.is_verified
+                      ? 'Verified! Continue'
+                      : 'Continue'}
+                  </Text>
+                  <Ionicons
+                    name={step === 7 && data.is_verified ? 'checkmark-circle' : 'arrow-forward'}
+                    size={16}
+                    color="#fff"
+                    style={{ marginLeft: 6 }}
+                  />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </SafeAreaView>

@@ -295,6 +295,10 @@ export const apiSubmitVideoVerification = (payload) => apiFetch('/user/video-ver
   method: 'POST',
   body: payload,
 });
+export const apiCompareFaces = (payload) => apiFetch('/auth/compare-faces', {
+  method: 'POST',
+  body: payload,
+});
 export const apiSendAadhaarOtp = (aadhaarNumber) => apiFetch('/aadhaar/send-otp', {
   method: 'POST',
   body: { aadhaar_number: aadhaarNumber },
