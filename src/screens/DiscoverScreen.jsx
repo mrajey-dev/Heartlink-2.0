@@ -1145,12 +1145,6 @@ export default function DiscoverScreen() {
                     </View>
 
                     <View style={styles.cardGlassPillRow}>
-                      {currentProfile.job ? (
-                        <View style={styles.cardInfoPill}>
-                          <Ionicons name="briefcase-outline" size={12} color="#FDE68A" style={{ marginRight: 5 }} />
-                          <Text style={styles.cardInfoPillTxt} numberOfLines={1}>{currentProfile.job}</Text>
-                        </View>
-                      ) : null}
                       {currentProfile.distance ? (
                         <View style={styles.cardInfoPill}>
                           <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
