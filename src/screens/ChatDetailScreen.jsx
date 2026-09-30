@@ -501,6 +501,34 @@ export default function ChatDetailScreen() {
   const [isPremiumUser, setIsPremiumUser] = useState(false);
   const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
 
+  const isMaleUserComputed = useMemo(() => {
+    if (isMaleUser) return true;
+    const g = (user?.gender || '').toLowerCase().trim();
+    return g === 'male' || g === 'm';
+  }, [isMaleUser, user]);
+
+  const isPremiumUserComputed = useMemo(() => {
+    if (isPremiumUser) return true;
+    if (!user) return false;
+    const plan = (user?.subscription_plan || '').toLowerCase().trim();
+    const hasPlan = plan && !['none', 'free', ''].includes(plan);
+    return Boolean(user?.is_premium || hasPlan);
+  }, [isPremiumUser, user]);
+
+  const isFreeLimitExhausted = useMemo(() => {
+    if (isSupportChat || isCurrentUserSupport) return false;
+    if (isPremiumUserComputed) return false;
+    if (!isMaleUserComputed) return false;
+    return freeMessagesLeft !== null && freeMessagesLeft <= 0;
+  }, [isSupportChat, isCurrentUserSupport, isPremiumUserComputed, isMaleUserComputed, freeMessagesLeft]);
+
+  useEffect(() => {
+    if (isFreeLimitExhausted) {
+      Keyboard.dismiss();
+      setShowEmojiPicker(false);
+    }
+  }, [isFreeLimitExhausted]);
+
   const isVerifiedUser =
     user?.is_verified === true ||
     user?.is_verified === 1 ||
@@ -1041,7 +1069,7 @@ export default function ChatDetailScreen() {
       return;
     }
 
-    if (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
+    if (isFreeLimitExhausted) {
       triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
       return;
     }
@@ -1160,6 +1188,9 @@ export default function ChatDetailScreen() {
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
         if (error?.requires_verification || error?.message?.toLowerCase()?.includes('aadhaar') || error?.message?.toLowerCase()?.includes('verification')) {
           setAadhaarModalVisible(true);
+        } else if (error?.response?.data?.free_limit_reached || error?.free_limit_reached || (typeof error?.message === 'string' && error?.message?.toLowerCase()?.includes('free limit'))) {
+          setFreeMessagesLeft(0);
+          triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
         } else {
           triggerCustomToast(error?.message || 'Failed to send image or message');
         }
@@ -1711,31 +1742,6 @@ export default function ChatDetailScreen() {
         {/* Input deck or Blocked Banner */}
         <View style={styles.inputContainer}>
           <SafeAreaView edges={['bottom']} style={styles.inputSafeArea}>
-            {/* Male 5 free messages limit indicator banner */}
-            {!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft !== null && (
-              <View style={[styles.freeBanner, freeMessagesLeft === 0 && styles.freeBannerExhausted]}>
-                <Ionicons
-                  name={freeMessagesLeft === 0 ? 'lock-closed' : 'sparkles'}
-                  size={13}
-                  color={freeMessagesLeft === 0 ? '#FF375F' : '#FF007F'}
-                  style={{ marginRight: 5 }}
-                />
-                <Text style={[styles.freeBannerTxt, freeMessagesLeft === 0 && styles.freeBannerTxtExhausted]}>
-                  {freeMessagesLeft === 0
-                    ? 'Free limit reached (5/5). Upgrade to Premium to keep chatting!'
-                    : `${freeMessagesLeft} of 5 free messages remaining for this chat`}
-                </Text>
-                {freeMessagesLeft === 0 && (
-                  <TouchableOpacity
-                    style={styles.upgradeMiniBtn}
-                    onPress={() => navigation.navigate('Plans')}
-                  >
-                    <Text style={styles.upgradeMiniTxt}>Upgrade</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-
             {!isMatched && !isSupportChat && !isCurrentUserSupport ? (
               <View style={styles.blockedBannerRow}>
                 <Ionicons name="heart-dislike" size={18} color="#FF9500" style={{ marginRight: 6 }} />
@@ -1752,8 +1758,57 @@ export default function ChatDetailScreen() {
                   <Text style={styles.unblockBannerBtnText}>Unblock</Text>
                 </TouchableOpacity>
               </View>
+            ) : isFreeLimitExhausted ? (
+              /* When all free messages are over: Show Upgrade button INSTEAD of input field */
+              <View style={styles.exhaustedUpgradeContainer}>
+                <View style={styles.exhaustedInfoRow}>
+                  <View style={styles.exhaustedIconWrap}>
+                    <Ionicons name="lock-closed" size={17} color="#FF375F" />
+                  </View>
+                  <View style={styles.exhaustedTextWrap}>
+                    <Text style={[styles.exhaustedTitle, { color: theme.textPrimary }]}>
+                      Free Message Limit Reached (5/5)
+                    </Text>
+                    <Text style={[styles.exhaustedSub, { color: theme.textSec }]}>
+                      Upgrade to unlock unlimited chatting and send date invites.
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.exhaustedUpgradeBtn}
+                  onPress={() => navigation.navigate('Plans')}
+                  activeOpacity={0.88}
+                >
+                  <LinearGradient
+                    colors={['#FF007F', '#E1006A', '#8B5CF6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.exhaustedUpgradeGrad}
+                  >
+                    <Ionicons name="sparkles" size={16} color="#FFD700" style={{ marginRight: 8 }} />
+                    <Text style={styles.exhaustedUpgradeTxt}>Upgrade to Premium</Text>
+                    <Ionicons name="arrow-forward" size={16} color="#FFF" style={{ marginLeft: 6 }} />
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
             ) : (
               <>
+                {/* Male 5 free messages limit indicator banner when messages remain */}
+                {!isSupportChat && !isCurrentUserSupport && isMaleUserComputed && !isPremiumUserComputed && freeMessagesLeft !== null && freeMessagesLeft > 0 && (
+                  <View style={styles.freeBanner}>
+                    <Ionicons
+                      name="sparkles"
+                      size={13}
+                      color="#FF007F"
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={styles.freeBannerTxt}>
+                      {`${freeMessagesLeft} of 5 free messages remaining for this chat`}
+                    </Text>
+                  </View>
+                )}
+
                 {/* Reply Preview Bar */}
                 {!!replyingTo && (
                   <View style={styles.replyPreviewContainer}>
@@ -1833,14 +1888,14 @@ export default function ChatDetailScreen() {
                     onPressOut={onSendPressOut}
                     activeOpacity={0.9}
                     style={styles.sendBtn}
-                    disabled={isSending || (!input.trim() && !selectedImage) || (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0)}
+                    disabled={isSending || (!input.trim() && !selectedImage)}
                   >
                     <Animated.View style={{ flex: 1, transform: [{ scale: sendScale }] }}>
                       <LinearGradient
                         colors={theme.gradientAccent}
                         style={[
                           styles.sendGrad,
-                          ((!input.trim() && !selectedImage) || isSending || (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0)) && styles.sendGradDisabled,
+                          ((!input.trim() && !selectedImage) || isSending) && styles.sendGradDisabled,
                         ]}
                       >
                         {isSending ? (
@@ -2810,7 +2865,9 @@ const getStyles = (theme) =>
       paddingHorizontal: 12,
       paddingVertical: 7,
       borderRadius: 12,
-      marginBottom: 8,
+      marginHorizontal: 16,
+      marginTop: 8,
+      marginBottom: 4,
       borderWidth: 1,
       borderColor: theme.isDark ? 'rgba(255, 0, 127, 0.3)' : 'rgba(255, 0, 127, 0.2)',
     },
@@ -2838,6 +2895,65 @@ const getStyles = (theme) =>
       color: '#FFF',
       fontSize: 11,
       fontWeight: '800',
+    },
+
+    // Exhausted Free Messages Full Upgrade Card
+    exhaustedUpgradeContainer: {
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 16,
+      backgroundColor: theme.isDark ? '#160F2B' : '#FFFFFF',
+    },
+    exhaustedInfoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    exhaustedIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.isDark ? 'rgba(255, 55, 95, 0.16)' : 'rgba(255, 55, 95, 0.1)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 55, 95, 0.35)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 11,
+    },
+    exhaustedTextWrap: {
+      flex: 1,
+    },
+    exhaustedTitle: {
+      fontSize: 13.5,
+      fontWeight: '800',
+      letterSpacing: -0.2,
+    },
+    exhaustedSub: {
+      fontSize: 11.5,
+      marginTop: 2,
+      lineHeight: 15,
+    },
+    exhaustedUpgradeBtn: {
+      borderRadius: 16,
+      overflow: 'hidden',
+      shadowColor: '#FF007F',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    exhaustedUpgradeGrad: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 13,
+      paddingHorizontal: 18,
+    },
+    exhaustedUpgradeTxt: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '800',
+      letterSpacing: 0.2,
     },
 
     // Character Counter Styles

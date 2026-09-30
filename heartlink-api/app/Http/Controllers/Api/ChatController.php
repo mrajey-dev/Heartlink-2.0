@@ -127,12 +127,33 @@ class ChatController extends Controller
             })->exists();
         }
 
+        $genderLower = strtolower(trim($user->gender ?? ''));
+        $isMale = ($genderLower === 'male' || $genderLower === 'm');
+        $isSubscribed = !empty($user->subscription_plan) && !in_array(strtolower(trim($user->subscription_plan)), ['none', 'free', '']);
+        $hasActiveSub = \App\Models\UserSubscription::where('user_id', $authId)->where('status', 'active')->where('expires_at', '>', now())->exists();
+        $isPremium = (bool) $user->is_premium || $isSubscribed || $hasActiveSub;
+
+        $freeMessagesLeft = null;
+        $freeLimitReached = false;
+        if ($isMale && !$isPremium && (int)$otherUserId !== 16 && (int)$authId !== 16) {
+            $counter = ChatMessageCounter::firstOrCreate([
+                'sender_id'   => $authId,
+                'receiver_id' => $otherUserId,
+            ]);
+            $freeMessagesLeft = max(0, 5 - ($counter->sent_count ?? 0));
+            $freeLimitReached = ($freeMessagesLeft === 0);
+        }
+
         return response()->json([
-            'messages'           => $messages,
-            'is_blocked_by_me'   => $isBlockedByMe,
-            'is_matched'         => $isMatched,
-            'recipient'          => $recipientData,
-            'free_messages_limit'=> 5,
+            'messages'            => $messages,
+            'is_blocked_by_me'    => $isBlockedByMe,
+            'is_matched'          => $isMatched,
+            'recipient'           => $recipientData,
+            'free_messages_limit' => 5,
+            'free_messages_left'  => $freeMessagesLeft,
+            'free_limit_reached'  => $freeLimitReached,
+            'is_male'             => $isMale,
+            'is_premium'          => $isPremium,
         ]);
     }
 
