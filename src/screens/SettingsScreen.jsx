@@ -438,7 +438,7 @@ export default function SettingsScreen() {
           ) : (
             <View style={styles.verifyPromptBox}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.verifyPromptTitle}>Aadhaar Verification (₹49)</Text>
+                <Text style={styles.verifyPromptTitle}>Aadhaar Verification</Text>
                 <Text style={styles.verifyPromptSub}>Aadhaar e-KYC verification is compulsory for all members to connect, match, and message on HeartLink.</Text>
               </View>
               <TouchableOpacity
@@ -449,7 +449,7 @@ export default function SettingsScreen() {
               >
                 <LinearGradient colors={['#00C853', '#0072E3']} style={styles.verifyBtnGrad}>
                   <Ionicons name="shield-checkmark" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.verifyBtnTxt}>{verifying ? 'Verifying...' : 'Verify ₹49'}</Text>
+                  <Text style={styles.verifyBtnTxt}>{verifying ? 'Verifying...' : 'Verify'}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>

@@ -21,6 +21,14 @@ class DatePlannerController extends Controller
 
     public function createProposal(Request $request)
     {
+        if (!$request->user()->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to send date invitations on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         $validated = $request->validate([
             'partner_id'    => 'required|exists:users,id',
             'restaurant_id' => 'required|exists:restaurants,id',
@@ -80,6 +88,14 @@ class DatePlannerController extends Controller
 
     public function respondProposal(Request $request)
     {
+        if (!$request->user()->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to respond to date invitations on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         $validated = $request->validate([
             'booking_id' => 'required|exists:date_bookings,id',
             'status'     => 'required|in:accepted,rejected,declined',

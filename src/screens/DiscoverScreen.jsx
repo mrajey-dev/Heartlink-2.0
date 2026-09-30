@@ -451,6 +451,11 @@ export default function DiscoverScreen() {
   const handleSparkPress = async () => {
     if (isAnimating || isSuperlikeLoading || !currentProfile) return;
 
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
+
     const currentP = currentProfile;
     setIsSuperlikeLoading(true);
 
@@ -701,6 +706,12 @@ export default function DiscoverScreen() {
 
   const swipeCard = async (direction, rawSwipeType = 'like') => {
     if (isAnimating || isSwipeLoading || !currentProfile) return;
+
+    if (!isVerifiedUser) {
+      Animated.spring(card1Pos, { toValue: { x: 0, y: 0 }, friction: 7, useNativeDriver: false }).start();
+      setAadhaarModalVisible(true);
+      return;
+    }
 
     const swipeType = (typeof rawSwipeType === 'string' && ['like', 'super_like', 'pass'].includes(rawSwipeType))
       ? rawSwipeType

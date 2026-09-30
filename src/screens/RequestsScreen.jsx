@@ -335,6 +335,10 @@ export default function RequestsScreen() {
   );
 
   const accept = async (id) => {
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoadingId(id);
     const targetItem = requests.find(r => r.id === id);
     const targetUserId = targetItem?.user_id || (typeof id === 'string' ? parseInt(id.replace(/[^0-9]/g, ''), 10) : id);
@@ -420,6 +424,10 @@ export default function RequestsScreen() {
   };
 
   const acceptDateProposal = async (item) => {
+    if (!isVerifiedUser) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoadingId(item.id);
     setExpandedIds(prev => ({ ...prev, [item.id]: false }));
     setRequests(prev => sortRequestsList(prev.map(r => r.id === item.id ? { ...r, status: 'accepted' } : r)));

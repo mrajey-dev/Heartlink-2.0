@@ -23,6 +23,13 @@ class RequestController extends Controller
         $rawParam    = (string) $fromUserId;
         $fromUserId  = (int) preg_replace('/[^0-9]/', '', $rawParam);
         $currentUser = $request->user();
+        if (!$currentUser->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to accept requests on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
         $currentId   = $currentUser->id;
 
         \Log::info('[Accept] raw=' . $rawParam . ' parsed=' . $fromUserId . ' currentId=' . $currentId);

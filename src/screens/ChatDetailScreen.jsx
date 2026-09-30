@@ -1036,6 +1036,11 @@ export default function ChatDetailScreen() {
       return;
     }
 
+    if (!isSupportChat && !isCurrentUserSupport && !user?.is_verified) {
+      setAadhaarModalVisible(true);
+      return;
+    }
+
     if (!isSupportChat && !isCurrentUserSupport && isMaleUser && !isPremiumUser && freeMessagesLeft === 0) {
       triggerCustomToast('Free limit reached (5/5). Upgrade to Premium to keep chatting!');
       return;
@@ -1209,6 +1214,10 @@ export default function ChatDetailScreen() {
 
   const handleConfirmBlock = () => {
     setShowBlockModal(false);
+    if (!user?.is_verified) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setIsBlocked(true);
     triggerCustomToast(`${activeUser.name} has been blocked and unmatched.`);
 
@@ -1260,6 +1269,10 @@ export default function ChatDetailScreen() {
 
   const handleConfirmReport = () => {
     setShowReportModal(false);
+    if (!user?.is_verified) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     triggerCustomToast(`Report submitted for ${activeUser.name}. Thank you!`);
 
     if (activeUser && activeUser.id) {

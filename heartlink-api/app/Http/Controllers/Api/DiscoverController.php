@@ -509,6 +509,13 @@ class DiscoverController extends Controller
         ]);
 
         $swiper = $request->user();
+        if (!$swiper->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to swipe and connect on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
         $swiperId = $swiper->id;
         $targetId = (int) $request->input('swiped_user_id');
         $type     = $request->input('type');

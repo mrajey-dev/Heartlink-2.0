@@ -11,8 +11,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../hooks/useAuth';
 import { apiCreateDateProposal, apiGetMatches } from '../services/api';
 import CustomAlertModal from '../components/CustomAlertModal';
+import AadhaarVerificationModal from '../components/AadhaarVerificationModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -22,6 +24,7 @@ const TIME_OPTIONS = ['7:00 PM', '8:00 PM', '8:30 PM', '9:00 PM'];
 export default function RestaurantDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { user } = useAuth();
   
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme), [theme]);
@@ -99,6 +102,7 @@ export default function RestaurantDetailScreen() {
 
   const [bookingAlertVisible, setBookingAlertVisible] = useState(false);
   const [mapAlertVisible, setMapAlertVisible] = useState(false);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
   const openGoogleMaps = () => {
@@ -111,6 +115,10 @@ export default function RestaurantDetailScreen() {
 
   const confirmBooking = async () => {
     if (isSending) return;
+    if (!user?.is_verified) {
+      setAadhaarModalVisible(true);
+      return;
+    }
     setIsSending(true);
     try {
       if (partner) {
@@ -329,6 +337,12 @@ export default function RestaurantDetailScreen() {
         iconColor="#FF375F"
         confirmText="OK"
         onConfirm={() => setMapAlertVisible(false)}
+      />
+
+      <AadhaarVerificationModal
+        visible={aadhaarModalVisible}
+        onClose={() => setAadhaarModalVisible(false)}
+        initialStep="alert"
       />
     </LinearGradient>
   );

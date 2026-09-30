@@ -13,6 +13,7 @@ import { ensureArray, formatImageUrl, calculateMatchPercentage, renderVerifiedBa
 import { apiBlockUser, apiReportUser } from '../../services/api';
 import BlurView from '../SafeBlurView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AadhaarVerificationModal from '../AadhaarVerificationModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -46,6 +47,7 @@ export default function ProfileDetail({
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [aadhaarModalVisible, setAadhaarModalVisible] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState(REPORT_REASONS[0].id);
   const [reportDetailsText, setReportDetailsText] = useState('');
   const [alsoBlockUserOnReport, setAlsoBlockUserOnReport] = useState(true);
@@ -161,6 +163,12 @@ export default function ProfileDetail({
   // ─── Block User Handler ──────────────────────────────────────────────
   const handleConfirmBlock = async () => {
     if (!targetUserId) return;
+    if (!currentUser?.is_verified) {
+      setShowBlockModal(false);
+      setShowOptionsMenu(false);
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoading(true);
     try {
       await apiBlockUser(targetUserId);
@@ -186,6 +194,12 @@ export default function ProfileDetail({
   // ─── Report User Handler ─────────────────────────────────────────────
   const handleConfirmReport = async () => {
     if (!targetUserId) return;
+    if (!currentUser?.is_verified) {
+      setShowReportModal(false);
+      setShowOptionsMenu(false);
+      setAadhaarModalVisible(true);
+      return;
+    }
     setActionLoading(true);
     try {
       const reasonObj = REPORT_REASONS.find(r => r.id === selectedReportReason);
@@ -223,6 +237,7 @@ export default function ProfileDetail({
   };
 
   return (
+    <>
     <Modal transparent visible={visible} statusBarTranslucent={true} animationType="fade" onRequestClose={handleClose}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} translucent backgroundColor="transparent" />
       <View style={styles.modalOverlay}>
@@ -807,6 +822,13 @@ export default function ProfileDetail({
 
       </View>
     </Modal>
+
+    <AadhaarVerificationModal
+      visible={aadhaarModalVisible}
+      onClose={() => setAadhaarModalVisible(false)}
+      initialStep="alert"
+    />
+  </>
   );
 }
 

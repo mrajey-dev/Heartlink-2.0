@@ -325,6 +325,15 @@ class ChatController extends Controller
             }
         }
 
+        // Mandatory Aadhaar identity verification check
+        if (!$user->is_verified && (int)$receiverId !== 16) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to send and reply to messages on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         // If regular user chatting with another regular user, verify active match
         if ((int) $senderId !== 16 && (int) $receiverId !== 16) {
             $isMatched = UserMatch::where(function ($q) use ($senderId, $receiverId) {
@@ -617,6 +626,14 @@ class ChatController extends Controller
 
     public function blockUser(Request $request)
     {
+        if (!$request->user()->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to block users on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         $validated = $request->validate([
             'blocked_user_id' => 'required|exists:users,id',
         ]);
@@ -688,6 +705,14 @@ class ChatController extends Controller
 
     public function reportUser(Request $request)
     {
+        if (!$request->user()->is_verified) {
+            return response()->json([
+                'error' => 'AADHAAR_VERIFICATION_REQUIRED',
+                'message' => 'Aadhaar identity verification is mandatory to report users on HeartLink.',
+                'requires_verification' => true,
+            ], 403);
+        }
+
         $validated = $request->validate([
             'reported_user_id' => 'required|exists:users,id',
             'reason'           => 'required|string|max:255',
