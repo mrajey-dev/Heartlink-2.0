@@ -1099,6 +1099,18 @@ public function savePushToken(Request $request)
         $refInput = $request->reference_image ?? $request->image1;
         $selfieInput = $request->selfie_image ?? $request->image2;
 
+        if ($request->has('check_env')) {
+            $py3 = @shell_exec('python3 --version 2>&1');
+            $py = @shell_exec('python --version 2>&1');
+            $disabled = ini_get('disable_functions');
+            return response()->json([
+                'python3' => $py3,
+                'python'  => $py,
+                'disable_functions' => $disabled,
+                'uname' => php_uname(),
+            ]);
+        }
+
         if (empty($refInput) || empty($selfieInput)) {
             return response()->json([
                 'is_match' => false,
