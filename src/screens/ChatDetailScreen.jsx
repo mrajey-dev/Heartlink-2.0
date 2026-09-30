@@ -458,6 +458,178 @@ const MessageBubble = React.memo(function MessageBubble({
   );
 });
 
+const FLOATING_HEARTS_CONFIG = [
+  { id: 1, size: 26, left: '8%', duration: 7200, delay: 0, drift: 22, color: '#FF007F' },
+  { id: 2, size: 18, left: '26%', duration: 8600, delay: 1800, drift: -20, color: '#FF4D8D' },
+  { id: 3, size: 30, left: '46%', duration: 7800, delay: 900, drift: 26, color: '#E1006A' },
+  { id: 4, size: 20, left: '65%', duration: 6500, delay: 3200, drift: -24, color: '#C026D3' },
+  { id: 5, size: 28, left: '84%', duration: 9200, delay: 2400, drift: 20, color: '#FF1493' },
+  { id: 6, size: 16, left: '16%', duration: 7400, delay: 4600, drift: -16, color: '#8B5CF6' },
+  { id: 7, size: 24, left: '38%', duration: 8100, delay: 4000, drift: 24, color: '#FF69B4' },
+  { id: 8, size: 22, left: '74%', duration: 8800, delay: 5400, drift: -22, color: '#FF007F' },
+];
+
+const FloatingHeartItem = React.memo(function FloatingHeartItem({
+  size,
+  left,
+  duration,
+  delay,
+  drift,
+  color,
+  isDark,
+}) {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(anim, {
+          toValue: 1,
+          duration,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [anim, duration, delay]);
+
+  const translateY = anim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [height * 0.72, -60],
+  });
+
+  const translateX = anim.interpolate({
+    inputRange: [0, 0.25, 0.5, 0.75, 1],
+    outputRange: [0, drift, -drift * 0.6, drift * 0.8, 0],
+  });
+
+  const scale = anim.interpolate({
+    inputRange: [0, 0.2, 0.6, 1],
+    outputRange: [0.6, 1.1, 0.95, 0.7],
+  });
+
+  const maxOpacity = isDark ? 0.22 : 0.16;
+  const opacity = anim.interpolate({
+    inputRange: [0, 0.15, 0.8, 1],
+    outputRange: [0, maxOpacity, maxOpacity * 0.75, 0],
+  });
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        left,
+        transform: [{ translateY }, { translateX }, { scale }],
+        opacity,
+        zIndex: 0,
+      }}
+    >
+      <Ionicons name="heart" size={size} color={color} />
+    </Animated.View>
+  );
+});
+
+const FloatingHeartsBackground = React.memo(function FloatingHeartsBackground({ isDark }) {
+  return (
+    <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+      {FLOATING_HEARTS_CONFIG.map((cfg) => (
+        <FloatingHeartItem key={cfg.id} {...cfg} isDark={isDark} />
+      ))}
+    </View>
+  );
+});
+
+const DraggableHeartCharm = React.memo(function DraggableHeartCharm({ onHeartPop }) {
+  const pan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const scale = useRef(new Animated.Value(1)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.12,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoop.start();
+    return () => pulseLoop.stop();
+  }, [pulse]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 3 || Math.abs(gestureState.dy) > 3;
+      },
+      onPanResponderGrant: () => {
+        pan.extractOffset();
+        Animated.spring(scale, { toValue: 1.25, friction: 5, useNativeDriver: false }).start();
+      },
+      onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
+      onPanResponderRelease: (_, gestureState) => {
+        pan.flattenOffset();
+        Animated.spring(scale, { toValue: 1, friction: 5, useNativeDriver: false }).start();
+        if (Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5) {
+          if (onHeartPop) onHeartPop();
+        }
+      },
+    })
+  ).current;
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        right: 18,
+        bottom: 95,
+        zIndex: 50,
+        transform: [
+          { translateX: pan.x },
+          { translateY: pan.y },
+          { scale },
+        ],
+      }}
+      {...panResponder.panHandlers}
+    >
+      <Animated.View style={{ transform: [{ scale: pulse }] }}>
+        <LinearGradient
+          colors={['#FF007F', '#E1006A', '#9333EA']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            justifyContent: 'center',
+            alignItems: 'center',
+            shadowColor: '#FF007F',
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.45,
+            shadowRadius: 8,
+            elevation: 8,
+            borderWidth: 1.5,
+            borderColor: 'rgba(255, 255, 255, 0.45)',
+          }}
+        >
+          <Ionicons name="heart" size={22} color="#FFFFFF" />
+        </LinearGradient>
+      </Animated.View>
+    </Animated.View>
+  );
+});
+
 export default function ChatDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -1637,13 +1809,32 @@ export default function ChatDetailScreen() {
           />
         )}
 
-        {/* Messages log — with optional wallpaper background */}
+        {/* Messages log — with lovely ambient romantic wallpaper and floating hearts */}
         <View
           style={[styles.messagesArea]}
           onTouchStart={() => {
             if (activeReactionMsgId !== null) setActiveReactionMsgId(null);
           }}
         >
+          {/* Ambient romantic gradient tint */}
+          <LinearGradient
+            colors={
+              theme.isDark
+                ? ['rgba(255, 0, 127, 0.05)', 'rgba(139, 92, 246, 0.06)', 'rgba(255, 0, 127, 0.04)']
+                : ['rgba(255, 235, 245, 0.65)', 'rgba(245, 235, 255, 0.45)', 'rgba(255, 240, 248, 0.7)']
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+            pointerEvents="none"
+          />
+
+          {/* Ambient soft glow auras */}
+          <View style={styles.chatAuraTop} pointerEvents="none" />
+          <View style={styles.chatAuraBottom} pointerEvents="none" />
+
+          {/* Floating animated hearts drifting softly in the background */}
+          <FloatingHeartsBackground isDark={theme.isDark} />
 
           <FlatList
             ref={listRef}
@@ -1725,6 +1916,13 @@ export default function ChatDetailScreen() {
               </LinearGradient>
             </TouchableOpacity>
           </Animated.View>
+
+          {/* Moveable interactive heart charm */}
+          <DraggableHeartCharm
+            onHeartPop={() => {
+              triggerCustomToast('❤️ Love is in the air!');
+            }}
+          />
         </View>
 
         {/* Input deck or Blocked Banner */}
@@ -2315,6 +2513,26 @@ const getStyles = (theme) =>
 
     // Messages log
     messagesArea: { flex: 1, position: 'relative' },
+    chatAuraTop: {
+      position: 'absolute',
+      top: -40,
+      right: -50,
+      width: 240,
+      height: 240,
+      borderRadius: 120,
+      backgroundColor: theme.isDark ? 'rgba(255, 0, 127, 0.08)' : 'rgba(255, 0, 127, 0.07)',
+      zIndex: 0,
+    },
+    chatAuraBottom: {
+      position: 'absolute',
+      bottom: 60,
+      left: -60,
+      width: 260,
+      height: 260,
+      borderRadius: 130,
+      backgroundColor: theme.isDark ? 'rgba(139, 92, 246, 0.09)' : 'rgba(139, 92, 246, 0.07)',
+      zIndex: 0,
+    },
     msgList: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 16, gap: 10 },
     msgContainer: {
       position: 'relative',
