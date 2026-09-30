@@ -283,9 +283,10 @@ export default function PlansScreen() {
 
     const userId = user?.id || user?.email || 'active_user';
     const purchasedKey = `@heartlink_has_purchased_plan_${userId}`;
+    const offerStartKey = `@heartlink_welcome_offer_start_${userId}`;
 
     AsyncStorage.getItem(purchasedKey)
-      .then((hasPurchased) => {
+      .then(async (hasPurchased) => {
         if (isCancelled) return;
         if (hasPurchased === 'true' || hasActivePaidPlan(user)) {
           setIsOfferEligible(false);
@@ -293,26 +294,39 @@ export default function PlansScreen() {
           return;
         }
 
-        let createdAtTimestamp = null;
-        if (user?.created_at) {
-          const parsed = new Date(user.created_at).getTime();
+        const isExplicitParam = Boolean(route.params?.welcomeDiscount20 || route.params?.discountOffer);
+
+        let offerStart = null;
+        const storedStart = await AsyncStorage.getItem(offerStartKey);
+        if (storedStart) {
+          const parsed = parseInt(storedStart, 10);
           if (!isNaN(parsed) && parsed > 0) {
-            createdAtTimestamp = parsed;
+            offerStart = parsed;
           }
         }
 
-        if (!createdAtTimestamp) {
-          createdAtTimestamp = Date.now();
+        if (!offerStart) {
+          let createdAtMs = null;
+          if (user?.created_at) {
+            const parsedCreated = new Date(user.created_at).getTime();
+            if (!isNaN(parsedCreated) && parsedCreated > 0 && (Date.now() - parsedCreated) < OFFER_DURATION_MS) {
+              createdAtMs = parsedCreated;
+            }
+          }
+          offerStart = createdAtMs || Date.now();
+          await AsyncStorage.setItem(offerStartKey, offerStart.toString()).catch(() => {});
         }
 
-        const expiresAt = createdAtTimestamp + OFFER_DURATION_MS;
+        const expiresAt = offerStart + OFFER_DURATION_MS;
         const remainingMs = expiresAt - Date.now();
 
-        if (remainingMs > 0 || route.params?.welcomeDiscount20 || route.params?.discountOffer) {
+        if (remainingMs > 0 || isExplicitParam) {
           const initialRemaining = remainingMs > 0 ? remainingMs : OFFER_DURATION_MS;
+          if (isCancelled) return;
           setTimeLeftMs(initialRemaining);
           setIsOfferEligible(true);
         } else {
+          if (isCancelled) return;
           setIsOfferEligible(false);
           setTimeLeftMs(0);
         }
@@ -366,6 +380,14 @@ export default function PlansScreen() {
     if (isNaN(num) || num <= 0) return totalStr;
     const discounted = Math.round(num * ((100 - percent) / 100));
     return '₹' + discounted.toLocaleString('en-IN');
+  };
+
+  const calculateDiscountedPerUnit = (priceStr, percent = 20) => {
+    if (!priceStr) return priceStr;
+    const num = parseFloat(priceStr.replace(/[^0-9\.]/g, ''));
+    if (isNaN(num) || num <= 0) return priceStr;
+    const discounted = Math.round(num * ((100 - percent) / 100) * 10) / 10;
+    return '₹' + (Number.isInteger(discounted) ? discounted : discounted.toFixed(1));
   };
 
   const fetchPlans = async () => {
@@ -529,11 +551,31 @@ export default function PlansScreen() {
       console.warn('[IAP] Purchase error / cancellation:', err?.message || err);
       pendingPurchaseRef.current = null;
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
-        Alert.alert(
-          'Google Play Billing',
-          `${err?.message || 'Unable to connect to Google Play Store.'}`,
-          [{ text: 'OK' }]
-        );
+        if (__DEV__) {
+          Alert.alert(
+            'Google Play Billing (Dev Simulation)',
+            `${err?.message || 'Google Play Store connection unavailable.'}\n\nSimulate successful purchase for ${card.name} (${selectedDurObj?.label || selectedDurId}) at ${priceToCharge} to test activation?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Simulate Purchase',
+                onPress: async () => {
+                  await handleVerifyAndComplete({
+                    productId: resolveSubscriptionSku(planKey),
+                    purchaseToken: `test_token_dev_${Date.now()}`,
+                    orderId: `GPA.TEST-DEV-${Date.now()}`,
+                  });
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            'Google Play Billing',
+            `${err?.message || 'Unable to connect to Google Play Store.'}`,
+            [{ text: 'OK' }]
+          );
+        }
       }
     } finally {
       setPurchasingCardId(null);
@@ -659,10 +701,14 @@ export default function PlansScreen() {
 
                       <View style={[styles.durTabContent, isSmallDevice && styles.smallDurTabContent]}>
                         {dur.save ? (
-                          <View style={[styles.savePill, isSelected && styles.savePillActive]}>
-                            <Text style={[styles.saveTxt, isSelected && styles.whiteTxt]}>
-                              {dur.save}
+                          <View style={[styles.savePill, isSelected && styles.savePillActive, isWelcomeDiscount && styles.savePillOffer]}>
+                            <Text style={[styles.saveTxt, isSelected && styles.whiteTxt, isWelcomeDiscount && styles.saveTxtOffer]}>
+                              {isWelcomeDiscount ? `${dur.save} + 20%` : dur.save}
                             </Text>
+                          </View>
+                        ) : isWelcomeDiscount ? (
+                          <View style={[styles.savePill, styles.savePillOffer]}>
+                            <Text style={[styles.saveTxt, styles.saveTxtOffer]}>20% OFF</Text>
                           </View>
                         ) : null}
 
@@ -670,11 +716,23 @@ export default function PlansScreen() {
                           {dur.label}
                         </Text>
                         <Text style={[styles.durPriceText, isSelected && styles.whiteTxt, isSmallDevice && styles.smallDurPriceText]}>
-                          {dur.price}<Text style={styles.durUnitText}>{dur.unit || ''}</Text>
+                          {isWelcomeDiscount ? calculateDiscountedPerUnit(dur.price, 20) : dur.price}
+                          <Text style={styles.durUnitText}>{dur.unit || ''}</Text>
                         </Text>
-                        <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
-                          {isWelcomeDiscount ? `${calculateDiscountedPrice(dur.total, 20)} (20% OFF)` : dur.total}
-                        </Text>
+                        {isWelcomeDiscount ? (
+                          <View style={styles.durTotalDiscountWrap}>
+                            <Text style={[styles.durTotalStruck, isSelected ? styles.whiteFaintTxt : styles.faintStruckTxt]}>
+                              {dur.total}
+                            </Text>
+                            <Text style={[styles.durTotalText, isSelected && styles.whiteTxt, styles.discountedHighlightTotal]}>
+                              {calculateDiscountedPrice(dur.total, 20)}
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
+                            {dur.total}
+                          </Text>
+                        )}
                       </View>
                     </TouchableOpacity>
                   );
@@ -1310,6 +1368,29 @@ const getStyles = (theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight)
   },
   whiteFaintTxt: {
     color: 'rgba(255, 255, 255, 0.75)',
+  },
+  durTotalDiscountWrap: {
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  durTotalStruck: {
+    fontSize: 8.5,
+    textDecorationLine: 'line-through',
+  },
+  faintStruckTxt: {
+    color: theme.isDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.38)',
+  },
+  discountedHighlightTotal: {
+    color: '#F59E0B',
+    fontWeight: '800',
+    fontSize: 10,
+  },
+  savePillOffer: {
+    backgroundColor: '#F59E0B',
+  },
+  saveTxtOffer: {
+    color: '#FFFFFF',
+    fontWeight: '900',
   },
 
   // Features Section

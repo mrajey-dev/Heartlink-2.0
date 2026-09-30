@@ -970,7 +970,7 @@ export default function DiscoverScreen() {
                         </Text>
                         <TouchableOpacity
                           style={styles.emptyBtn}
-                          onPress={() => navigation.navigate('Plans')}
+                          onPress={() => navigation.navigate('Plans', { welcomeDiscount20: true })}
                           activeOpacity={0.85}
                         >
                           <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.emptyBtnGrad}>
@@ -1304,7 +1304,7 @@ export default function DiscoverScreen() {
         cancelText="Maybe Later"
         onConfirm={() => {
           setFreeLimitModalVisible(false);
-          navigation.navigate('Plans');
+          navigation.navigate('Plans', { welcomeDiscount20: true });
         }}
         onCancel={() => {
           setFreeLimitModalVisible(false);
@@ -1325,7 +1325,7 @@ export default function DiscoverScreen() {
         message={superlikeModalMessage}
         onUpgrade={() => {
           setSuperlikeUpgradeModalVisible(false);
-          navigation.navigate('Plans');
+          navigation.navigate('Plans', { welcomeDiscount20: true });
         }}
         onClose={() => setSuperlikeUpgradeModalVisible(false)}
       />

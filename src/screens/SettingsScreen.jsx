@@ -385,7 +385,7 @@ export default function SettingsScreen() {
                 <Text style={styles.subFreeTitle}>Free Membership</Text>
                 <Text style={styles.subFreeSub}>Upgrade to unlock rewinds, passport & 10x matches!</Text>
               </View>
-              <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('Plans')} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('Plans', { welcomeDiscount20: true })} activeOpacity={0.85}>
                 <LinearGradient colors={['#FBBF24', '#F59E0B', '#D97706']} style={styles.upgradeBtnGrad}>
                   <Text style={styles.upgradeBtnTxt}>Upgrade Plan</Text>
                 </LinearGradient>

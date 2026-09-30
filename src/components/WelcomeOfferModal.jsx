@@ -55,7 +55,7 @@ export default function WelcomeOfferModal() {
 
     let isMounted = true;
     const userId = user.id || user.email || 'active_user';
-    const storageKey = `@heartlink_first_login_${userId}`;
+    const offerStartKey = `@heartlink_welcome_offer_start_${userId}`;
     const hideTodayKey = `@heartlink_hide_offer_${userId}`;
     const purchasedKey = `@heartlink_has_purchased_plan_${userId}`;
 
@@ -84,34 +84,33 @@ export default function WelcomeOfferModal() {
           }
         }
 
-        // Determine account creation timestamp
-        let createdAtTimestamp = null;
-        if (user.created_at) {
-          const parsed = new Date(user.created_at).getTime();
+        // Check or initialize the 24-hour welcome offer window
+        let offerStart = null;
+        const storedStart = await AsyncStorage.getItem(offerStartKey);
+        if (storedStart) {
+          const parsed = parseInt(storedStart, 10);
           if (!isNaN(parsed) && parsed > 0) {
-            createdAtTimestamp = parsed;
+            offerStart = parsed;
           }
         }
 
-        if (!createdAtTimestamp) {
-          const storedFirstSeen = await AsyncStorage.getItem(storageKey);
-          if (storedFirstSeen) {
-            const parsedStored = parseInt(storedFirstSeen, 10);
-            if (!isNaN(parsedStored) && parsedStored > 0) {
-              createdAtTimestamp = parsedStored;
+        if (!offerStart) {
+          // If account was created within the last 24h, align with creation time; otherwise start 24h timer now!
+          let createdAtMs = null;
+          if (user.created_at) {
+            const parsedCreated = new Date(user.created_at).getTime();
+            if (!isNaN(parsedCreated) && parsedCreated > 0 && (Date.now() - parsedCreated) < OFFER_DURATION_MS) {
+              createdAtMs = parsedCreated;
             }
           }
-          if (!createdAtTimestamp) {
-            createdAtTimestamp = Date.now();
-            await AsyncStorage.setItem(storageKey, createdAtTimestamp.toString()).catch(() => { });
-          }
+          offerStart = createdAtMs || Date.now();
+          await AsyncStorage.setItem(offerStartKey, offerStart.toString()).catch(() => {});
         }
 
-        const expiresAt = createdAtTimestamp + OFFER_DURATION_MS; // 24 hours from creation
+        const expiresAt = offerStart + OFFER_DURATION_MS;
         const remainingMs = expiresAt - Date.now();
 
-        // Strict 24-Hour Eligibility Rule:
-        // Only show offer if account was created within the last 24 hours
+        // Expired after 24 hours
         if (remainingMs <= 0) {
           if (isMounted) setVisible(false);
           return;
@@ -132,7 +131,7 @@ export default function WelcomeOfferModal() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, userHasPlan]);
 
   // 1 Second Delay Timer for Close Button
   useEffect(() => {
@@ -254,7 +253,7 @@ export default function WelcomeOfferModal() {
 
               {/* Subtitle Description */}
               <Text style={styles.offerDescTxt}>
-                Get Flat 20% of on any membership plan
+                Get Flat 20% OFF on any membership plan
               </Text>
 
               {/* Middle 20% Coupon Ticket Card (Golden Signature Gradient Theme!) */}
