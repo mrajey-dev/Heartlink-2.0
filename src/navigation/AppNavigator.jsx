@@ -13,6 +13,7 @@ import RestaurantDetailScreen from '../screens/RestaurantDetailScreen';
 import PlansScreen from '../screens/PlansScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SupportChatScreen from '../screens/SupportChatScreen';
+import SnapMapScreen from '../screens/SnapMapScreen';
 import RadarLoader from '../components/RadarLoader';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
@@ -91,6 +92,7 @@ export default function AppNavigator() {
               <Stack.Screen name="Plans" component={PlansScreen} options={{ presentation: 'modal' }} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
               <Stack.Screen name="SupportChat" component={SupportChatScreen} options={{ presentation: 'card' }} />
+              <Stack.Screen name="Map" component={SnapMapScreen} />
             </>
           ) : (
             <Stack.Screen

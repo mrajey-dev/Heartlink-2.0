@@ -874,8 +874,8 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerRightGroup}>
-            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-              <Ionicons name="options-outline" size={18} color={isDark ? '#FDE68A' : theme.textPrimary} />
+            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Map')} activeOpacity={0.7}>
+              <Ionicons name="map" size={18} color={isDark ? '#FDE68A' : theme.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
               <Ionicons name="notifications" size={19} color={isDark ? '#FDE68A' : theme.textPrimary} />

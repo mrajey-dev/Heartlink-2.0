@@ -59,10 +59,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/user/settings',  [SettingsController::class, 'updateSettings']);
 
         // Discovery & Swiping
-        Route::get('/discover',        [DiscoverController::class, 'feed']);
-        Route::get('/discover/vibes',  [DiscoverController::class, 'vibeFeed']);
-        Route::post('/discover/swipe', [DiscoverController::class, 'swipe']);
-        Route::post('/discover/reset', [DiscoverController::class, 'reset']);
+        Route::get('/discover',           [DiscoverController::class, 'feed']);
+        Route::get('/discover/vibes',     [DiscoverController::class, 'vibeFeed']);
+        Route::get('/discover/map-users', [DiscoverController::class, 'mapUsers']);
+        Route::post('/discover/swipe',    [DiscoverController::class, 'swipe']);
+        Route::post('/discover/reset',    [DiscoverController::class, 'reset']);
 
         // Matches & Requests
         Route::get('/matches',                         [MatchController::class, 'index']);

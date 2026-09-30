@@ -760,4 +760,133 @@ class DiscoverController extends Controller
             'target_user' => $targetUserObj,
         ]);
     }
+
+    /**
+     * Return all registered users with their coordinates, profile photos, and distance for the Snap Map
+     */
+    public function mapUsers(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthenticated'], 401);
+        }
+
+        $reqCity = trim($request->query('city', ''));
+        $reqState = trim($request->query('state', ''));
+        $reqLat = $request->query('latitude');
+        $reqLng = $request->query('longitude');
+
+        $userCity = !empty($reqCity) ? $reqCity : trim($user->city ?? '');
+        $userState = !empty($reqState) ? $reqState : trim($user->state ?? '');
+        $userLat = is_numeric($reqLat) ? (float)$reqLat : (is_numeric($user->latitude) ? (float)$user->latitude : null);
+        $userLng = is_numeric($reqLng) ? (float)$reqLng : (is_numeric($user->longitude) ? (float)$user->longitude : null);
+
+        if (($userLat === null || $userLng === null || ($userLat == 0 && $userLng == 0)) && !empty($userCity)) {
+            $cityCoords = $this->getCityCoordinates($userCity);
+            if ($cityCoords) {
+                $userLat = $cityCoords[0];
+                $userLng = $cityCoords[1];
+            }
+        }
+
+        if ($userLat === null || $userLng === null) {
+            $userLat = 19.9975;
+            $userLng = 73.7898;
+        }
+
+        // Fetch registered users (excluding current user and support user 16)
+        $users = User::where('id', '!=', $user->id)
+            ->where('id', '!=', 16)
+            ->with(['photos' => function ($q) {
+                $q->orderBy('sort_order', 'asc');
+            }, 'settings'])
+            ->get();
+
+        $mapUsers = [];
+        foreach ($users as $index => $u) {
+            $pLat = is_numeric($u->latitude) ? (float)$u->latitude : null;
+            $pLng = is_numeric($u->longitude) ? (float)$u->longitude : null;
+
+            if ($pLat === null || $pLng === null || ($pLat == 0 && $pLng == 0)) {
+                $coords = $this->getCityCoordinates($u->city);
+                if ($coords) {
+                    // Small deterministic dispersion so multiple people in same city are distinctly visible
+                    $jitterLat = ((($index * 7) % 21) - 10) * 0.0035;
+                    $jitterLng = ((($index * 11) % 21) - 10) * 0.0035;
+                    $pLat = $coords[0] + $jitterLat;
+                    $pLng = $coords[1] + $jitterLng;
+                } else {
+                    $pLat = $userLat + (((($index * 13) % 25) - 12) * 0.012);
+                    $pLng = $userLng + (((($index * 17) % 25) - 12) * 0.012);
+                }
+            }
+
+            $distKm = 1;
+            if ($userLat !== null && $userLng !== null && $pLat !== null && $pLng !== null) {
+                $dist = $this->calculateDistanceInKm($userLat, $userLng, $pLat, $pLng);
+                $distKm = max(1, (int)round($dist));
+            }
+
+            // Extract primary photo or first uploaded photo
+            $photoUrl = null;
+            if ($u->photos && count($u->photos) > 0) {
+                $p0 = $u->photos[0];
+                $photoUrl = is_string($p0) ? $p0 : ($p0->photo_url ?? null);
+            }
+            if (empty($photoUrl)) {
+                $photoUrl = $u->avatar ?: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=900';
+            }
+
+            $allPhotos = [];
+            if ($u->photos && count($u->photos) > 0) {
+                foreach ($u->photos as $ph) {
+                    $uStr = is_string($ph) ? $ph : ($ph->photo_url ?? null);
+                    if ($uStr) $allPhotos[] = $uStr;
+                }
+            }
+            if (empty($allPhotos)) {
+                $allPhotos = [$photoUrl];
+            }
+
+            $mapUsers[] = [
+                'id'                  => $u->id,
+                'name'                => $u->name,
+                'display_name'        => !empty($u->display_name) ? $u->display_name : $u->name,
+                'age'                 => $u->age ?? 24,
+                'gender'              => $u->gender,
+                'city'                => $u->city ?: 'Nearby',
+                'state'               => $u->state ?: '',
+                'bio'                 => $u->bio ?: 'Living life and making meaningful memories ✨',
+                'job'                 => $u->occupation ?: 'Member',
+                'occupation'          => $u->occupation,
+                'education'           => $u->education,
+                'latitude'            => $pLat,
+                'longitude'           => $pLng,
+                'distance_km'         => $distKm,
+                'distance'            => "{$distKm} km away",
+                'image'               => $photoUrl,
+                'images'              => $allPhotos,
+                'is_verified'         => (bool)($u->is_verified || $u->isVerified),
+                'is_online'           => (bool)$u->is_online,
+                'compatibility_score' => $u->compatibility_score ?? (78 + (($index * 7) % 20)),
+                'subscription_plan'   => $u->subscription_plan,
+            ];
+        }
+
+        // Sort by closest distance
+        usort($mapUsers, fn($a, $b) => $a['distance_km'] <=> $b['distance_km']);
+
+        return response()->json([
+            'users'        => $mapUsers,
+            'current_user' => [
+                'id'        => $user->id,
+                'name'      => $user->name,
+                'latitude'  => $userLat,
+                'longitude' => $userLng,
+                'city'      => $userCity,
+                'avatar'    => $user->avatar,
+            ],
+            'total'        => count($mapUsers),
+        ]);
+    }
 }
