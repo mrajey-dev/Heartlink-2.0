@@ -1142,9 +1142,6 @@ export default function DiscoverScreen() {
                         </Text>
                         {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
                       </View>
-                      <View style={styles.cardInfoBtnGlass}>
-                        <Ionicons name="chevron-up" size={18} color="#FFF" />
-                      </View>
                     </View>
 
                     <View style={styles.cardGlassPillRow}>
