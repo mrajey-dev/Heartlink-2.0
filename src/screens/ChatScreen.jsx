@@ -94,8 +94,8 @@ export default function ChatScreen() {
         if (
           typeof supportTime === 'string' &&
           (supportTime.toLowerCase().includes('minute') ||
-           supportTime.toLowerCase().includes('ago') ||
-           supportTime.toLowerCase().includes('now'))
+            supportTime.toLowerCase().includes('ago') ||
+            supportTime.toLowerCase().includes('now'))
         ) {
           supportTime = '';
         }
@@ -271,9 +271,6 @@ export default function ChatScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Messages</Text>
           <View style={styles.headerRight}>
-            <TouchableOpacity style={[styles.iconBtn, { marginRight: 8 }]} onPress={() => navigation.navigate('Map')}>
-              <Ionicons name="map-outline" size={19} color="#FF007F" />
-            </TouchableOpacity>
             <TouchableOpacity style={styles.iconBtn} onPress={() => setSearchOpen(p => !p)}>
               <Ionicons name={searchOpen ? 'close' : 'search'} size={19} color={theme.textPrimary} />
             </TouchableOpacity>

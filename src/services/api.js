@@ -291,6 +291,10 @@ export const apiForgotPassword = async (email) => {
 export const apiGetProfile = () => apiFetch('/user/profile');
 export const apiUpdateProfile = (data) => apiFetch('/user/profile', { method: 'POST', body: data });
 export const apiVerifyUserProfile = () => apiFetch('/user/verify', { method: 'POST' });
+export const apiSubmitVideoVerification = (payload) => apiFetch('/user/video-verify', {
+  method: 'POST',
+  body: payload,
+});
 export const apiSendAadhaarOtp = (aadhaarNumber) => apiFetch('/aadhaar/send-otp', {
   method: 'POST',
   body: { aadhaar_number: aadhaarNumber },
@@ -321,16 +325,6 @@ export const apiGetVibeFeed = (vibe, params = {}) => {
   if (params.verified_only) query.append('verified_only', '1');
   return apiFetch(`/discover/vibes?${query.toString()}`);
 };
-export const apiGetMapUsers = (params = {}) => {
-  const query = new URLSearchParams();
-  if (params.city) query.append('city', params.city);
-  if (params.state) query.append('state', params.state);
-  if (params.latitude !== undefined && params.latitude !== null) query.append('latitude', params.latitude);
-  if (params.longitude !== undefined && params.longitude !== null) query.append('longitude', params.longitude);
-  const qs = query.toString();
-  return apiFetch(qs ? `/discover/map-users?${qs}` : '/discover/map-users');
-};
-
 export const apiGetUserCount = () => apiFetch('/user-count');
 export const apiGetUnreadCounts = () => apiFetch('/user/unread-counts');
 export const apiResetDiscovery = () => apiFetch('/discover/reset', { method: 'POST' });

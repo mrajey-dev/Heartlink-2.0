@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/user/profile',      [AuthController::class, 'profile']);
         Route::post('/user/profile',     [AuthController::class, 'updateProfile']);
         Route::post('/user/verify',      [AuthController::class, 'verifyProfile']);
+        Route::post('/user/video-verify', [AuthController::class, 'submitVideoVerification']);
         Route::post('/aadhaar/send-otp',   [AuthController::class, 'sendAadhaarOtp']);
         Route::post('/aadhaar/verify-otp', [AuthController::class, 'verifyAadhaarOtp']);
         Route::post('/auth/logout',      [AuthController::class, 'logout']);

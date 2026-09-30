@@ -874,8 +874,8 @@ export default function DiscoverScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerRightGroup}>
-            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Map')} activeOpacity={0.7}>
-              <Ionicons name="map" size={18} color={isDark ? '#FDE68A' : theme.textPrimary} />
+            <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+              <Ionicons name="options-outline" size={18} color={isDark ? '#FDE68A' : theme.textPrimary} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.headerRightBtn} onPress={() => navigation.navigate('Requests')} activeOpacity={0.7}>
               <Ionicons name="notifications" size={19} color={isDark ? '#FDE68A' : theme.textPrimary} />
@@ -1080,112 +1080,112 @@ export default function DiscoverScreen() {
                     }
                   ]}
                 >
-                <Image
-                  key={`${currentProfile?.id}_${safePhotoIdx}`}
-                  source={{ uri: formatImageUrl(currentProfile?.images?.[safePhotoIdx] || currentProfile?.images?.[0]) }}
-                  style={styles.cardPhoto}
-                  resizeMode="cover"
-                />
+                  <Image
+                    key={`${currentProfile?.id}_${safePhotoIdx}`}
+                    source={{ uri: formatImageUrl(currentProfile?.images?.[safePhotoIdx] || currentProfile?.images?.[0]) }}
+                    style={styles.cardPhoto}
+                    resizeMode="cover"
+                  />
 
-                <LinearGradient colors={['rgba(0,0,0,0.2)', 'transparent']} style={styles.topGrad} />
-                <LinearGradient colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.92)']} style={styles.bottomGrad} />
+                  <LinearGradient colors={['rgba(0,0,0,0.2)', 'transparent']} style={styles.topGrad} />
+                  <LinearGradient colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.65)', 'rgba(0,0,0,0.92)']} style={styles.bottomGrad} />
 
-                {/* Dynamic Action Stamps */}
-                <Animated.View style={[styles.stampContainer, styles.likeStamp, { opacity: likeStampOpacity }]} pointerEvents="none">
-                  <Text style={styles.likeStampText}>LIKE</Text>
-                </Animated.View>
+                  {/* Dynamic Action Stamps */}
+                  <Animated.View style={[styles.stampContainer, styles.likeStamp, { opacity: likeStampOpacity }]} pointerEvents="none">
+                    <Text style={styles.likeStampText}>LIKE</Text>
+                  </Animated.View>
 
-                <Animated.View style={[styles.stampContainer, styles.nopeStamp, { opacity: nopeStampOpacity }]} pointerEvents="none">
-                  <Text style={styles.nopeStampText}>NOPE</Text>
-                </Animated.View>
+                  <Animated.View style={[styles.stampContainer, styles.nopeStamp, { opacity: nopeStampOpacity }]} pointerEvents="none">
+                    <Text style={styles.nopeStampText}>NOPE</Text>
+                  </Animated.View>
 
-                <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
-                  <Ionicons name="chevron-up" size={17} color="#FDE68A" style={{ marginRight: 4 }} />
-                  <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
-                </Animated.View>
+                  <Animated.View style={[styles.detailsHintContainer, { opacity: detailsHintOpacity }]} pointerEvents="none">
+                    <Ionicons name="chevron-up" size={17} color="#FDE68A" style={{ marginRight: 4 }} />
+                    <Text style={styles.detailsHintText}>VIEW DETAILS</Text>
+                  </Animated.View>
 
-                {/* Top-Left Photo Counter Pill */}
-                {currentProfile?.images?.length > 1 && (
-                  <View style={styles.cardPhotoCounter} pointerEvents="none">
-                    <Ionicons name="images-outline" size={11} color="#FFF" style={{ marginRight: 4 }} />
-                    <Text style={styles.cardPhotoCounterTxt}>{safePhotoIdx + 1}/{currentProfile.images.length}</Text>
-                  </View>
-                )}
-
-                {/* Top-Right Match Percentage Badge */}
-                <LinearGradient
-                  colors={['rgba(251, 191, 36, 0.95)', 'rgba(217, 119, 6, 0.95)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.cardMatchBadge}
-                  pointerEvents="none"
-                >
-                  <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
-                </LinearGradient>
-
-                {/* Photo progress dots */}
-                {currentProfile.images.length > 1 && (
-                  <View style={styles.photoDotsRow} pointerEvents="none">
-                    {currentProfile.images.map((_, i) => (
-                      <View
-                        key={i}
-                        style={[styles.photoDot, i === safePhotoIdx && styles.photoDotActive]}
-                      />
-                    ))}
-                  </View>
-                )}
-
-                {/* Tap zones: left = prev photo, right = next photo, center = detail */}
-                <View style={styles.tapZoneRow} pointerEvents="box-none">
-                  <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
-                    <View style={styles.tapZoneSide} />
-                  </Pressable>
-                  <Pressable onPress={openDetail} style={{ flex: 2 }}>
-                    <View style={styles.tapZoneCenter} />
-                  </Pressable>
-                  <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
-                    <View style={styles.tapZoneSide} />
-                  </Pressable>
-                </View>
-
-                {/* Profile Identity Details Overlay at Bottom of Profile Card */}
-                <View style={styles.cardTextOverlayBottomLeft} pointerEvents="box-none">
-                  <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={{ width: '100%' }}>
-                    <View style={styles.cardProfileHeaderRow}>
-                      <View style={styles.cardNameRow}>
-                        <Text style={styles.cardProfileName}>
-                          {currentProfile.display_name || currentProfile.displayName || currentProfile.name}
-                          {currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}
-                        </Text>
-                        {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
-                      </View>
+                  {/* Top-Left Photo Counter Pill */}
+                  {currentProfile?.images?.length > 1 && (
+                    <View style={styles.cardPhotoCounter} pointerEvents="none">
+                      <Ionicons name="images-outline" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                      <Text style={styles.cardPhotoCounterTxt}>{safePhotoIdx + 1}/{currentProfile.images.length}</Text>
                     </View>
+                  )}
 
-                    <View style={styles.cardGlassPillRow}>
-                      {currentProfile.distance ? (
-                        <View style={styles.cardInfoPill}>
-                          <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
-                          <Text style={styles.cardInfoPillTxt}>{currentProfile.distance}</Text>
+                  {/* Top-Right Match Percentage Badge */}
+                  <LinearGradient
+                    colors={['rgba(251, 191, 36, 0.95)', 'rgba(217, 119, 6, 0.95)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.cardMatchBadge}
+                    pointerEvents="none"
+                  >
+                    <Ionicons name="sparkles" size={11} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.cardMatchBadgeTxt}>{currentProfile.compatibility}% MATCH</Text>
+                  </LinearGradient>
+
+                  {/* Photo progress dots */}
+                  {currentProfile.images.length > 1 && (
+                    <View style={styles.photoDotsRow} pointerEvents="none">
+                      {currentProfile.images.map((_, i) => (
+                        <View
+                          key={i}
+                          style={[styles.photoDot, i === safePhotoIdx && styles.photoDotActive]}
+                        />
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Tap zones: left = prev photo, right = next photo, center = detail */}
+                  <View style={styles.tapZoneRow} pointerEvents="box-none">
+                    <Pressable onPress={handlePhotoTapLeft} style={{ flex: 1 }}>
+                      <View style={styles.tapZoneSide} />
+                    </Pressable>
+                    <Pressable onPress={openDetail} style={{ flex: 2 }}>
+                      <View style={styles.tapZoneCenter} />
+                    </Pressable>
+                    <Pressable onPress={handlePhotoTapRight} style={{ flex: 1 }}>
+                      <View style={styles.tapZoneSide} />
+                    </Pressable>
+                  </View>
+
+                  {/* Profile Identity Details Overlay at Bottom of Profile Card */}
+                  <View style={styles.cardTextOverlayBottomLeft} pointerEvents="box-none">
+                    <TouchableOpacity activeOpacity={0.9} onPress={openDetail} style={{ width: '100%' }}>
+                      <View style={styles.cardProfileHeaderRow}>
+                        <View style={styles.cardNameRow}>
+                          <Text style={styles.cardProfileName}>
+                            {currentProfile.display_name || currentProfile.displayName || currentProfile.name}
+                            {currentProfile.showAge !== false ? `, ${currentProfile.age}` : ''}
+                          </Text>
+                          {renderVerifiedBadge(currentProfile, 19, { marginLeft: 6 })}
                         </View>
-                      ) : null}
-                    </View>
-
-                    {/* Interest preview chips */}
-                    {currentProfile.interests && currentProfile.interests.length > 0 && (
-                      <View style={styles.cardInterestsRow}>
-                        {currentProfile.interests.slice(0, 3).map((interest, idx) => (
-                          <View key={idx} style={styles.cardInterestTag}>
-                            <Text style={styles.cardInterestTagTxt}>{interest}</Text>
-                          </View>
-                        ))}
                       </View>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </Animated.View>
-            </>
-          )}
+
+                      <View style={styles.cardGlassPillRow}>
+                        {currentProfile.distance ? (
+                          <View style={styles.cardInfoPill}>
+                            <Ionicons name="location-sharp" size={12} color="#FDE68A" style={{ marginRight: 4 }} />
+                            <Text style={styles.cardInfoPillTxt}>{currentProfile.distance}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {/* Interest preview chips */}
+                      {currentProfile.interests && currentProfile.interests.length > 0 && (
+                        <View style={styles.cardInterestsRow}>
+                          {currentProfile.interests.slice(0, 3).map((interest, idx) => (
+                            <View key={idx} style={styles.cardInterestTag}>
+                              <Text style={styles.cardInterestTagTxt}>{interest}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              </>
+            )}
           </View>
 
           {/* 2. Lower Section: STATIONARY Joined Actions Dock (ZERO GAP - DOES NOT MOVE ON SWIPE!) */}

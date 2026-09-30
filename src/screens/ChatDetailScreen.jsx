@@ -1668,14 +1668,6 @@ export default function ChatDetailScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.menuBtn, { marginRight: 8 }]}
-                onPress={() => navigation.navigate('Map')}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="map-outline" size={18} color={theme.textPrimary} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 style={styles.menuBtn}
                 onPress={() => setShowMenu((p) => !p)}
                 activeOpacity={0.7}
@@ -1734,19 +1726,6 @@ export default function ChatDetailScreen() {
               </View>
             ) : (
               <View style={styles.dropdownCard}>
-                <TouchableOpacity
-                  style={styles.dropdownOption}
-                  onPress={() => {
-                    setShowMenu(false);
-                    navigation.navigate('Map');
-                  }}
-                >
-                  <Ionicons name="map-outline" size={18} color="#FF007F" />
-                  <Text style={[styles.dropdownOptionText, { color: '#FF007F' }]}>Open Snap Map</Text>
-                </TouchableOpacity>
-
-                <View style={styles.dropdownDivider} />
-
                 <TouchableOpacity
                   style={styles.dropdownOption}
                   onPress={() => {

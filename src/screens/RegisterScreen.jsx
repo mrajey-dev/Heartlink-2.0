@@ -18,6 +18,7 @@ import { useTheme } from '../theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomAlertModal from '../components/CustomAlertModal';
 import SearchableDropdownModal from '../components/common/SearchableDropdownModal';
+import FaceMappingVerification from '../components/FaceMappingVerification';
 import {
   fetchCountryCodesApi, fetchCountriesApi, fetchStatesApi, fetchCitiesApi
 } from '../services/locationApi';
@@ -948,51 +949,41 @@ function StepLifestyleHabits({ data, onChange }) {
   );
 }
 
-// ─── Step 7: Video Introduction (SKIPPABLE) ────────────────────────────────
-function StepVideoIntro({ data, onChange }) {
+// ─── Step 7: Video & 3D Face Mapping Verification ──────────────────────────
+function StepVideoFaceVerification({ data, onChange }) {
   const { theme, isDark } = useTheme();
-  const sty = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const pickVideo = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-    if (!res.canceled && res.assets[0]?.uri) {
-      onChange('videoIntroUrl', res.assets[0].uri);
-    }
-  };
 
   return (
     <View>
-      <StepHeader icon="videocam-outline" title="Video Introduction (Optional)" sub="Boost your reach with a 15-second intro video" />
+      <StepHeader
+        icon="scan-outline"
+        title="Video & Face Verification"
+        sub="Verify your identity with our 3D face mapping tool to earn your verified badge"
+      />
 
-      <View style={sty.videoCard}>
-        {data.videoIntroUrl ? (
-          <View style={sty.videoSuccessWrap}>
-            <Ionicons name="checkmark-circle-outline" size={40} color="#30D158" />
-            <Text style={sty.videoSuccessTitle}>Video Intro Selected!</Text>
-            <TouchableOpacity onPress={pickVideo} style={sty.videoReplaceBtn}>
-              <Text style={sty.videoReplaceBtnText}>Change Video</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={sty.videoUploadBox} onPress={pickVideo}>
-            <LinearGradient colors={['rgba(255,0,127,0.15)', 'rgba(181,23,158,0.05)']} style={StyleSheet.absoluteFill} />
-            <Ionicons name="videocam-outline" size={38} color="#FF007F" />
-            <Text style={sty.videoUploadTitle}>Upload Video Intro</Text>
-            <Text style={sty.videoUploadSub}>Tap to record or pick a 15s video</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Boost Note */}
-      <View style={sty.boostNoteCard}>
-        <Ionicons name="flash-outline" size={18} color="#FF007F" style={{ marginRight: 8 }} />
-        <Text style={sty.boostNoteText}>
-          Adding a video introduction boosts your profile visibility by 3x and gets you more matches! You can skip this step for now and add it later.
-        </Text>
-      </View>
+      <FaceMappingVerification
+        referenceImage={data.referenceFaceImage || (data.images && data.images[0]) || null}
+        onReferenceImageChange={(uri) => {
+          onChange('referenceFaceImage', uri);
+          if (!data.images || data.images.length === 0) {
+            onChange('images', [uri]);
+          } else {
+            const next = [...data.images];
+            next[0] = uri;
+            onChange('images', next);
+          }
+        }}
+        verificationSelfie={data.verificationSelfie || null}
+        onVerificationSelfieChange={(uri) => onChange('verificationSelfie', uri)}
+        isVerified={!!data.is_verified}
+        onVerificationComplete={(res) => {
+          onChange('is_verified', true);
+          onChange('video_verified', true);
+          if (res.verification_selfie) {
+            onChange('verificationSelfie', res.verification_selfie);
+          }
+        }}
+      />
     </View>
   );
 }
@@ -1378,7 +1369,12 @@ export default function RegisterScreen() {
             pincode: data.pincode || '',
             relationship_type: data.relationshipType || 'Long-term',
             interests: data.hobbies || [],
-            photos: validPhotos,
+            is_verified: !!data.is_verified,
+            video_verified: !!data.video_verified,
+            verification_selfie: data.verificationSelfie || '',
+            photos: (data.referenceFaceImage && !validPhotos.includes(data.referenceFaceImage))
+              ? [data.referenceFaceImage, ...validPhotos]
+              : validPhotos,
           };
 
           return registerUser(registrationPayload).then((res) => {
@@ -1571,7 +1567,7 @@ export default function RegisterScreen() {
               {step === 4 && <StepLocation data={data} onChange={onChange} onFocusScroll={handleScrollToInput} />}
               {step === 5 && <StepIdentity data={data} onChange={onChange} onFocusScroll={handleScrollToInput} />}
               {step === 6 && <StepLifestyleHabits data={data} onChange={onChange} />}
-              {step === 7 && <StepVideoIntro data={data} onChange={onChange} />}
+              {step === 7 && <StepVideoFaceVerification data={data} onChange={onChange} />}
               {step === 8 && <StepPhotos data={data} onChange={onChange} />}
             </Animated.View>
           </ScrollView>
