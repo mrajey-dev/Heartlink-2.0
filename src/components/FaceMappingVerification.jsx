@@ -16,7 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme/ThemeContext';
-import { apiCompareFaces } from '../services/api';
+import { apiCompareFaces, apiValidatePersonPhoto } from '../services/api';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -249,6 +249,21 @@ export default function FaceMappingVerification({
           const mime = asset.mimeType || 'image/jpeg';
           val = `data:${mime};base64,${asset.base64}`;
         }
+
+        // Validate that reference photo contains a real human person
+        try {
+          const check = await apiValidatePersonPhoto({ image: val });
+          if (check && check.has_person === false) {
+            Alert.alert(
+              'Person Photo Required 👤',
+              check.message || 'No human face detected. Please select a clear portrait of yourself (not an object, car, animal, or graphic).'
+            );
+            return;
+          }
+        } catch (e) {
+          console.warn('Person check warning:', e?.message);
+        }
+
         if (onReferenceImageChange) {
           onReferenceImageChange(val);
         }
@@ -323,13 +338,18 @@ export default function FaceMappingVerification({
         selfie_image: capturedSelfie || verificationSelfie,
       });
     } catch (e) {
-      console.warn('apiCompareFaces error, running local geometric analyzer:', e?.message);
+      console.warn('apiCompareFaces error:', e?.message);
     }
 
-    // Determine final result from backend or local analyzer
+    // Determine final result strictly from AI verification
     const finalResult = (apiRes && typeof apiRes.is_match === 'boolean')
       ? apiRes
-      : localCompareBase64Faces(referenceImage, capturedSelfie || verificationSelfie);
+      : {
+          is_match: false,
+          score: 0,
+          metrics: { eyes_match: 0, face_shape_match: 0, jawline_match: 0, skin_tone_match: 0 },
+          reason: 'Unable to reach verification server. Please check internet connection and try again.',
+        };
 
     setTimeout(() => {
       setIsScanning(false);
@@ -360,7 +380,7 @@ export default function FaceMappingVerification({
           });
         }
       }
-    }, 3800);
+    }, 3600);
   };
 
   const laserTranslateY = laserAnim.interpolate({

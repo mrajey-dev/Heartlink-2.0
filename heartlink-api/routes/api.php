@@ -39,7 +39,8 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/login',    [AuthController::class, 'login']);
     Route::post('/upload-image',  [AuthController::class, 'uploadImage']);
     Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
-    Route::post('/auth/compare-faces',   [AuthController::class, 'compareFaces']);
+    Route::post('/auth/compare-faces',          [AuthController::class, 'compareFaces']);
+    Route::post('/auth/validate-person-photo',  [AuthController::class, 'validatePersonPhoto']);
     Route::get('/user-count',     [AuthController::class, 'getUserCount']);
 
     // Protected API Routes (Sanctum Auth)

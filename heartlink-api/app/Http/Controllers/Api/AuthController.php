@@ -474,6 +474,19 @@ public function savePushToken(Request $request)
                 return response()->json(['message' => 'No image file provided'], 422);
             }
 
+            // Person verification check if requested
+            $requirePerson = filter_var($request->require_person ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($requirePerson && isset($savedFilePath) && file_exists($savedFilePath)) {
+                $check = \App\Services\AiFaceService::detectPerson($savedFilePath);
+                if (!$check['has_person']) {
+                    @unlink($savedFilePath);
+                    return response()->json([
+                        'message'    => 'Please upload a clear photo of a person. No human face was detected.',
+                        'has_person' => false,
+                    ], 422);
+                }
+            }
+
             return response()->json([
                 'message' => 'Image uploaded successfully',
                 'url'     => $imageUrl,
@@ -1099,18 +1112,6 @@ public function savePushToken(Request $request)
         $refInput = $request->reference_image ?? $request->image1;
         $selfieInput = $request->selfie_image ?? $request->image2;
 
-        if ($request->has('check_env')) {
-            $py3 = @shell_exec('python3 --version 2>&1');
-            $py = @shell_exec('python --version 2>&1');
-            $disabled = ini_get('disable_functions');
-            return response()->json([
-                'python3' => $py3,
-                'python'  => $py,
-                'disable_functions' => $disabled,
-                'uname' => php_uname(),
-            ]);
-        }
-
         if (empty($refInput) || empty($selfieInput)) {
             return response()->json([
                 'is_match' => false,
@@ -1125,7 +1126,25 @@ public function savePushToken(Request $request)
             ], 422);
         }
 
-        $res = $this->analyzeAndCompareFaces($refInput, $selfieInput);
+        $res = \App\Services\AiFaceService::compareFaces($refInput, $selfieInput);
+        return response()->json($res);
+    }
+
+    /**
+     * Validate if an uploaded image contains a human face/person
+     */
+    public function validatePersonPhoto(Request $request)
+    {
+        $image = $request->image ?? $request->photo;
+        if (empty($image)) {
+            return response()->json([
+                'has_person' => false,
+                'confidence' => 0,
+                'message'    => 'Image is required.',
+            ], 422);
+        }
+
+        $res = \App\Services\AiFaceService::detectPerson($image);
         return response()->json($res);
     }
 

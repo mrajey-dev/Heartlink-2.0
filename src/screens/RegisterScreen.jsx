@@ -11,8 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useNavigation } from '@react-navigation/native';
-import { registerUser } from "../services/authService";
-import { apiUploadImage } from "../services/api";
+import { apiUploadImage, apiValidatePersonPhoto } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useTheme } from '../theme/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1013,6 +1012,20 @@ function StepPhotos({ data, onChange }) {
           photoVal = `data:${mime};base64,${asset.base64}`;
         }
 
+        // Validate that uploaded photo is of a real person
+        try {
+          const check = await apiValidatePersonPhoto({ image: photoVal });
+          if (check && check.has_person === false) {
+            Alert.alert(
+              'Person Photo Required 👤',
+              check.message || 'Please upload a photo of a person. Non-person photos, animals, objects, cars, or scenery are strictly not allowed.'
+            );
+            return;
+          }
+        } catch (e) {
+          console.warn('Person check warning:', e?.message);
+        }
+
         const next = [...images];
         next[idx] = photoVal;
         // Keep photos compacted so primary slot is always intact
@@ -1332,7 +1345,7 @@ export default function RegisterScreen() {
       }
 
       const rawImages = (data.images || []).filter(x => !!x);
-      Promise.all(rawImages.map(img => apiUploadImage(img, { email: data.email, user_id: data.email ? data.email.split('@')[0] : null })))
+      Promise.all(rawImages.map(img => apiUploadImage(img, { email: data.email, user_id: data.email ? data.email.split('@')[0] : null, require_person: true })))
         .then((uploadedPhotos) => {
           const validPhotos = uploadedPhotos.filter(img => typeof img === 'string' && (img.startsWith('http://') || img.startsWith('https://')));
           const avatarUrl = validPhotos[0] || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400';
