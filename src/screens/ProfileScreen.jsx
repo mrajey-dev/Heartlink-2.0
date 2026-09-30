@@ -96,43 +96,37 @@ export default function ProfileScreen() {
 
   const morphWidth = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [width, 42],
+    outputRange: [width, 44],
     extrapolate: 'clamp',
   });
 
   const morphHeight = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [height * 0.42, 42],
+    outputRange: [height * 0.42, 44],
     extrapolate: 'clamp',
   });
 
   const morphRadius = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, 21],
+    outputRange: [0, 22],
     extrapolate: 'clamp',
   });
 
   const morphLeft = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, 62],
+    outputRange: [0, 64],
     extrapolate: 'clamp',
   });
 
   const morphTop = scrollY.interpolate({
     inputRange: [0, 180],
-    outputRange: [0, topHeaderOffset - 1],
+    outputRange: [0, topHeaderOffset - 2],
     extrapolate: 'clamp',
   });
 
   const morphBorderWidth = scrollY.interpolate({
     inputRange: [0, 180],
     outputRange: [0, 2],
-    extrapolate: 'clamp',
-  });
-
-  const heroImgHeight = scrollY.interpolate({
-    inputRange: [0, 180],
-    outputRange: [width * 1.33, 42],
     extrapolate: 'clamp',
   });
 
@@ -880,6 +874,7 @@ export default function ProfileScreen() {
 
       {/* 3. Dynamic Morphing Hero Photo (Above background shield, morphs into circle) */}
       <Animated.View
+        pointerEvents="box-none"
         style={[
           styles.morphPhotoWrapper,
           {
@@ -892,20 +887,18 @@ export default function ProfileScreen() {
           },
         ]}
       >
-        <View style={StyleSheet.absoluteFill}>
-          <Animated.Image
-            source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
-            style={[styles.heroImg, { height: heroImgHeight }]}
-            resizeMode="cover"
-          />
-        </View>
+        <Image
+          source={{ uri: allPhotos[photoIdx] || profileUser?.avatar || allPhotos[0] }}
+          style={styles.heroImg}
+          resizeMode="cover"
+        />
         {uploadingPhoto && (
           <View style={styles.heroLoadingOverlay}>
             <ActivityIndicator size="large" color="#FF007F" />
           </View>
         )}
         <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroControlsOpacity }]} pointerEvents="box-none">
-          <LinearGradient colors={['rgba(0,0,0,0.22)', 'transparent']} style={styles.heroTopGrad} />
+          <LinearGradient colors={['rgba(0,0,0,0.3)', 'transparent']} style={styles.heroTopGrad} />
           <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
 
           {/* Change Photo Floating Badge */}
@@ -1310,108 +1303,6 @@ export default function ProfileScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* 3. Dynamic Morphing Hero Photo (Above background shield, morphs into circle) */}
-      <Animated.View
-        style={[
-          styles.morphPhotoWrapper,
-          {
-            width: morphWidth,
-            height: morphHeight,
-            borderRadius: morphRadius,
-            left: morphLeft,
-            top: morphTop,
-            borderWidth: morphBorderWidth,
-          },
-        ]}
-      >
-        <View style={StyleSheet.absoluteFill}>
-          <Animated.Image
-            source={{ uri: user?.avatar || profileUser?.avatar || allPhotos[0] }}
-            style={[styles.heroImg, { height: heroImgHeight }]}
-            resizeMode="cover"
-          />
-        </View>
-        {uploadingPhoto && (
-          <View style={styles.heroLoadingOverlay}>
-            <ActivityIndicator size="large" color="#FF007F" />
-          </View>
-        )}
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: heroControlsOpacity }]} pointerEvents="box-none">
-          <LinearGradient colors={['rgba(0,0,0,0.22)', 'transparent']} style={styles.heroTopGrad} />
-          <LinearGradient colors={['transparent', theme.isDark ? '#0D0F1A' : '#F6F5FA']} style={styles.heroBottomGrad} />
-
-          {/* Change Photo Floating Badge */}
-          <TouchableOpacity
-            style={styles.changePhotoBtn}
-            onPress={() => setPhotoPickerVisible(true)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="camera" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.changePhotoTxt}>Change Photo</Text>
-          </TouchableOpacity>
-
-          {/* Photo Indicator Dots */}
-          {allPhotos.length > 1 && (
-            <View style={styles.photoIndicatorRow}>
-              {allPhotos.map((_, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => setPhotoIdx(i)}
-                  style={[styles.indicatorBar, i === photoIdx && styles.indicatorBarActive]}
-                />
-              ))}
-            </View>
-          )}
-        </Animated.View>
-      </Animated.View>
-
-      {/* 4. Fixed Sticky Top Header Controls (Top Layer - Back button, Title, Settings gear) */}
-      <View style={styles.fixedHeaderContainer} pointerEvents="box-none">
-        <View style={styles.fixedHeaderContent}>
-          <TouchableOpacity
-            style={styles.solidControlBtn}
-            onPress={handleBack}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="chevron-back" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
-          </TouchableOpacity>
-
-          <Animated.View
-            style={[
-              styles.fixedHeaderNameWrap,
-              {
-                opacity: headerNameOpacity,
-                transform: [{ translateY: headerNameTranslateY }],
-              },
-            ]}
-            pointerEvents="none"
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text
-                style={[
-                  styles.fixedHeaderName,
-                  { color: isDark ? '#FFFFFF' : '#000000' },
-                ]}
-                numberOfLines={1}
-              >
-                {profileUser.name}
-              </Text>
-              {renderVerifiedBadge(user, 16, { marginLeft: 4 })}
-            </View>
-          </Animated.View>
-
-          <TouchableOpacity
-            style={styles.solidControlBtn}
-            onPress={() => navigation.navigate('Settings')}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="settings-outline" size={20} color={isDark ? "#FFFFFF" : "#000000"} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {/* Custom Alert Modals */}
       <CustomAlertModal
         visible={logoutAlertVisible}
@@ -1761,7 +1652,7 @@ export default function ProfileScreen() {
 const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
   flex: { flex: 1 },
   scrollContainer: {
-    paddingTop: height * 0.42 + safeTopSpacing + 10,
+    paddingTop: height * 0.42 + 10,
     paddingBottom: 110,
   },
 
@@ -1811,7 +1702,7 @@ const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
   },
   fixedHeaderNameWrap: {
     position: 'absolute',
-    left: 112,
+    left: 118,
     right: 60,
     alignItems: 'flex-start',
   },
@@ -1833,8 +1724,7 @@ const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 110,
-    zIndex: 110,
+    elevation: 4,
   },
 
   coverBgWrapper: {
@@ -1899,9 +1789,12 @@ const getStyles = (theme, safeTopSpacing = 44) => StyleSheet.create({
   heroImg: {
     position: 'absolute',
     top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
     width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
   },
   heroTopGrad: {
     position: 'absolute',
