@@ -1184,7 +1184,7 @@ export default function DiscoverScreen() {
                 ]}
                 disabled={isAnimating || passedHistory.length === 0}
               >
-                <Ionicons name="arrow-undo" size={18} color="#F59E0B" />
+                <Ionicons name="arrow-undo" size={16} color="#F59E0B" />
               </TouchableOpacity>
 
               {/* 2. Pass Button (✕) */}
@@ -1200,7 +1200,7 @@ export default function DiscoverScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.actionBtnGradFill}
                 >
-                  <Ionicons name="close" size={28} color="#fff" />
+                  <Ionicons name="close" size={21} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -1220,7 +1220,7 @@ export default function DiscoverScreen() {
                   {isSuperlikeLoading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Ionicons name="flash" size={30} color="#fff" />
+                    <Ionicons name="flash" size={23} color="#fff" />
                   )}
                 </LinearGradient>
               </TouchableOpacity>
@@ -1238,7 +1238,7 @@ export default function DiscoverScreen() {
                   end={{ x: 1, y: 1 }}
                   style={styles.actionBtnGradFill}
                 >
-                  <Ionicons name="heart" size={26} color="#fff" />
+                  <Ionicons name="heart" size={21} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
 
@@ -1249,7 +1249,7 @@ export default function DiscoverScreen() {
                 style={[styles.actionBtnSmallRound, styles.actionBtnInfo]}
                 disabled={isAnimating}
               >
-                <Ionicons name="information" size={20} color={isDark ? '#C084FC' : '#9333EA'} />
+                <Ionicons name="information" size={17} color={isDark ? '#C084FC' : '#9333EA'} />
               </TouchableOpacity>
             </View>
           )}
@@ -2053,91 +2053,91 @@ const getStyles = (theme, insets) => {
       justifyContent: 'space-evenly',
       alignItems: 'center',
       width: '100%',
-      paddingVertical: verticalScale(11),
-      paddingHorizontal: scale(8),
-      backgroundColor: isDark ? 'rgba(20, 15, 10, 0.94)' : 'rgba(255, 255, 255, 0.96)',
+      paddingVertical: verticalScale(8),
+      paddingHorizontal: scale(10),
+      backgroundColor: isDark ? 'rgba(20, 15, 10, 0.95)' : '#FFFFFF',
       borderTopWidth: 1,
-      borderTopColor: isDark ? 'rgba(245, 158, 11, 0.18)' : 'rgba(0, 0, 0, 0.04)',
-      borderBottomLeftRadius: 32,
-      borderBottomRightRadius: 32,
+      borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+      borderBottomLeftRadius: 30,
+      borderBottomRightRadius: 30,
       borderWidth: 0,
-      shadowColor: isDark ? '#F59E0B' : '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.2 : 0.08,
-      shadowRadius: 10,
-      elevation: 5,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: isDark ? 0.2 : 0.06,
+      shadowRadius: 8,
+      elevation: 3,
     },
     actionBtnSmallRound: {
-      width: scale(40),
-      height: scale(40),
-      borderRadius: scale(20),
+      width: scale(36),
+      height: scale(36),
+      borderRadius: scale(18),
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1,
+    },
+    actionBtnRewind: {
+      backgroundColor: isDark ? 'rgba(30, 22, 12, 0.75)' : '#FFFBEB',
+      borderColor: 'rgba(245, 158, 11, 0.35)',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 1.5 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    actionBtnInfo: {
+      backgroundColor: isDark ? 'rgba(30, 18, 40, 0.75)' : '#FAF5FF',
+      borderColor: isDark ? 'rgba(168, 85, 247, 0.35)' : 'rgba(147, 51, 234, 0.25)',
+      shadowColor: '#A855F7',
+      shadowOffset: { width: 0, height: 1.5 },
+      shadowOpacity: 0.15,
+      shadowRadius: 4,
+      elevation: 2,
+    },
+    actionBtnPass: {
+      width: scale(45),
+      height: scale(45),
+      borderRadius: scale(22.5),
+      overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
       borderWidth: 1.5,
-    },
-    actionBtnRewind: {
-      backgroundColor: isDark ? 'rgba(30, 22, 12, 0.85)' : 'rgba(254, 243, 199, 0.9)',
-      borderColor: 'rgba(245, 158, 11, 0.4)',
-      shadowColor: '#F59E0B',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 3,
-    },
-    actionBtnInfo: {
-      backgroundColor: isDark ? 'rgba(30, 18, 40, 0.85)' : 'rgba(243, 232, 255, 0.9)',
-      borderColor: isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(147, 51, 234, 0.3)',
-      shadowColor: '#A855F7',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 3,
-    },
-    actionBtnPass: {
-      width: scale(52),
-      height: scale(52),
-      borderRadius: scale(26),
-      overflow: 'hidden',
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: 'rgba(255, 255, 255, 0.35)',
+      borderColor: 'rgba(255, 255, 255, 0.5)',
       shadowColor: '#FF4D6D',
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.4,
-      shadowRadius: 10,
-      elevation: 6,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.28,
+      shadowRadius: 6,
+      elevation: 3,
     },
     actionBtnSuperlike: {
-      width: scale(64),
-      height: scale(64),
-      borderRadius: scale(32),
-      overflow: 'hidden',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: -verticalScale(4),
-      borderWidth: 3,
-      borderColor: 'rgba(255, 255, 255, 0.55)',
-      shadowColor: '#F59E0B',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.55,
-      shadowRadius: 16,
-      elevation: 9,
-    },
-    actionBtnLike: {
       width: scale(52),
       height: scale(52),
       borderRadius: scale(26),
       overflow: 'hidden',
       justifyContent: 'center',
       alignItems: 'center',
+      marginTop: -verticalScale(2),
       borderWidth: 2,
-      borderColor: 'rgba(255, 255, 255, 0.35)',
+      borderColor: 'rgba(255, 255, 255, 0.65)',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    actionBtnLike: {
+      width: scale(45),
+      height: scale(45),
+      borderRadius: scale(22.5),
+      overflow: 'hidden',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: 'rgba(255, 255, 255, 0.5)',
       shadowColor: '#10B981',
-      shadowOffset: { width: 0, height: 5 },
-      shadowOpacity: 0.4,
-      shadowRadius: 10,
-      elevation: 6,
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.28,
+      shadowRadius: 6,
+      elevation: 3,
     },
     actionBtnGradFill: {
       width: '100%',
