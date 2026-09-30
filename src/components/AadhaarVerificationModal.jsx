@@ -22,14 +22,14 @@ export default function AadhaarVerificationModal({
   visible,
   onClose,
   onVerifiedSuccess,
-  initialStep = 'aadhaar',
+  initialStep = 'alert',
 }) {
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
 
-  // Temporary: directly bypass payment screen to 'aadhaar' for testing verification
-  const [step, setStep] = useState('aadhaar');
+  // Mandatory Google Play billing of ₹49 required before unlocking 'aadhaar' verification screen
+  const [step, setStep] = useState(initialStep || 'alert');
   const [verifying, setVerifying] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
 
@@ -62,8 +62,9 @@ export default function AadhaarVerificationModal({
 
   useEffect(() => {
     if (visible) {
-      setStep('aadhaar');
+      setStep(initialStep || 'alert');
       setVerifying(false);
+      setIsPurchasing(false);
       setAadhaarNumber('');
       setOtp('');
       setRefId('');
@@ -253,8 +254,93 @@ export default function AadhaarVerificationModal({
   };
 
   const handleStartAadhaarPaymentOrOtp = async () => {
-    // Payment temporarily removed for testing Aadhaar verification
-    setStep('aadhaar');
+    if (Platform.OS === 'web') {
+      if (__DEV__) {
+        Alert.alert(
+          'Google Play Billing (Simulation)',
+          'Simulate Google Play payment of ₹49 for Aadhaar Verification plan to proceed?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Simulate & Continue',
+              onPress: async () => {
+                try {
+                  const verifyRes = await apiVerifyGooglePurchase({
+                    purchase_token: `test_token_aadhaar_${Date.now()}`,
+                    product_id: 'aadharverification',
+                    order_id: `GPA.TEST-AADHAAR-${Date.now()}`,
+                    plan_name: 'Aadhaar Verification',
+                    price: '₹49',
+                    duration: '1 Year',
+                  });
+                  if (verifyRes?.user) {
+                    updateUser(verifyRes.user);
+                  }
+                } catch (e) {}
+                setStep('aadhaar');
+              },
+            },
+          ]
+        );
+        return;
+      }
+      Alert.alert(
+        'Google Play Billing',
+        'Google Play subscriptions are only supported on Android devices. Please install and open HeartLink on your Android phone to pay and verify.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setIsPurchasing(true);
+    setErrorMessage('');
+    try {
+      // In Google Play Console: product ID is 'aadharverification'
+      // and base plan ID is 'aadharverificaationonetimepurchase'
+      const purchaseResult = await purchaseSubscriptionPlan({
+        planKey: 'aadharverification',
+        durationId: '12m',
+        isDiscountOffer: false,
+      });
+      const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
+
+      if (purchaseItem && (purchaseItem.purchaseToken || purchaseItem.transactionReceipt)) {
+        await handleAadhaarPurchaseCompleted(purchaseItem);
+      } else {
+        // In Android native, requestPurchase completes asynchronously via setupPurchaseListeners.
+        // Poll available purchases after brief delay as a reliable safety fallback:
+        setTimeout(async () => {
+          try {
+            const available = await getAvailablePurchases();
+            const aadharSub = available.find((p) => {
+              const id = String(p?.productId || p?.id || '').toLowerCase();
+              return id.includes('aadhar') || id.includes('verif');
+            });
+            if (aadharSub) {
+              await handleAadhaarPurchaseCompletedRef.current(aadharSub);
+            }
+          } catch (e) {}
+        }, 1500);
+      }
+    } catch (err) {
+      console.warn('[IAP] Aadhaar verification purchase error / cancellation:', err?.message || err);
+      const errStr = `${err?.code || ''} ${err?.message || ''}`.toLowerCase();
+      // If user already owns the subscription on this Google account (common with repeated test purchases)
+      if (errStr.includes('already') || errStr.includes('owned') || err?.code === 'E_ALREADY_OWNED') {
+        console.log('[IAP] Aadhaar plan already owned on this account! Proceeding to Aadhaar step...');
+        setStep('aadhaar');
+        return;
+      }
+      if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        Alert.alert(
+          'Google Play Billing',
+          `${err?.message || 'Payment of ₹49 is required to proceed with Aadhaar Verification.'}`,
+          [{ text: 'OK' }]
+        );
+      }
+    } finally {
+      setIsPurchasing(false);
+    }
   };
 
   // Format Aadhaar number with spaces (XXXX XXXX XXXX)
@@ -386,20 +472,21 @@ export default function AadhaarVerificationModal({
 
               </View>
 
-              {/* ─── Official Verification Pricing Notice (Free Testing Mode) ─── */}
+              {/* ─── Official Verification Pricing Notice (Google Play Billing ₹49) ─── */}
               <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>FREE</Text>
-                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • Testing Mode</Text>
+                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>₹49</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14), fontWeight: '700' }}>₹99</Text>
+                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • 50% OFF</Text>
                   </View>
                   <Text style={[styles.offerDesc, { color: theme.textSec }]}>
-                    Aadhaar identity verification & Verified Shield badge (Payment removed for testing).
+                    Official 1-Year Aadhaar identity verification & Verified Shield badge.
                   </Text>
                 </View>
                 <View style={[styles.valueTag, { backgroundColor: '#00C853' }]}>
                   <Ionicons name="shield-checkmark" size={13} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.valueTagTxt}>FREE TEST</Text>
+                  <Text style={styles.valueTagTxt}>SPECIAL ₹49</Text>
                 </View>
               </View>
 
@@ -417,8 +504,14 @@ export default function AadhaarVerificationModal({
                     end={{ x: 1, y: 0 }}
                     style={styles.gradCtaBtn}
                   >
-                    <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.gradCtaBtnTxt}>Continue to Aadhaar Verification</Text>
+                    {isPurchasing ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <>
+                        <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
+                        <Text style={styles.gradCtaBtnTxt}>Pay ₹49 & Verify Aadhaar</Text>
+                      </>
+                    )}
                   </LinearGradient>
                 </TouchableOpacity>
 
