@@ -6,6 +6,7 @@
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
     "@expo-google-fonts/grand-hotel": "^0.4.1",
     "@expo-google-fonts/pacifico": "^0.4.1",
+    "@expo-google-fonts/playfair-display": "^0.4.2",
     "@expo-google-fonts/satisfy": "^0.4.1",
     "@expo/vector-icons": "^15.1.1",
     "@hookform/resolvers": "^5.4.0",

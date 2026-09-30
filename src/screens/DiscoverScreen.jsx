@@ -17,6 +17,11 @@ import {
   BricolageGrotesque_700Bold,
   BricolageGrotesque_800Bold,
 } from '@expo-google-fonts/bricolage-grotesque';
+import {
+  PlayfairDisplay_600SemiBold,
+  PlayfairDisplay_700Bold,
+  PlayfairDisplay_800ExtraBold,
+} from '@expo-google-fonts/playfair-display';
 const SatisfyFont = require('../../assets/fonts/Satisfy-Regular.ttf');
 import CustomAlertModal from '../components/CustomAlertModal';
 import MatchModal from '../components/MatchModal';
@@ -55,13 +60,15 @@ export default function DiscoverScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { theme, isDark } = useTheme();
-  const styles = useMemo(() => getStyles(theme, insets), [theme, insets]);
-
   const [fontsLoaded] = useFonts({
     BricolageGrotesque_700Bold,
     BricolageGrotesque_800Bold,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+    PlayfairDisplay_800ExtraBold,
     Satisfy_400Regular: SatisfyFont,
   });
+  const styles = useMemo(() => getStyles(theme, insets, fontsLoaded), [theme, insets, fontsLoaded]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -1352,7 +1359,7 @@ export default function DiscoverScreen() {
   );
 }
 
-const getStyles = (theme, insets) => {
+const getStyles = (theme, insets, fontsLoaded) => {
   const isDark = !!theme?.isDark;
   const bottomNavHeight = Math.max((insets?.bottom || 0) + 8, Platform.OS === 'ios' ? 24 : 14) + 72;
   const bottomClearance = bottomNavHeight + verticalScale(14);
@@ -1986,11 +1993,16 @@ const getStyles = (theme, insets) => {
       shadowRadius: 4,
     },
     cardProfileName: {
-      fontFamily: Platform.OS === 'ios' ? 'Helvetica Neue' : 'sans-serif-medium',
-      fontSize: fs(24),
-      fontWeight: '900',
+      fontFamily: Platform.select({
+        web: 'Playfair Display, Georgia, serif',
+        ios: fontsLoaded ? 'PlayfairDisplay_700Bold' : 'Georgia',
+        android: fontsLoaded ? 'PlayfairDisplay_700Bold' : 'serif',
+        default: 'serif',
+      }),
+      fontSize: fs(25),
+      fontWeight: '700',
       color: '#FFFFFF',
-      letterSpacing: -0.6,
+      letterSpacing: -0.3,
       marginBottom: verticalScale(3),
       textShadowColor: 'rgba(0,0,0,0.6)',
       textShadowOffset: { width: 0, height: 1.5 },

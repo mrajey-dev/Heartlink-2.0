@@ -987,10 +987,16 @@ const getStyles = (theme) => StyleSheet.create({
     right: 20,
   },
   sheetHeroName: {
-    fontSize: 24,
-    fontWeight: '900',
+    fontFamily: Platform.select({
+      web: 'Playfair Display, Georgia, serif',
+      ios: 'PlayfairDisplay_700Bold',
+      android: 'PlayfairDisplay_700Bold',
+      default: 'serif',
+    }),
+    fontSize: 25,
+    fontWeight: '700',
     color: '#FFF',
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   sheetHeroSub: {
     fontSize: 13,
