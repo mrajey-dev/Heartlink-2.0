@@ -271,7 +271,7 @@ const MessageBubble = React.memo(function MessageBubble({
         { backgroundColor: highlightBgColor, borderRadius: 18, paddingHorizontal: 6, paddingVertical: 2 },
       ]}
     >
-      {/* Like button — long press shows ❤️ like + delete only */}
+      {/* Like button — long press shows ❤️ reaction */}
       {isMenuOpen && (
         <View style={[styles.reactionBarPill, isMe ? styles.reactionBarMe : styles.reactionBarOther]}>
           {/* Single heart like button */}
@@ -279,7 +279,7 @@ const MessageBubble = React.memo(function MessageBubble({
             style={[
               styles.reactionEmojiBtn,
               item.reaction === '❤️' && styles.reactionEmojiBtnSelected,
-              { paddingHorizontal: 14, paddingVertical: 6 },
+              { paddingHorizontal: 12, paddingVertical: 5 },
             ]}
             onPress={() => {
               onReact(item.id, '❤️');
@@ -287,22 +287,10 @@ const MessageBubble = React.memo(function MessageBubble({
             }}
             activeOpacity={0.6}
           >
-            <Text style={[styles.reactionEmojiText, { fontSize: 26 }]}>❤️</Text>
+            <Text style={[styles.reactionEmojiText, { fontSize: 24 }]}>❤️</Text>
             {item.reaction === '❤️' && (
               <Text style={styles.likedLabel}>Liked</Text>
             )}
-          </TouchableOpacity>
-
-          {/* Delete button */}
-          <TouchableOpacity
-            style={styles.reactionTrashBtn}
-            onPress={() => {
-              onDeleteMsg(item.id);
-              onCloseReactionMenu();
-            }}
-            activeOpacity={0.6}
-          >
-            <Ionicons name="trash-outline" size={17} color="#FF375F" />
           </TouchableOpacity>
         </View>
       )}
@@ -1767,7 +1755,7 @@ export default function ChatDetailScreen() {
                   </View>
                   <View style={styles.exhaustedTextWrap}>
                     <Text style={[styles.exhaustedTitle, { color: theme.textPrimary }]}>
-                      Free Message Limit Reached (5/5)
+                      Free Message Limit Reached
                     </Text>
                     <Text style={[styles.exhaustedSub, { color: theme.textSec }]}>
                       Upgrade to unlock unlimited chatting and send date invites.
