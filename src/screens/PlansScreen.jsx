@@ -146,12 +146,6 @@ export default function PlansScreen() {
 
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedCardForPayment, setSelectedCardForPayment] = useState(null);
-  const [customOfferPrice, setCustomOfferPrice] = useState(null);
-  const [originalOfferPrice, setOriginalOfferPrice] = useState(null);
-
-  const OFFER_DURATION_MS = 24 * 60 * 60 * 1000;
-  const [timeLeftMs, setTimeLeftMs] = useState(0);
-  const [isOfferEligible, setIsOfferEligible] = useState(false);
 
   const pendingPurchaseRef = useRef(null);
   const verifiedTokensRef = useRef(new Set());
@@ -200,13 +194,6 @@ export default function PlansScreen() {
       if (verifyRes?.user) {
         await updateUser(verifyRes.user);
       }
-
-      // Permanently suppress 20% off welcome popup and offer banner once user buys a plan
-      const uId = user?.id || user?.email || 'active_user';
-      await AsyncStorage.setItem(`@heartlink_has_purchased_plan_${uId}`, 'true').catch(() => {});
-      await AsyncStorage.setItem(`@heartlink_hide_offer_${uId}`, (Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toString()).catch(() => {});
-      setIsOfferEligible(false);
-      setTimeLeftMs(0);
 
       setPurchasedPlanName(planName);
       setSuccessAlertVisible(true);
@@ -271,124 +258,6 @@ export default function PlansScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    let isCancelled = false;
-
-    // Immediately suppress offer if user already has an active plan or subscription
-    if (hasActivePaidPlan(user)) {
-      setIsOfferEligible(false);
-      setTimeLeftMs(0);
-      return;
-    }
-
-    const userId = user?.id || user?.email || 'active_user';
-    const purchasedKey = `@heartlink_has_purchased_plan_${userId}`;
-    const offerStartKey = `@heartlink_welcome_offer_start_${userId}`;
-
-    AsyncStorage.getItem(purchasedKey)
-      .then(async (hasPurchased) => {
-        if (isCancelled) return;
-        if (hasPurchased === 'true' || hasActivePaidPlan(user)) {
-          setIsOfferEligible(false);
-          setTimeLeftMs(0);
-          return;
-        }
-
-        const isExplicitParam = Boolean(route.params?.welcomeDiscount20 || route.params?.discountOffer);
-
-        let offerStart = null;
-        const storedStart = await AsyncStorage.getItem(offerStartKey);
-        if (storedStart) {
-          const parsed = parseInt(storedStart, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            offerStart = parsed;
-          }
-        }
-
-        if (!offerStart) {
-          let createdAtMs = null;
-          if (user?.created_at) {
-            const parsedCreated = new Date(user.created_at).getTime();
-            if (!isNaN(parsedCreated) && parsedCreated > 0 && (Date.now() - parsedCreated) < OFFER_DURATION_MS) {
-              createdAtMs = parsedCreated;
-            }
-          }
-          offerStart = createdAtMs || Date.now();
-          await AsyncStorage.setItem(offerStartKey, offerStart.toString()).catch(() => {});
-        }
-
-        const expiresAt = offerStart + OFFER_DURATION_MS;
-        const remainingMs = expiresAt - Date.now();
-
-        if (remainingMs > 0 || isExplicitParam) {
-          const initialRemaining = remainingMs > 0 ? remainingMs : OFFER_DURATION_MS;
-          if (isCancelled) return;
-          setTimeLeftMs(initialRemaining);
-          setIsOfferEligible(true);
-        } else {
-          if (isCancelled) return;
-          setIsOfferEligible(false);
-          setTimeLeftMs(0);
-        }
-      })
-      .catch(() => {
-        if (isCancelled) return;
-        if (hasActivePaidPlan(user)) {
-          setIsOfferEligible(false);
-          setTimeLeftMs(0);
-        }
-      });
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [user, route.params]);
-
-  useEffect(() => {
-    if (!isOfferEligible || timeLeftMs <= 0) return;
-
-    const interval = setInterval(() => {
-      setTimeLeftMs((prev) => {
-        if (prev <= 1000) {
-          clearInterval(interval);
-          setIsOfferEligible(false);
-          return 0;
-        }
-        return prev - 1000;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isOfferEligible, timeLeftMs]);
-
-  const formatTimeLeft = (ms) => {
-    if (ms <= 0) return '00h 00m 00s';
-    const totalSeconds = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    const seconds = totalSeconds % 60;
-    const pad = (n) => (n < 10 ? `0${n}` : `${n}`);
-    return `${pad(hours)}h ${pad(minutes)}m ${pad(seconds)}s`;
-  };
-
-  const isWelcomeDiscount = isOfferEligible;
-
-  const calculateDiscountedPrice = (totalStr, percent = 20) => {
-    if (!totalStr) return '₹94';
-    const numStr = totalStr.replace(/[^0-9]/g, '');
-    const num = parseInt(numStr, 10);
-    if (isNaN(num) || num <= 0) return totalStr;
-    const discounted = Math.round(num * ((100 - percent) / 100));
-    return '₹' + discounted.toLocaleString('en-IN');
-  };
-
-  const calculateDiscountedPerUnit = (priceStr, percent = 20) => {
-    if (!priceStr) return priceStr;
-    const num = parseFloat(priceStr.replace(/[^0-9\.]/g, ''));
-    if (isNaN(num) || num <= 0) return priceStr;
-    const discounted = Math.round(num * ((100 - percent) / 100) * 10) / 10;
-    return '₹' + (Number.isInteger(discounted) ? discounted : discounted.toFixed(1));
-  };
 
   const fetchPlans = async () => {
     setLoading(true);
@@ -471,16 +340,7 @@ export default function PlansScreen() {
     const selectedDurObj = card.durations?.find(d => d.id === selectedDurId) || card.durations?.[0];
 
     const origPrice = selectedDurObj?.total || '₹117';
-    let priceToCharge = origPrice;
-
-    if (isWelcomeDiscount) {
-      priceToCharge = calculateDiscountedPrice(origPrice, 20);
-      setOriginalOfferPrice(origPrice);
-      setCustomOfferPrice(priceToCharge);
-    } else {
-      setOriginalOfferPrice(null);
-      setCustomOfferPrice(null);
-    }
+    const priceToCharge = origPrice;
 
     if (Platform.OS === 'web') {
       const planKey = (card.plan_key || card.name || '').toLowerCase();
@@ -535,7 +395,7 @@ export default function PlansScreen() {
       const purchaseResult = await purchaseSubscriptionPlan({
         planKey,
         durationId: selectedDurId,
-        isDiscountOffer: isWelcomeDiscount,
+        isDiscountOffer: false,
       });
 
       console.log('[IAP] Purchase request completed:', purchaseResult);
@@ -701,14 +561,10 @@ export default function PlansScreen() {
 
                       <View style={[styles.durTabContent, isSmallDevice && styles.smallDurTabContent]}>
                         {dur.save ? (
-                          <View style={[styles.savePill, isSelected && styles.savePillActive, isWelcomeDiscount && styles.savePillOffer]}>
-                            <Text style={[styles.saveTxt, isSelected && styles.whiteTxt, isWelcomeDiscount && styles.saveTxtOffer]}>
-                              {isWelcomeDiscount ? `${dur.save} + 20%` : dur.save}
+                          <View style={[styles.savePill, isSelected && styles.savePillActive]}>
+                            <Text style={[styles.saveTxt, isSelected && styles.whiteTxt]}>
+                              {dur.save}
                             </Text>
-                          </View>
-                        ) : isWelcomeDiscount ? (
-                          <View style={[styles.savePill, styles.savePillOffer]}>
-                            <Text style={[styles.saveTxt, styles.saveTxtOffer]}>20% OFF</Text>
                           </View>
                         ) : null}
 
@@ -716,23 +572,11 @@ export default function PlansScreen() {
                           {dur.label}
                         </Text>
                         <Text style={[styles.durPriceText, isSelected && styles.whiteTxt, isSmallDevice && styles.smallDurPriceText]}>
-                          {isWelcomeDiscount ? calculateDiscountedPerUnit(dur.price, 20) : dur.price}
-                          <Text style={styles.durUnitText}>{dur.unit || ''}</Text>
+                          {dur.price}<Text style={styles.durUnitText}>{dur.unit || ''}</Text>
                         </Text>
-                        {isWelcomeDiscount ? (
-                          <View style={styles.durTotalDiscountWrap}>
-                            <Text style={[styles.durTotalStruck, isSelected ? styles.whiteFaintTxt : styles.faintStruckTxt]}>
-                              {dur.total}
-                            </Text>
-                            <Text style={[styles.durTotalText, isSelected && styles.whiteTxt, styles.discountedHighlightTotal]}>
-                              {calculateDiscountedPrice(dur.total, 20)}
-                            </Text>
-                          </View>
-                        ) : (
-                          <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
-                            {dur.total}
-                          </Text>
-                        )}
+                        <Text style={[styles.durTotalText, isSelected && styles.whiteFaintTxt, isSmallDevice && styles.smallDurTotalText]}>
+                          {dur.total}
+                        </Text>
                       </View>
                     </TouchableOpacity>
                   );
@@ -793,7 +637,7 @@ export default function PlansScreen() {
                   <>
                     <Ionicons name="sparkles" size={isSmallDevice ? 15 : 17} color="#FFFFFF" style={{ marginRight: 6 }} />
                     <Text style={[styles.cardCtaText, isSmallDevice && styles.smallCardCtaText]}>
-                      Get {card.name} ({isWelcomeDiscount ? `${calculateDiscountedPrice(selectedDurObj?.total, 20)} • 20% OFF` : (selectedDurObj?.total || `${selectedDurObj?.price || ''}${selectedDurObj?.unit || ''}`)})
+                      Get {card.name} ({selectedDurObj?.total || `${selectedDurObj?.price || ''}${selectedDurObj?.unit || ''}`})
                     </Text>
                   </>
                 )}
@@ -837,24 +681,6 @@ export default function PlansScreen() {
             <View style={{ width: 38 }} />
           </View>
 
-
-
-          {/* Top 20% Welcome Offer Banner with Countdown Timer for 24-Hour New Users */}
-          {isOfferEligible && (
-            <View style={[styles.topOfferBannerWrap, isSmallDevice && styles.smallTopOfferBannerWrap]}>
-              <LinearGradient
-                colors={['#FBBF24', '#F59E0B', '#D97706']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.topOfferBannerGrad}
-              >
-                <Text style={[styles.topOfferBannerTitle, isSmallDevice && styles.smallTopOfferBannerTitle]}>
-                  <Text style={styles.boldOfferTxt}>20% OFF </Text>WELCOME OFFER ACTIVE
-                </Text>
-                <Text style={[styles.topOfferBannerSub, isSmallDevice && styles.smallTopOfferBannerSub]}>Expires in {formatTimeLeft(timeLeftMs)}</Text>
-              </LinearGradient>
-            </View>
-          )}
 
           {/* Slidable Carousel of Cards */}
           {loading ? (
@@ -991,22 +817,11 @@ export default function PlansScreen() {
         visible={paymentModalVisible}
         plan={selectedCardForPayment}
         durationId={cardDurations[selectedCardForPayment?.id] || '6m'}
-        customPrice={customOfferPrice}
-        originalPrice={originalOfferPrice}
         onClose={() => {
           setPaymentModalVisible(false);
-          setCustomOfferPrice(null);
-          setOriginalOfferPrice(null);
         }}
         onPaymentSuccess={async () => {
           setPaymentModalVisible(false);
-          setCustomOfferPrice(null);
-          setOriginalOfferPrice(null);
-          const uId = user?.id || user?.email || 'active_user';
-          await AsyncStorage.setItem(`@heartlink_has_purchased_plan_${uId}`, 'true').catch(() => {});
-          await AsyncStorage.setItem(`@heartlink_hide_offer_${uId}`, (Date.now() + 10 * 365 * 24 * 60 * 60 * 1000).toString()).catch(() => {});
-          setIsOfferEligible(false);
-          setTimeLeftMs(0);
           navigation.goBack();
         }}
       />
@@ -1058,54 +873,7 @@ const getStyles = (theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight)
     zIndex: 0,
   },
 
-  // Top Offer Banner
-  topOfferBannerWrap: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    zIndex: 10,
-  },
-  smallTopOfferBannerWrap: {
-    marginBottom: 4,
-    paddingHorizontal: 12,
-  },
-  topOfferBannerGrad: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    elevation: 4,
-    shadowColor: '#FF007F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  boldOfferTxt: {
-    fontWeight: '900',
-    fontSize: 12.5,
-    color: '#FFD700',
-  },
-  topOfferBannerTitle: {
-    color: '#FFFFFF',
-    fontSize: 11.5,
-    fontWeight: '500',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  smallTopOfferBannerTitle: {
-    fontSize: 10,
-  },
-  topOfferBannerSub: {
-    color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  smallTopOfferBannerSub: {
-    fontSize: 9.5,
-  },
+
 
   // Header
   header: {
@@ -1369,29 +1137,7 @@ const getStyles = (theme, CARD_WIDTH, CARD_SPACING, isSmallDevice, windowHeight)
   whiteFaintTxt: {
     color: 'rgba(255, 255, 255, 0.75)',
   },
-  durTotalDiscountWrap: {
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  durTotalStruck: {
-    fontSize: 8.5,
-    textDecorationLine: 'line-through',
-  },
-  faintStruckTxt: {
-    color: theme.isDark ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.38)',
-  },
-  discountedHighlightTotal: {
-    color: '#F59E0B',
-    fontWeight: '800',
-    fontSize: 10,
-  },
-  savePillOffer: {
-    backgroundColor: '#F59E0B',
-  },
-  saveTxtOffer: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-  },
+
 
   // Features Section
   featuresSection: {

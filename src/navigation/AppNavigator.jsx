@@ -18,8 +18,6 @@ import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../theme/ThemeContext';
 import { useNotification } from '../context/NotificationContext';
 import InAppNotificationBanner from '../components/InAppNotificationBanner';
-import WelcomeOfferModal from '../components/WelcomeOfferModal';
-import GoogleReviewModal from '../components/GoogleReviewModal';
 import ForceUpdateModal from '../components/ForceUpdateModal';
 import MandatoryLocationModal from '../components/MandatoryLocationModal';
 
@@ -102,8 +100,6 @@ export default function AppNavigator() {
             />
           )}
         </Stack.Navigator>
-        {isAuthenticated && <WelcomeOfferModal />}
-        {isAuthenticated && <GoogleReviewModal />}
         <ForceUpdateModal />
         <MandatoryLocationModal />
       </NavigationContainer>
