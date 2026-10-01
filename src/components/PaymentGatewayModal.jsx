@@ -51,7 +51,7 @@ export default function PaymentGatewayModal({
           item_type: isSuperlike ? 'superlikes' : 'membership',
         })
           .then(() => setSupportNotified(true))
-          .catch(() => {});
+          .catch(() => { });
       }
     } else {
       notifiedRef.current = false;

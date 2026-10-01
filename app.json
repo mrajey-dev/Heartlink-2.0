@@ -7,7 +7,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.heartlinkdatingapp.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow Heart Link to access your camera to take profile photos and send images in chat.",
+        "NSPhotoLibraryUsageDescription": "Allow Heart Link to access your photo library to select photos for your profile and chat.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.heartlinkdatingapp.app",
@@ -39,6 +45,13 @@
       "expo-status-bar",
       "react-native-iap",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Heart Link to access your photo library to select photos for your profile and chat.",
+          "cameraPermission": "Allow Heart Link to access your camera to take profile photos and send pictures in chat."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow Heart Link to use your location to find nearby matches and date spots."
@@ -51,7 +64,8 @@
           "color": "#FF007F",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-splash-screen"
     ],
     "extra": {
       "eas": {

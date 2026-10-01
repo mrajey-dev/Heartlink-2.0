@@ -212,7 +212,7 @@ export default function PlansScreen() {
   handleVerifyAndCompleteRef.current = handleVerifyAndComplete;
 
   useEffect(() => {
-    let removeListeners = () => {};
+    let removeListeners = () => { };
     initializeIAP()
       .then(async (ok) => {
         if (ok) {
@@ -248,11 +248,11 @@ export default function PlansScreen() {
           );
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       if (removeListeners) removeListeners();
-      endIAPConnection().catch(() => {});
+      endIAPConnection().catch(() => { });
     };
   }, []);
 
@@ -473,14 +473,14 @@ export default function PlansScreen() {
     const cardGlow = isPlus
       ? 'rgba(168, 85, 247, 0.28)'
       : isPremium
-      ? 'rgba(245, 158, 11, 0.32)'
-      : (card.glowColor || card.glow_color || 'rgba(255, 0, 127, 0.25)');
+        ? 'rgba(245, 158, 11, 0.32)'
+        : (card.glowColor || card.glow_color || 'rgba(255, 0, 127, 0.25)');
 
     const cardGrad = isPlus
       ? ['#A855F7', '#7C3AED']
       : isPremium
-      ? ['#FBBF24', '#F59E0B', '#D97706']
-      : (Array.isArray(card.gradient) && card.gradient.length >= 2 ? card.gradient : ['#FF007F', '#B5179E']);
+        ? ['#FBBF24', '#F59E0B', '#D97706']
+        : (Array.isArray(card.gradient) && card.gradient.length >= 2 ? card.gradient : ['#FF007F', '#B5179E']);
 
     const accentCol = isPlus ? '#A855F7' : isPremium ? '#F59E0B' : (card.accentColor || card.accent_color || cardGrad[0] || '#FF007F');
     const icon = card.iconName || card.icon_name || card.icon || (isPlus ? 'star-outline' : isPremium ? 'sparkles-outline' : 'heart-outline');

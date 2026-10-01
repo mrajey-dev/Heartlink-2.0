@@ -1,0 +1,22 @@
+# EAS Build ignore file
+# Ignore backend
+heartlink-api/
+heartlink-api.zip
+backend.zip
+public_html*.zip
+HeartLink_App_Marketing_Screenshots.zip
+HeartLink_Marketing_Screenshots/
+*.sql
+*.log
+
+# Ignore android folder during iOS build
+android/
+
+# Ignore scratch & temp
+scratch/
+dist/
+.vscode/
+.claude/
+script_*.txt
+chatgpt_response.html
+chatgpt_screen.png
