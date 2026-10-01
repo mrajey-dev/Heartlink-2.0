@@ -23,9 +23,9 @@ class SubscriptionPlanSeeder extends Seeder
                 'gradient'     => ['#06B6D4', '#3B82F6'],
                 'glow_color'   => 'rgba(6, 182, 212, 0.22)',
                 'durations'    => [
-                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹18',   'unit' => '/wk', 'total' => '₹864', 'save' => '38% OFF'],
-                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹25',   'unit' => '/wk', 'total' => '₹600', 'save' => '15% OFF', 'popular' => true],
-                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹29.2',  'unit' => '/wk', 'total' => '₹117', 'save' => 'STANDARD'],
+                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹18',   'unit' => '/wk', 'total' => '₹864', 'save' => '38% OFF', 'ios_product_id' => 'basicyearly'],
+                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹25',   'unit' => '/wk', 'total' => '₹600', 'save' => '15% OFF', 'popular' => true, 'ios_product_id' => 'basic6months'],
+                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹29.2',  'unit' => '/wk', 'total' => '₹117', 'save' => 'STANDARD', 'ios_product_id' => 'basic1monthplan'],
                 ],
                 'features'     => [
                     ['icon' => 'heart-outline',        'title' => '20 Profile Swipes Daily (Refreshes at 12:00 AM)'],
@@ -48,9 +48,9 @@ class SubscriptionPlanSeeder extends Seeder
                 'gradient'     => ['#A855F7', '#7C3AED'],
                 'glow_color'   => 'rgba(168, 85, 247, 0.28)',
                 'durations'    => [
-                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹43',   'unit' => '/wk', 'total' => '₹2,064', 'save' => '20% OFF'],
-                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹49',   'unit' => '/wk', 'total' => '₹1,176', 'save' => '8% OFF', 'popular' => true],
-                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹53.5', 'unit' => '/wk', 'total' => '₹214',   'save' => 'FLEX'],
+                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹43',   'unit' => '/wk', 'total' => '₹2,064', 'save' => '20% OFF', 'ios_product_id' => 'plusyearly'],
+                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹49',   'unit' => '/wk', 'total' => '₹1,176', 'save' => '8% OFF', 'popular' => true, 'ios_product_id' => 'plus6month'],
+                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹53.5', 'unit' => '/wk', 'total' => '₹214',   'save' => 'FLEX', 'ios_product_id' => 'plusmonthly'],
                 ],
                 'features'     => [
                     ['icon' => 'heart-outline',        'title' => '50 Profile Swipes Daily (Refreshes at 12:00 AM)'],
@@ -74,9 +74,9 @@ class SubscriptionPlanSeeder extends Seeder
                 'gradient'     => ['#FBBF24', '#F59E0B', '#D97706'],
                 'glow_color'   => 'rgba(245, 158, 11, 0.32)',
                 'durations'    => [
-                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹70',   'unit' => '/wk', 'total' => '₹3,360', 'save' => '29% OFF'],
-                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹83',   'unit' => '/wk', 'total' => '₹1,992', 'save' => '16% OFF', 'popular' => true],
-                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹99',   'unit' => '/wk', 'total' => '₹396',   'save' => 'ULTIMATE'],
+                    ['id' => '12m', 'label' => '1 Year',   'price' => '₹70',   'unit' => '/wk', 'total' => '₹3,360', 'save' => '29% OFF', 'ios_product_id' => 'premiumyearly'],
+                    ['id' => '6m',  'label' => '6 Months', 'price' => '₹83',   'unit' => '/wk', 'total' => '₹1,992', 'save' => '16% OFF', 'popular' => true, 'ios_product_id' => 'premium6month'],
+                    ['id' => '1m',  'label' => '1 Month',  'price' => '₹99',   'unit' => '/wk', 'total' => '₹396',   'save' => 'ULTIMATE', 'ios_product_id' => 'premiummonthly'],
                 ],
                 'features'     => [
                     ['icon' => 'infinite-outline',     'title' => 'Unlimited Daily Profile Swipes'],
@@ -101,9 +101,9 @@ class SubscriptionPlanSeeder extends Seeder
                 'gradient'     => ['#FF007F', '#9D4EDD'],
                 'glow_color'   => 'rgba(255, 0, 127, 0.3)',
                 'durations'    => [
-                    ['id' => '30_superlikes', 'label' => '30 Superlikes', 'price' => '₹600', 'unit' => ' pack', 'total' => '₹600', 'save' => '50% OFF'],
-                    ['id' => '15_superlikes', 'label' => '15 Superlikes', 'price' => '₹450', 'unit' => ' pack', 'total' => '₹450', 'save' => '25% OFF', 'popular' => true],
-                    ['id' => '5_superlikes',  'label' => '5 Superlikes',  'price' => '₹200', 'unit' => ' pack', 'total' => '₹200', 'save' => 'STANDARD'],
+                    ['id' => '30_superlikes', 'label' => '30 Superlikes', 'price' => '₹600', 'unit' => ' pack', 'total' => '₹600', 'save' => '50% OFF', 'ios_product_id' => 'superlikepack30'],
+                    ['id' => '15_superlikes', 'label' => '15 Superlikes', 'price' => '₹450', 'unit' => ' pack', 'total' => '₹450', 'save' => '25% OFF', 'popular' => true, 'ios_product_id' => 'superlikepack15'],
+                    ['id' => '5_superlikes',  'label' => '5 Superlikes',  'price' => '₹200', 'unit' => ' pack', 'total' => '₹200', 'save' => 'STANDARD', 'ios_product_id' => 'superlikepack5'],
                 ],
                 'features'     => [
                     ['icon' => 'flash-outline',        'title' => 'Instant Superlikes Added to Balance'],
@@ -133,6 +133,7 @@ class SubscriptionPlanSeeder extends Seeder
                         'original_price' => '₹99',
                         'save'           => '50% OFF',
                         'popular'        => true,
+                        'ios_product_id' => 'aadharverification',
                     ],
                 ],
                 'features'     => [

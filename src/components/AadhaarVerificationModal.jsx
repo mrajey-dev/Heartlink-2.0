@@ -91,6 +91,7 @@ export default function AadhaarVerificationModal({
           plan_name: 'Aadhaar Verification',
           price: '₹49',
           duration: '1 Year',
+          platform: Platform.OS,
         });
 
         await finishPurchaseTransaction(purchaseItem, false);
@@ -332,8 +333,9 @@ export default function AadhaarVerificationModal({
         return;
       }
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        const storeTitle = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
         Alert.alert(
-          'Google Play Billing',
+          `${storeTitle} Billing`,
           `${err?.message || 'Payment of ₹49 is required to proceed with Aadhaar Verification.'}`,
           [{ text: 'OK' }]
         );

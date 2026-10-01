@@ -105,11 +105,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/date-bookings',       [DatePlannerController::class, 'createProposal']);
         Route::post('/date-bookings/respond', [DatePlannerController::class, 'respondProposal']);
 
-        // Subscriptions & Payments (Google Play Billing & Legacy Razorpay)
+        // Subscriptions & Payments (Google Play Billing, Apple App Store & Legacy Razorpay)
         Route::get('/subscriptions/plans',             [SubscriptionController::class, 'getPlans']);
         Route::get('/subscriptions/verification-plan', [SubscriptionController::class, 'getVerificationPlan']);
         Route::post('/subscriptions/subscribe',        [SubscriptionController::class, 'subscribe']);
         Route::post('/payment/verify-google-purchase', [SubscriptionController::class, 'verifyGooglePurchase']);
+        Route::post('/payment/verify-apple-purchase',  [SubscriptionController::class, 'verifyGooglePurchase']);
+        Route::post('/payment/verify-iap-purchase',    [SubscriptionController::class, 'verifyGooglePurchase']);
         Route::post('/payment/create-order',           [SubscriptionController::class, 'createRazorpayOrder']);
         Route::post('/payment/verify-payment',         [SubscriptionController::class, 'verifyRazorpayPayment']);
         Route::post('/payment/notify-attempt',         [SubscriptionController::class, 'notifyPaymentAttempt']);

@@ -23,6 +23,7 @@ import {
   finishPurchaseTransaction,
   endIAPConnection,
   resolveSubscriptionSku,
+  resolveIosSubscriptionSku,
 } from '../services/iapService';
 
 export const DEFAULT_SUBSCRIPTION_PLANS = [
@@ -39,9 +40,9 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
     glow_color: 'rgba(6, 182, 212, 0.22)',
     glowColor: 'rgba(6, 182, 212, 0.22)',
     durations: [
-      { id: '1m', label: '1 Month', price: '₹29.2', unit: '/wk', total: '₹117', save: 'STANDARD' },
-      { id: '6m', label: '6 Months', price: '₹25', unit: '/wk', total: '₹600', save: '15% OFF', popular: true },
-      { id: '12m', label: '1 Year', price: '₹18', unit: '/wk', total: '₹864', save: '38% OFF' },
+      { id: '1m', label: '1 Month', price: '₹29.2', unit: '/wk', total: '₹117', save: 'STANDARD', iosSku: 'basic1monthplan' },
+      { id: '6m', label: '6 Months', price: '₹25', unit: '/wk', total: '₹600', save: '15% OFF', popular: true, iosSku: 'basic6months' },
+      { id: '12m', label: '1 Year', price: '₹18', unit: '/wk', total: '₹864', save: '38% OFF', iosSku: 'basicyearly' },
     ],
     features: [
       { icon: 'heart-outline', title: '20 Profile Swipes Daily (Refreshes at 12:00 AM)' },
@@ -65,9 +66,9 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
     glow_color: 'rgba(168, 85, 247, 0.28)',
     glowColor: 'rgba(168, 85, 247, 0.28)',
     durations: [
-      { id: '1m', label: '1 Month', price: '₹53.5', unit: '/wk', total: '₹214', save: 'FLEX' },
-      { id: '6m', label: '6 Months', price: '₹49', unit: '/wk', total: '₹1,176', save: '8% OFF', popular: true },
-      { id: '12m', label: '1 Year', price: '₹43', unit: '/wk', total: '₹2,064', save: '20% OFF' },
+      { id: '1m', label: '1 Month', price: '₹53.5', unit: '/wk', total: '₹214', save: 'FLEX', iosSku: 'plusmonthly' },
+      { id: '6m', label: '6 Months', price: '₹49', unit: '/wk', total: '₹1,176', save: '8% OFF', popular: true, iosSku: 'plus6month' },
+      { id: '12m', label: '1 Year', price: '₹43', unit: '/wk', total: '₹2,064', save: '20% OFF', iosSku: 'plusyearly' },
     ],
     features: [
       { icon: 'heart-outline', title: '50 Profile Swipes Daily (Refreshes at 12:00 AM)' },
@@ -92,9 +93,9 @@ export const DEFAULT_SUBSCRIPTION_PLANS = [
     glow_color: 'rgba(245, 158, 11, 0.32)',
     glowColor: 'rgba(245, 158, 11, 0.32)',
     durations: [
-      { id: '1m', label: '1 Month', price: '₹99', unit: '/wk', total: '₹396', save: 'ULTIMATE' },
-      { id: '6m', label: '6 Months', price: '₹83', unit: '/wk', total: '₹1,992', save: '16% OFF', popular: true },
-      { id: '12m', label: '1 Year', price: '₹70', unit: '/wk', total: '₹3,360', save: '29% OFF' },
+      { id: '1m', label: '1 Month', price: '₹99', unit: '/wk', total: '₹396', save: 'ULTIMATE', iosSku: 'premiummonthly' },
+      { id: '6m', label: '6 Months', price: '₹83', unit: '/wk', total: '₹1,992', save: '16% OFF', popular: true, iosSku: 'premium6month' },
+      { id: '12m', label: '1 Year', price: '₹70', unit: '/wk', total: '₹3,360', save: '29% OFF', iosSku: 'premiumyearly' },
     ],
     features: [
       { icon: 'infinite-outline', title: 'Unlimited Daily Profile Swipes' },
@@ -160,12 +161,17 @@ export default function PlansScreen() {
     }
 
     const pending = pendingPurchaseRef.current;
-    const rawProductId = resolveSubscriptionSku(purchaseItem.productId || purchaseItem.id || pending?.card?.plan_key || pending?.planKey);
+    const rawProductId = purchaseItem.productId || purchaseItem.id || (
+      Platform.OS === 'ios'
+        ? (pending?.selectedDurObj?.iosSku || resolveIosSubscriptionSku(pending?.card?.plan_key || pending?.planKey, pending?.selectedDurId))
+        : resolveSubscriptionSku(pending?.card?.plan_key || pending?.planKey)
+    );
 
     let planName = pending?.card?.name;
     if (!planName) {
-      if (rawProductId.includes('premium')) planName = 'HeartLink Premium';
-      else if (rawProductId.includes('plus')) planName = 'HeartLink Plus';
+      const pIdLower = String(rawProductId).toLowerCase();
+      if (pIdLower.includes('premium')) planName = 'HeartLink Premium';
+      else if (pIdLower.includes('plus')) planName = 'HeartLink Plus';
       else planName = 'HeartLink Basic';
     }
 
@@ -185,6 +191,7 @@ export default function PlansScreen() {
         duration: durationLabel,
         duration_id: durationId,
         price: price,
+        platform: Platform.OS,
       });
 
       await finishPurchaseTransaction(purchaseItem, false);
@@ -197,9 +204,10 @@ export default function PlansScreen() {
       setSuccessAlertVisible(true);
     } catch (vErr) {
       console.warn('[IAP] Verification error:', vErr);
+      const storeLabel = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
       Alert.alert(
         'Subscription Verification',
-        'Your payment succeeded with Google Play. We are updating your membership status in the cloud.',
+        `Your payment succeeded with ${storeLabel}. We are updating your membership status in the cloud.`,
         [{ text: 'OK' }]
       );
     } finally {
@@ -218,7 +226,7 @@ export default function PlansScreen() {
         if (ok) {
           try {
             const subs = await getAvailableSubscriptions();
-            console.log('[PlansScreen] Loaded subscriptions from Google Play:', subs?.length);
+            console.log('[PlansScreen] Loaded subscriptions from store:', subs?.length);
           } catch (e) {
             console.warn('[PlansScreen] Error preloading subscriptions:', e);
           }
@@ -238,9 +246,10 @@ export default function PlansScreen() {
               setPurchasingCardId(null);
               pendingPurchaseRef.current = null;
               if (pErr?.code !== 'E_USER_CANCELLED' && pErr?.message !== 'User canceled the purchase') {
+                const storeTitle = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
                 Alert.alert(
-                  'Google Play Billing',
-                  `${pErr?.message || 'Google Play Store returned an error (Code: ' + (pErr?.code || 'unknown') + ').'}\n\nPlease check your Google Play account and license testing status.`,
+                  `${storeTitle} Billing`,
+                  `${pErr?.message || storeTitle + ' returned an error (Code: ' + (pErr?.code || 'unknown') + ').'}\n\nPlease check your ${storeTitle} account.`,
                   [{ text: 'OK' }]
                 );
               }
@@ -380,7 +389,8 @@ export default function PlansScreen() {
     }
 
     setPurchasingCardId(card.id);
-    const planKey = resolveSubscriptionSku(card.plan_key || card.name);
+    const planKey = (card.plan_key || card.name || '').toLowerCase();
+    const targetIosSku = selectedDurObj?.iosSku || resolveIosSubscriptionSku(planKey, selectedDurId);
     pendingPurchaseRef.current = {
       card,
       planKey,
@@ -393,6 +403,7 @@ export default function PlansScreen() {
       const purchaseResult = await purchaseSubscriptionPlan({
         planKey,
         durationId: selectedDurId,
+        skuOverride: Platform.OS === 'ios' ? targetIosSku : null,
         isDiscountOffer: false,
       });
 
@@ -401,7 +412,7 @@ export default function PlansScreen() {
 
       if (
         purchaseItem &&
-        (purchaseItem.purchaseToken || purchaseItem.transactionReceipt || purchaseItem.orderId)
+        (purchaseItem.purchaseToken || purchaseItem.transactionReceipt || purchaseItem.orderId || purchaseItem.transactionId)
       ) {
         await handleVerifyAndComplete(purchaseItem);
       }
@@ -409,19 +420,21 @@ export default function PlansScreen() {
       console.warn('[IAP] Purchase error / cancellation:', err?.message || err);
       pendingPurchaseRef.current = null;
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        const storeTitle = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
         if (__DEV__) {
           Alert.alert(
-            'Google Play Billing (Dev Simulation)',
-            `${err?.message || 'Google Play Store connection unavailable.'}\n\nSimulate successful purchase for ${card.name} (${selectedDurObj?.label || selectedDurId}) at ${priceToCharge} to test activation?`,
+            `${storeTitle} Billing (Dev Simulation)`,
+            `${err?.message || storeTitle + ' connection unavailable.'}\n\nSimulate successful purchase for ${card.name} (${selectedDurObj?.label || selectedDurId}) at ${priceToCharge} to test activation?`,
             [
               { text: 'Cancel', style: 'cancel' },
               {
                 text: 'Simulate Purchase',
                 onPress: async () => {
+                  const simSku = Platform.OS === 'ios' ? targetIosSku : resolveSubscriptionSku(planKey);
                   await handleVerifyAndComplete({
-                    productId: resolveSubscriptionSku(planKey),
+                    productId: simSku,
                     purchaseToken: `test_token_dev_${Date.now()}`,
-                    orderId: `GPA.TEST-DEV-${Date.now()}`,
+                    orderId: Platform.OS === 'ios' ? `APPLE.TEST-${Date.now()}` : `GPA.TEST-DEV-${Date.now()}`,
                   });
                 },
               },
@@ -429,8 +442,8 @@ export default function PlansScreen() {
           );
         } else {
           Alert.alert(
-            'Google Play Billing',
-            `${err?.message || 'Unable to connect to Google Play Store.'}`,
+            `${storeTitle} Billing`,
+            `${err?.message || 'Unable to connect to ' + storeTitle + '.'}`,
             [{ text: 'OK' }]
           );
         }

@@ -16,7 +16,7 @@ const getIAP = () => {
   return RNIap;
 };
 
-// Exact Product IDs configured in Google Play Console Subscriptions
+// Exact Product IDs configured in Google Play Console & Apple App Store Subscriptions
 export const SUBSCRIPTION_SKUS = Platform.select({
   android: [
     'heartlink_basic',
@@ -26,16 +26,24 @@ export const SUBSCRIPTION_SKUS = Platform.select({
     'aadharverification',
   ],
   ios: [
-    'heartlink_basic',
-    'heartlink_plus',
-    'heartlink_premium',
-    'superlike',
+    'basicyearly',
+    'basic6months',
+    'basic1monthplan',
     'aadharverification',
+    'superlikepack30',
+    'superlikepack15',
+    'superlikepack5',
+    'plusyearly',
+    'plus6month',
+    'plusmonthly',
+    'premiumyearly',
+    'premium6month',
+    'premiummonthly',
   ],
   default: [],
 });
 
-// Consumable top-up packs
+// Consumable / top-up packs
 export const IN_APP_SKUS = Platform.select({
   android: [
     'superlike_pack_5',
@@ -43,9 +51,9 @@ export const IN_APP_SKUS = Platform.select({
     'superlike_pack_30',
   ],
   ios: [
-    'superlike_pack_5',
-    'superlike_pack_15',
-    'superlike_pack_30',
+    'superlikepack5',
+    'superlikepack15',
+    'superlikepack30',
   ],
   default: [],
 });
@@ -350,10 +358,99 @@ export const findMatchingOffer = (subscription, durationId = '6m', isDiscountOff
 };
 
 /**
- * Maps any plan key, display name, or partial string to the exact Google Play Console subscription SKU:
- * 'heartlink_basic', 'heartlink_plus', 'heartlink_premium', 'superlike', or 'aadharverification'
+ * Maps plan key/name and duration to the exact Apple App Store subscription Product ID:
+ * 1.  basicyearly         - Basic 1 Year (1 year)
+ * 2.  basic6months        - Basic 6 months (6 months)
+ * 3.  basic1monthplan     - Basic 1 month (1 month)
+ * 4.  aadharverification  - Aadhar verification (1 year)
+ * 5.  superlikepack30     - 30 Superlike (1 year)
+ * 6.  superlikepack15     - 15 superlikes (1 year)
+ * 7.  superlikepack5      - 5 superlikes (1 year)
+ * 8.  plusyearly          - Plus 1 year (1 year)
+ * 9.  plus6month          - 6 months plus (6 months)
+ * 10. plusmonthly         - 1 month plus (1 month)
+ * 11. premiumyearly       - 1 year premium (1 year)
+ * 12. premium6month       - 6 months plan (6 months)
+ * 13. premiummonthly      - 1 month premium plan (1 month)
  */
-export const resolveSubscriptionSku = (keyOrName) => {
+export const resolveIosSubscriptionSku = (keyOrName, durationId = '6m') => {
+  const str = String(keyOrName || '').toLowerCase().trim();
+  const dur = String(durationId || '6m').toLowerCase().trim();
+
+  // If already an exact iOS product ID, return it directly
+  const exactIosSkus = [
+    'basicyearly',
+    'basic6months',
+    'basic1monthplan',
+    'aadharverification',
+    'superlikepack30',
+    'superlikepack15',
+    'superlikepack5',
+    'plusyearly',
+    'plus6month',
+    'plusmonthly',
+    'premiumyearly',
+    'premium6month',
+    'premiummonthly',
+  ];
+  if (exactIosSkus.includes(str)) return str;
+
+  // 1. Aadhaar Identity Verification
+  if (str.includes('aadhar') || str.includes('verification')) {
+    return 'aadharverification';
+  }
+
+  // 2. Superlikes Packs
+  if (str.includes('superlike')) {
+    if (dur.includes('30') || str.includes('30')) return 'superlikepack30';
+    if (dur.includes('15') || str.includes('15')) return 'superlikepack15';
+    if (dur.includes('5') || str.includes('5')) return 'superlikepack5';
+    return 'superlikepack15';
+  }
+
+  // 3. HeartLink Premium
+  if (str.includes('premium')) {
+    if (dur === '12m' || dur.includes('year') || dur.includes('annual') || dur.includes('1y')) {
+      return 'premiumyearly';
+    }
+    if (dur === '6m' || dur.includes('6')) {
+      return 'premium6month';
+    }
+    return 'premiummonthly';
+  }
+
+  // 4. HeartLink Plus
+  if (str.includes('plus')) {
+    if (dur === '12m' || dur.includes('year') || dur.includes('annual') || dur.includes('1y')) {
+      return 'plusyearly';
+    }
+    if (dur === '6m' || dur.includes('6')) {
+      return 'plus6month';
+    }
+    return 'plusmonthly';
+  }
+
+  // 5. HeartLink Basic (Default)
+  if (dur === '12m' || dur.includes('year') || dur.includes('annual') || dur.includes('1y')) {
+    return 'basicyearly';
+  }
+  if (dur === '6m' || dur.includes('6')) {
+    return 'basic6months';
+  }
+  return 'basic1monthplan';
+};
+
+/**
+ * Maps any plan key, display name, or partial string to the exact store subscription SKU.
+ * On iOS: returns the App Store subscription Product ID.
+ * On Android: returns Google Play subscription SKU ('heartlink_basic', 'heartlink_plus', 'heartlink_premium', 'superlike', 'aadharverification').
+ */
+export const resolveSubscriptionSku = (keyOrName, durationId = '6m') => {
+  if (Platform.OS === 'ios') {
+    return resolveIosSubscriptionSku(keyOrName, durationId);
+  }
+
+  // Google Play Console subscription SKUs (strictly unchanged for Android)
   const str = String(keyOrName || '').toLowerCase().trim();
   if (str.includes('aadhar') || str.includes('verification')) return 'aadharverification';
   if (str.includes('superlike')) return 'superlike';
@@ -364,13 +461,14 @@ export const resolveSubscriptionSku = (keyOrName) => {
 };
 
 /**
- * Purchase subscription plan supporting Google Play Subscriptions v2
+ * Purchase subscription plan supporting Apple StoreKit (iOS) and Google Play Subscriptions v2 (Android)
  */
 export const purchaseSubscriptionPlan = async ({ planKey, durationId = '6m', skuOverride = null, isDiscountOffer = false }) => {
   const iap = getIAP();
   if (!iap) {
+    const storeLabel = Platform.OS === 'ios' ? 'Apple App Store' : 'Google Play';
     throw new Error(
-      'Google Play Billing is not supported inside Expo Go because native TurboModules (Nitro) cannot run in the Expo Go sandbox.\n\nTo test Google Play Billing on Android, run:\n  npx expo run:android\nor install the standalone release APK.'
+      `In-App Purchases are not supported inside Expo Go because native TurboModules cannot run in the Expo Go sandbox.\n\nTo test ${storeLabel} Billing on native devices, run:\n  npx expo run:${Platform.OS === 'ios' ? 'ios' : 'android'}\nor install the native release build.`
     );
   }
 
@@ -378,6 +476,28 @@ export const purchaseSubscriptionPlan = async ({ planKey, durationId = '6m', sku
     await initializeIAP();
   }
 
+  // ── iOS Apple App Store Flow ──────────────────────────────────────────
+  if (Platform.OS === 'ios') {
+    const targetSku = skuOverride || resolveIosSubscriptionSku(planKey, durationId);
+    console.log('[IAP iOS] Requesting Apple App Store purchase for SKU:', targetSku, 'Duration:', durationId);
+
+    if (typeof iap.requestPurchase === 'function') {
+      return await iap.requestPurchase({
+        type: 'subs',
+        request: {
+          apple: {
+            sku: targetSku,
+          },
+        },
+      });
+    } else if (typeof iap.requestSubscription === 'function') {
+      return await iap.requestSubscription({ sku: targetSku });
+    } else {
+      throw new Error('Apple App Store purchase method not available on this client.');
+    }
+  }
+
+  // ── Android Google Play Billing Flow (STRICTLY UNCHANGED) ─────────────
   const rawTarget = skuOverride || resolveSubscriptionSku(planKey);
   const targetSku = String(rawTarget || '').toLowerCase().trim();
 
@@ -483,27 +603,35 @@ export const purchaseSubscriptionPlan = async ({ planKey, durationId = '6m', sku
 export const requestProductPurchase = async (sku) => {
   const iap = getIAP();
   if (!iap) {
+    const storeLabel = Platform.OS === 'ios' ? 'Apple App Store' : 'Google Play';
     throw new Error(
-      'Google Play Billing is not supported inside Expo Go because native TurboModules (Nitro) cannot run in the Expo Go sandbox.\n\nTo test Google Play Billing on Android, run:\n  npx expo run:android\nor install the standalone release APK.'
+      `In-App Purchases are not supported inside Expo Go because native TurboModules cannot run in the Expo Go sandbox.\n\nTo test ${storeLabel} purchases, run:\n  npx expo run:${Platform.OS === 'ios' ? 'ios' : 'android'}\nor install the native release build.`
     );
   }
 
   try {
     if (!isIapInitialized) await initializeIAP();
 
-    // Query available products first to ensure SKU exists and avoid native Android crash
-    const products = await getAvailableProducts([sku]);
-    const product = products.find((p) => (p?.id || p?.productId) === sku);
+    let targetSku = sku;
+    if (Platform.OS === 'ios') {
+      targetSku = resolveIosSubscriptionSku(sku);
+    }
 
-    if (!product && Platform.OS === 'android') {
-      throw new Error(
-        `One-time product "${sku}" was not found in Google Play Store.\n\n` +
-        `Available in store: ${products.map((p) => p?.id || p?.productId).join(', ') || 'none'}.\n\n` +
-        `To enable Superlikes purchases via Google Play Billing:\n` +
-        `1. Open Google Play Console > HeartLink > Monetize with Play > Products > One-time products.\n` +
-        `2. Click "Create product" and set Product ID to "${sku}".\n` +
-        `3. Set the price and click "Activate".`
-      );
+    if (Platform.OS === 'android') {
+      // Query available products first to ensure SKU exists and avoid native Android crash
+      const products = await getAvailableProducts([sku]);
+      const product = products.find((p) => (p?.id || p?.productId) === sku);
+
+      if (!product) {
+        throw new Error(
+          `One-time product "${sku}" was not found in Google Play Store.\n\n` +
+          `Available in store: ${products.map((p) => p?.id || p?.productId).join(', ') || 'none'}.\n\n` +
+          `To enable Superlikes purchases via Google Play Billing:\n` +
+          `1. Open Google Play Console > HeartLink > Monetize with Play > Products > One-time products.\n` +
+          `2. Click "Create product" and set Product ID to "${sku}".\n` +
+          `3. Set the price and click "Activate".`
+        );
+      }
     }
 
     if (typeof iap.requestPurchase === 'function') {
@@ -521,7 +649,7 @@ export const requestProductPurchase = async (sku) => {
           type: 'in-app',
           request: {
             apple: {
-              sku,
+              sku: targetSku,
             },
           },
         });

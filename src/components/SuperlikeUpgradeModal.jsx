@@ -41,6 +41,7 @@ const SUPERLIKE_PACKS = [
     save: null,
     popular: false,
     basePlanId: 'superlikepack5',
+    iosSku: 'superlikepack5',
   },
   {
     id: '15_superlikes',
@@ -52,6 +53,7 @@ const SUPERLIKE_PACKS = [
     save: 'SAVE 25%',
     popular: true,
     basePlanId: 'superlikepack15',
+    iosSku: 'superlikepack15',
   },
   {
     id: '30_superlikes',
@@ -63,6 +65,7 @@ const SUPERLIKE_PACKS = [
     save: 'SAVE 50%',
     popular: false,
     basePlanId: 'superlikepack30',
+    iosSku: 'superlikepack30',
   },
 ];
 
@@ -89,12 +92,13 @@ export default function SuperlikeUpgradeModal({
       try {
         const verifyRes = await apiVerifyGooglePurchase({
           purchase_token: purchaseItem.purchaseToken || purchaseItem.transactionReceipt || '',
-          product_id: purchaseItem.productId || 'superlike',
+          product_id: purchaseItem.productId || (Platform.OS === 'ios' ? selectedPack.iosSku : 'superlike'),
           order_id: purchaseItem.orderId || purchaseItem.transactionId || '',
           plan_name: `${selectedPack.count} Superlikes Pack`,
           duration: `${selectedPack.count} Superlikes`,
           duration_id: selectedPack.id,
           price: selectedPack.price,
+          platform: Platform.OS,
         });
 
         await finishPurchaseTransaction(purchaseItem, false);
@@ -195,10 +199,12 @@ export default function SuperlikeUpgradeModal({
     setIsBuying(true);
     try {
       // In Google Play Console, superlike is configured as a subscription with product ID 'superlike'
-      // and base plans: superlikepack5, superlikepack15, superlikepack30
+      // and base plans: superlikepack5, superlikepack15, superlikepack30.
+      // In Apple App Store, each is a subscription Product ID: superlikepack5, superlikepack15, superlikepack30.
       const purchaseResult = await purchaseSubscriptionPlan({
         planKey: 'superlike',
         durationId: selectedPack.id,
+        skuOverride: Platform.OS === 'ios' ? selectedPack.iosSku : null,
         isDiscountOffer: false, // No 20% discount offer for superlikes
       });
       const purchaseItem = Array.isArray(purchaseResult) ? purchaseResult[0] : purchaseResult;
@@ -222,9 +228,10 @@ export default function SuperlikeUpgradeModal({
     } catch (err) {
       console.warn('[IAP] Superlikes purchase error / cancellation:', err?.message || err);
       if (err?.code !== 'E_USER_CANCELLED' && err?.message !== 'User canceled the purchase') {
+        const storeTitle = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
         Alert.alert(
-          'Google Play Billing',
-          `${err?.message || 'Unable to connect to Google Play Store for Superlikes.'}`,
+          `${storeTitle} Billing`,
+          `${err?.message || 'Unable to connect to ' + storeTitle + ' for Superlikes.'}`,
           [{ text: 'OK' }]
         );
       }

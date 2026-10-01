@@ -462,17 +462,23 @@ export const apiVerifyRazorpayPayment = async (data) => {
 
 export const apiVerifyGooglePurchase = async (data) => {
   try {
-    console.log('[Google Billing] Verifying purchase with data:', data);
-    const response = await apiFetch('/payment/verify-google-purchase', {
+    const storeLabel = Platform.OS === 'ios' ? 'Apple App Store' : 'Google Billing';
+    console.log(`[${storeLabel}] Verifying purchase with data:`, data);
+    const endpoint = Platform.OS === 'ios' ? '/payment/verify-apple-purchase' : '/payment/verify-google-purchase';
+    const response = await apiFetch(endpoint, {
       method: 'POST',
       body: data,
     });
-    console.log('[Google Billing] Verification response:', response);
+    console.log(`[${storeLabel}] Verification response:`, response);
     return response;
   } catch (error) {
-    console.error('[Google Billing] Verify purchase error:', error);
+    console.error('[IAP Billing] Verify purchase error:', error);
     throw error;
   }
+};
+
+export const apiVerifyApplePurchase = async (data) => {
+  return await apiVerifyGooglePurchase({ ...data, platform: 'ios' });
 };
 
 export const apiNotifyPaymentAttempt = async (data) => {

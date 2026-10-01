@@ -646,8 +646,12 @@ class SubscriptionController extends Controller
             ?? '1m'
         ));
 
-        \Illuminate\Support\Facades\Log::info('[Google Play Billing] Verification Request:', [
+        $platform = strtolower($request->input('platform') ?? 'android');
+        $storeName = $platform === 'ios' ? 'App Store' : 'Google Play';
+
+        \Illuminate\Support\Facades\Log::info('[In-App Purchase] Verification Request:', [
             'user_id'        => $user->id,
+            'platform'       => $platform,
             'product_id'     => $productId,
             'order_id'       => $orderId,
             'purchase_token' => substr($purchaseToken ?? '', 0, 15) . '...',
@@ -666,19 +670,20 @@ class SubscriptionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Aadhaar identity verification successfully completed with Google Play! 🎉',
+                'message' => "Aadhaar identity verification successfully completed with {$storeName}! 🎉",
                 'user'    => $user->load('photos', 'activeSubscription', 'settings'),
             ]);
         }
 
         // 2. Superlikes Pack Purchase
-        if (str_contains($rawPlan, 'superlike') || str_contains($rawDuration, 'superlike')) {
+        if (str_contains($rawPlan, 'superlike') || str_contains($rawDuration, 'superlike') || str_contains(strtolower($productId ?? ''), 'superlike')) {
             $count = 5;
-            if (str_contains($rawPlan, '30') || str_contains($rawDuration, '30')) {
+            $combinedSuper = strtolower($rawPlan . ' ' . $rawDuration . ' ' . ($productId ?? ''));
+            if (str_contains($combinedSuper, '30')) {
                 $count = 30;
-            } elseif (str_contains($rawPlan, '15') || str_contains($rawDuration, '15')) {
+            } elseif (str_contains($combinedSuper, '15')) {
                 $count = 15;
-            } elseif (str_contains($rawPlan, '5') || str_contains($rawDuration, '5')) {
+            } elseif (str_contains($combinedSuper, '5')) {
                 $count = 5;
             }
             $user->purchased_superlikes_count = (int) ($user->purchased_superlikes_count ?? 0) + $count;
@@ -686,31 +691,33 @@ class SubscriptionController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => "Google Play payment verified & {$count} Superlikes added! 🎉",
+                'message' => "{$storeName} payment verified & {$count} Superlikes added! 🎉",
                 'user'    => $user->load('photos', 'activeSubscription', 'settings'),
             ]);
         }
 
-        // 2. Membership Plans (Basic, Plus, Premium)
+        // 3. Membership Plans (Basic, Plus, Premium)
+        $combinedPlan = strtolower($rawPlan . ' ' . ($productId ?? ''));
         $formattedPlanName = 'HeartLink Basic';
-        if (str_contains($rawPlan, 'premium')) {
+        if (str_contains($combinedPlan, 'premium')) {
             $formattedPlanName = 'HeartLink Premium';
-        } elseif (str_contains($rawPlan, 'plus')) {
+        } elseif (str_contains($combinedPlan, 'plus')) {
             $formattedPlanName = 'HeartLink Plus';
-        } elseif (str_contains($rawPlan, 'basic')) {
+        } elseif (str_contains($combinedPlan, 'basic')) {
             $formattedPlanName = 'HeartLink Basic';
         }
 
         $durationLabel = '1 Month';
         $expiresAt = now()->addMonth();
 
-        if (str_contains($rawDuration, '12') || str_contains($rawDuration, 'year') || str_contains($rawDuration, '1y')) {
+        $combinedDuration = strtolower($rawDuration . ' ' . ($productId ?? ''));
+        if (str_contains($combinedDuration, '12') || str_contains($combinedDuration, 'year') || str_contains($combinedDuration, 'yearly') || str_contains($combinedDuration, '1y')) {
             $durationLabel = '1 Year';
             $expiresAt = now()->addYear();
-        } elseif (str_contains($rawDuration, '6')) {
+        } elseif (str_contains($combinedDuration, '6m') || str_contains($combinedDuration, '6month') || str_contains($combinedDuration, '6-month') || str_contains($combinedDuration, '6 months')) {
             $durationLabel = '6 Months';
             $expiresAt = now()->addMonths(6);
-        } elseif (str_contains($rawDuration, '1') || str_contains($rawDuration, 'month')) {
+        } elseif (str_contains($combinedDuration, '1m') || str_contains($combinedDuration, 'month') || str_contains($combinedDuration, 'monthly') || str_contains($combinedDuration, '1 month')) {
             $durationLabel = '1 Month';
             $expiresAt = now()->addMonth();
         }
@@ -747,7 +754,7 @@ class SubscriptionController extends Controller
 
         return response()->json([
             'success'      => true,
-            'message'      => 'Google Play subscription activated successfully! 🎉',
+            'message'      => "{$storeName} subscription activated successfully! 🎉",
             'subscription' => $subscription,
             'user'         => $user->load('photos', 'activeSubscription', 'settings'),
         ]);

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Heart Link",
     "slug": "HeartLink",
-    "version": "1.0.44",
+    "version": "1.0.45",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
     },
     "android": {
       "package": "com.heartlinkdatingapp.app",
-      "versionCode": 45,
+      "versionCode": 64,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "com.android.vending.BILLING",
