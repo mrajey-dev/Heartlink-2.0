@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\ProfilePhoto;
 use App\Models\AadhaarVerification;
+use App\Models\UserSubscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -216,10 +217,10 @@ class AuthController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'name'              => 'sometimes|string|max:25',
+            'name'              => 'sometimes|string|max:255',
             'age'               => 'sometimes|nullable|integer',
             'gender'            => 'sometimes|nullable|string',
-            'display_name'      => 'sometimes|nullable|string|max:25',
+            'display_name'      => 'sometimes|nullable|string|max:100',
             'country_code'      => 'sometimes|nullable|string',
             'mother_tongue'     => 'sometimes|nullable|string',
             'languages_spoken'   => 'sometimes|nullable|array',
@@ -252,9 +253,10 @@ class AuthController extends Controller
             'is_screenshot_allowed' => 'sometimes|boolean',
         ]);
 
-        if ($user->is_verified) {
-            // After Aadhaar verification, lock real identity fields (name, age, dob, gender)
-            // but allow display_name to remain editable as a cosmetic preference
+        $isAadhaarVerified = $user->is_verified || !empty($user->aadhaar_number) || $user->is_aadhaar_verified;
+        if ($isAadhaarVerified) {
+            // After Aadhaar verification, real identity fields (name, age, dob, gender) cannot be edited
+            // display_name remains fully editable by the user as their chosen alias/nickname
             unset($validated['name'], $validated['dob'], $validated['age'], $validated['gender']);
         }
 
@@ -646,6 +648,26 @@ public function savePushToken(Request $request)
 
         $currentUser = $request->user();
         $userId = $currentUser ? $currentUser->id : 0;
+
+        // Aadhaar verification is FREE only for user with id = 218
+        // For all other users, payment of ₹49 is required
+        $isFreeUser = ((int) $userId === 218);
+        if (!$isFreeUser && $currentUser) {
+            $hasPaid = UserSubscription::where('user_id', $userId)
+                ->where(function ($q) {
+                    $q->where('plan_name', 'LIKE', '%verification%')
+                      ->orWhere('plan_name', 'LIKE', '%aadhar%');
+                })
+                ->exists();
+
+            if (!$hasPaid && !$currentUser->is_verified) {
+                return response()->json([
+                    'message'          => 'Aadhaar verification is a paid feature (₹49). Please complete the verification payment to proceed.',
+                    'payment_required' => true,
+                ], 402);
+            }
+        }
+
         $existingUser = User::where('aadhaar_number', $aadhaarNumber)
             ->where('is_verified', true)
             ->where('id', '!=', $userId)
@@ -752,6 +774,25 @@ public function savePushToken(Request $request)
         $otp = trim($validated['otp']);
         $user = $request->user();
         $userId = $user ? $user->id : 0;
+
+        // Aadhaar verification is FREE only for user with id = 218
+        // For all other users, payment of ₹49 is required
+        $isFreeUser = ((int) $userId === 218);
+        if (!$isFreeUser && $user) {
+            $hasPaid = UserSubscription::where('user_id', $userId)
+                ->where(function ($q) {
+                    $q->where('plan_name', 'LIKE', '%verification%')
+                      ->orWhere('plan_name', 'LIKE', '%aadhar%');
+                })
+                ->exists();
+
+            if (!$hasPaid && !$user->is_verified) {
+                return response()->json([
+                    'message'          => 'Payment of ₹49 is required to verify Aadhaar identity.',
+                    'payment_required' => true,
+                ], 402);
+            }
+        }
 
         $refId = $request->input('ref_id')
             ?: \Illuminate\Support\Facades\Cache::get('aadhaar_ref_user_' . $userId);
@@ -861,11 +902,11 @@ public function savePushToken(Request $request)
 
             // Auto-update user name, DOB, age, and gender from verified Aadhaar e-KYC data
             if ($extractedKycData) {
-                // Fetch full name from Aadhaar card and update in users table
+                // Fetch full real name from Aadhaar card and replace user's legal full name (name column in users table)
+                // Note: display_name is intentionally preserved as it is, so the user can continue editing their preferred display name
                 $kycName = $extractedKycData['name'] ?? $extractedKycData['full_name'] ?? null;
                 if (!empty($kycName)) {
                     $user->name = trim($kycName);
-                    $user->display_name = trim($kycName);
                 }
 
                 // Fetch date of birth and calculate age from Aadhaar card
@@ -920,16 +961,40 @@ public function savePushToken(Request $request)
             \Illuminate\Support\Facades\Cache::forget('aadhaar_ref_user_' . $userId);
             \Illuminate\Support\Facades\Cache::forget('aadhaar_num_user_' . $userId);
 
-            // Store complete Aadhaar verification record in database table
+            // Store complete Aadhaar verification record in aadhaar_verifications table
             try {
-                $addr = is_array($extractedKycData['address'] ?? null) ? $extractedKycData['address'] : [];
+                $addr = is_array($extractedKycData['address'] ?? null)
+                    ? $extractedKycData['address']
+                    : (is_array($extractedKycData['split_address'] ?? null) ? $extractedKycData['split_address'] : []);
+
+                // Construct full_address if not provided as single string
+                $fullAddress = null;
+                if (!empty($extractedKycData['full_address'])) {
+                    $fullAddress = $extractedKycData['full_address'];
+                } elseif (is_string($extractedKycData['address'] ?? null)) {
+                    $fullAddress = $extractedKycData['address'];
+                } elseif (!empty($addr)) {
+                    $fullAddress = implode(', ', array_filter([
+                        $addr['house'] ?? null,
+                        $addr['street'] ?? null,
+                        $addr['landmark'] ?? null,
+                        $addr['vtc'] ?? null,
+                        $addr['district'] ?? null,
+                        $addr['state'] ?? null,
+                        $addr['pincode'] ?? null,
+                        $addr['country'] ?? 'India',
+                    ]));
+                }
 
                 // Derive year_of_birth from DOB if API didn't return it
-                $yearOfBirth = $extractedKycData['year_of_birth'] ?? null;
-                if (!$yearOfBirth && $user->dob) {
-                    try {
-                        $yearOfBirth = \Carbon\Carbon::parse($user->dob)->year;
-                    } catch (\Exception $e) {}
+                $yearOfBirth = $extractedKycData['year_of_birth'] ?? $extractedKycData['yob'] ?? null;
+                if (!$yearOfBirth) {
+                    $dobVal = $extractedKycData['date_of_birth'] ?? $extractedKycData['dob'] ?? $user->dob ?? null;
+                    if ($dobVal) {
+                        try {
+                            $yearOfBirth = (string) \Carbon\Carbon::parse($dobVal)->year;
+                        } catch (\Exception $e) {}
+                    }
                 }
 
                 // Map gender code for aadhaar record (store as M/F)
@@ -939,28 +1004,37 @@ public function savePushToken(Request $request)
                     $aadhaarGenderCode = ($g === 'male' || $g === 'm') ? 'M' : (($g === 'female' || $g === 'f') ? 'F' : strtoupper(substr($user->gender, 0, 1)));
                 }
 
+                $finalAadhaarNum = $user->aadhaar_number ?? $aadhaarNumber;
+                if (empty($finalAadhaarNum)) {
+                    $finalAadhaarNum = 'AADHAAR_' . $user->id;
+                }
+
+                $finalRefId = !empty($refId) ? (string) $refId : ($extractedKycData['reference_id'] ?? null);
+
                 AadhaarVerification::updateOrCreate(
                     ['user_id' => $user->id],
                     [
-                        'aadhaar_number' => $user->aadhaar_number ?? $aadhaarNumber ?? ('AADHAAR_' . $user->id),
-                        'reference_id'   => (string) $refId,
-                        'full_name'      => $extractedKycData['name'] ?? $user->name,
+                        'aadhaar_number' => $finalAadhaarNum,
+                        'reference_id'   => $finalRefId,
+                        'full_name'      => $extractedKycData['name'] ?? $extractedKycData['full_name'] ?? $user->name,
                         'gender'         => $aadhaarGenderCode,
                         'date_of_birth'  => !empty($extractedKycData['date_of_birth'])
                                               ? $extractedKycData['date_of_birth']
-                                              : ($user->dob ? \Carbon\Carbon::parse($user->dob)->format('d-m-Y') : null),
-                        'year_of_birth'  => $yearOfBirth,
-                        'care_of'        => $extractedKycData['care_of'] ?? null,
-                        'full_address'   => $extractedKycData['full_address'] ?? null,
+                                              : (!empty($extractedKycData['dob'])
+                                                  ? $extractedKycData['dob']
+                                                  : ($user->dob ? \Carbon\Carbon::parse($user->dob)->format('d-m-Y') : null)),
+                        'year_of_birth'  => $yearOfBirth ? (string) $yearOfBirth : null,
+                        'care_of'        => $extractedKycData['care_of'] ?? $extractedKycData['careof'] ?? $extractedKycData['co'] ?? null,
+                        'full_address'   => $fullAddress,
                         'house'          => $addr['house'] ?? null,
-                        'street'         => $addr['street'] ?? null,
-                        'vtc'            => $addr['vtc'] ?? ($user->city ?? null),
+                        'street'         => $addr['street'] ?? $addr['landmark'] ?? null,
+                        'vtc'            => $addr['vtc'] ?? $addr['sub_district'] ?? ($user->city ?? null),
                         'district'       => $addr['district'] ?? ($user->city ?? null),
                         'state'          => $addr['state'] ?? ($user->state ?? null),
                         'pincode'        => $addr['pincode'] ?? ($user->pincode ?? null),
                         'country'        => $addr['country'] ?? 'India',
-                        'photo'          => $extractedKycData['photo'] ?? null,
-                        'raw_response'   => $extractedKycData,
+                        'photo'          => $extractedKycData['photo'] ?? $extractedKycData['photo_link'] ?? $extractedKycData['image'] ?? null,
+                        'raw_response'   => $resJson ?: ($extractedKycData ?: ['status' => 'VERIFIED']),
                         'status'         => 'VERIFIED',
                         'verified_at'    => now(),
                     ]
@@ -981,6 +1055,27 @@ public function savePushToken(Request $request)
                 $user->is_verified = true;
                 $user->email_verified_at = now();
                 $user->save();
+
+                try {
+                    AadhaarVerification::firstOrCreate(
+                        ['user_id' => $user->id],
+                        [
+                            'aadhaar_number' => $user->aadhaar_number ?? $aadhaarNumber ?? ('AADHAAR_' . $user->id),
+                            'reference_id'   => (string) $refId,
+                            'full_name'      => $user->name,
+                            'gender'         => $user->gender ? (strtoupper(substr($user->gender, 0, 1)) === 'M' ? 'M' : 'F') : null,
+                            'date_of_birth'  => $user->dob ? \Carbon\Carbon::parse($user->dob)->format('d-m-Y') : null,
+                            'year_of_birth'  => $user->dob ? (string) \Carbon\Carbon::parse($user->dob)->year : null,
+                            'district'       => $user->city ?? null,
+                            'state'          => $user->state ?? null,
+                            'pincode'        => $user->pincode ?? null,
+                            'country'        => 'India',
+                            'status'         => 'VERIFIED',
+                            'verified_at'    => now(),
+                        ]
+                    );
+                } catch (\Exception $ex) {}
+
                 return response()->json([
                     'success' => true,
                     'message' => 'Aadhaar identity verified successfully! Official Verified Shield badge active.',

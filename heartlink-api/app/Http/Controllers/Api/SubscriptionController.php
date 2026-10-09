@@ -67,8 +67,11 @@ class SubscriptionController extends Controller
         ]);
     }
 
-    public function getVerificationPlan()
+    public function getVerificationPlan(Request $request)
     {
+        $user = $request->user();
+        $isFreeUser = $user && ((int) $user->id === 218);
+
         $plan = SubscriptionPlan::where('plan_key', 'verification')->first();
         if (!$plan) {
             $plan = SubscriptionPlan::firstOrCreate(
@@ -85,12 +88,12 @@ class SubscriptionController extends Controller
                         [
                             'id'             => 'aadharverificaationonetimepurchase',
                             'label'          => '1 Year',
-                            'price'          => '₹49',
-                            'total'          => '₹49',
-                            'amount'         => 49,
+                            'price'          => $isFreeUser ? '₹0' : '₹49',
+                            'total'          => $isFreeUser ? '₹0' : '₹49',
+                            'amount'         => $isFreeUser ? 0 : 49,
                             'unit'           => ' / year',
                             'original_price' => '₹99',
-                            'save'           => '50% OFF',
+                            'save'           => $isFreeUser ? '100% OFF (Special User Free Pass)' : '50% OFF',
                             'popular'        => true,
                         ],
                     ],
@@ -110,11 +113,12 @@ class SubscriptionController extends Controller
             'plan'           => $plan,
             'plan_id'        => 'verification',
             'product_id'     => 'aadharverification',
-            'amount'         => 49,
-            'price'          => 49,
-            'price_display'  => '₹49',
-            'original_price' => '₹99',
-            'save'           => '50% OFF',
+            'is_free'        => $isFreeUser,
+            'amount'         => $isFreeUser ? 0 : 49,
+            'price'          => $isFreeUser ? 0 : 49,
+            'price_display'  => $isFreeUser ? 'FREE' : '₹49',
+            'original_price' => $isFreeUser ? '₹49' : '₹99',
+            'save'           => $isFreeUser ? '100% OFF' : '50% OFF',
         ]);
     }
 
@@ -512,6 +516,22 @@ class SubscriptionController extends Controller
             }
             $user->save();
 
+            UserSubscription::updateOrCreate(
+                [
+                    'user_id'   => $user->id,
+                    'plan_name' => 'Aadhaar Verification',
+                ],
+                [
+                    'duration'        => '1 Year',
+                    'price'           => '₹49',
+                    'status'          => 'active',
+                    'payment_method'  => 'razorpay',
+                    'transaction_id'  => $paymentId,
+                    'starts_at'       => now(),
+                    'expires_at'      => now()->addYear(),
+                ]
+            );
+
             return response()->json([
                 'success' => true,
                 'message' => 'Identity verification payment processed successfully! 🎉',
@@ -667,6 +687,22 @@ class SubscriptionController extends Controller
                 $user->subscription_plan = 'Free';
             }
             $user->save();
+
+            UserSubscription::updateOrCreate(
+                [
+                    'user_id'   => $user->id,
+                    'plan_name' => 'Aadhaar Verification',
+                ],
+                [
+                    'duration'        => $rawDuration ?: '1 Year',
+                    'price'           => $price ?: '₹49',
+                    'status'          => 'active',
+                    'payment_method'  => $platform ?: 'google_play',
+                    'transaction_id'  => $orderId ?: ('TXN_' . time()),
+                    'starts_at'       => now(),
+                    'expires_at'      => now()->addYear(),
+                ]
+            );
 
             return response()->json([
                 'success' => true,

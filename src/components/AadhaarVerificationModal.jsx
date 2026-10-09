@@ -28,8 +28,10 @@ export default function AadhaarVerificationModal({
   const { theme, isDark } = useTheme();
   const { user, updateUser } = useAuth();
 
-  // Mandatory Google Play billing of ₹49 required before unlocking 'aadhaar' verification screen
-  const [step, setStep] = useState(initialStep || 'alert');
+  const isFreeUser = user?.id === 218 || Number(user?.id) === 218;
+
+  // Mandatory Google Play billing of ₹49 required before unlocking 'aadhaar' verification screen (except for user 218)
+  const [step, setStep] = useState(initialStep || (isFreeUser ? 'aadhaar' : 'alert'));
   const [verifying, setVerifying] = useState(false);
   const [isPurchasing, setIsPurchasing] = useState(false);
 
@@ -62,7 +64,8 @@ export default function AadhaarVerificationModal({
 
   useEffect(() => {
     if (visible) {
-      setStep(initialStep || 'alert');
+      const isFree = user?.id === 218 || Number(user?.id) === 218;
+      setStep(initialStep || (isFree ? 'aadhaar' : 'alert'));
       setVerifying(false);
       setIsPurchasing(false);
       setAadhaarNumber('');
@@ -76,7 +79,7 @@ export default function AadhaarVerificationModal({
       lastSentAadhaarRef.current = '';
       lastSentRefId.current = '';
     }
-  }, [visible, initialStep]);
+  }, [visible, initialStep, user?.id]);
 
   const handleAadhaarPurchaseCompleted = async (purchaseItem) => {
     if (!purchaseItem) return;
@@ -236,11 +239,12 @@ export default function AadhaarVerificationModal({
 
       let updatedUser = {
         is_verified: true,
+        is_aadhaar_verified: true,
         email_verified_at: new Date().toISOString(),
         subscription_plan: user?.subscription_plan && user?.subscription_plan !== 'none' ? user.subscription_plan : 'Free',
       };
       if (res?.user) {
-        updatedUser = { ...user, ...res.user, is_verified: true };
+        updatedUser = { ...user, ...res.user, is_verified: true, is_aadhaar_verified: true };
       }
       updateUser(updatedUser);
       setSuccessMessage(res?.message || 'Your identity has been verified successfully via Aadhaar OTP. Profile verification badge is now active!');
@@ -255,6 +259,11 @@ export default function AadhaarVerificationModal({
   };
 
   const handleStartAadhaarPaymentOrOtp = async () => {
+    if (isFreeUser) {
+      setStep('aadhaar');
+      return;
+    }
+
     if (Platform.OS === 'web') {
       if (__DEV__) {
         Alert.alert(
@@ -474,21 +483,27 @@ export default function AadhaarVerificationModal({
 
               </View>
 
-              {/* ─── Official Verification Pricing Notice (Google Play Billing ₹49) ─── */}
+              {/* ─── Official Verification Pricing Notice (Google Play Billing ₹49 / Free for user 218) ─── */}
               <View style={[styles.offerBanner, { backgroundColor: isDark ? 'rgba(0, 200, 83, 0.12)' : 'rgba(0, 200, 83, 0.06)', borderColor: 'rgba(0, 200, 83, 0.3)' }]}>
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>₹49</Text>
-                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14), fontWeight: '700' }}>₹99</Text>
-                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}> • 50% OFF</Text>
+                    <Text style={[styles.offerPrice, { color: '#00C853' }]}>{isFreeUser ? 'FREE' : '₹49'}</Text>
+                    <Text style={{ textDecorationLine: 'line-through', color: theme.textFaint, marginLeft: 8, fontSize: fs(14), fontWeight: '700' }}>
+                      {isFreeUser ? '₹49' : '₹99'}
+                    </Text>
+                    <Text style={[styles.offerPriceSub, { color: '#00C853', marginLeft: 6 }]}>
+                      • {isFreeUser ? '100% FREE' : '50% OFF'}
+                    </Text>
                   </View>
                   <Text style={[styles.offerDesc, { color: theme.textSec }]}>
-                    Official 1-Year Aadhaar identity verification & Verified Shield badge.
+                    {isFreeUser
+                      ? 'Complimentary 1-Year Aadhaar verification & Verified Shield badge for your account.'
+                      : 'Official 1-Year Aadhaar identity verification & Verified Shield badge.'}
                   </Text>
                 </View>
                 <View style={[styles.valueTag, { backgroundColor: '#00C853' }]}>
                   <Ionicons name="shield-checkmark" size={13} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.valueTagTxt}>SPECIAL ₹49</Text>
+                  <Text style={styles.valueTagTxt}>{isFreeUser ? 'FREE USER PASS' : 'SPECIAL ₹49'}</Text>
                 </View>
               </View>
 
@@ -511,7 +526,9 @@ export default function AadhaarVerificationModal({
                     ) : (
                       <>
                         <Ionicons name="shield-checkmark" size={19} color="#FFF" style={{ marginRight: 8 }} />
-                        <Text style={styles.gradCtaBtnTxt}>Pay ₹49 & Verify Aadhaar</Text>
+                        <Text style={styles.gradCtaBtnTxt}>
+                          {isFreeUser ? 'Verify Aadhaar Now (Free)' : 'Pay ₹49 & Verify Aadhaar'}
+                        </Text>
                       </>
                     )}
                   </LinearGradient>

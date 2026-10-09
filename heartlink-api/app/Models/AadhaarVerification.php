@@ -35,9 +35,22 @@ class AadhaarVerification extends Model
     ];
 
     protected $casts = [
-        'raw_response' => 'array',
-        'verified_at'  => 'datetime',
+        'verified_at' => 'datetime',
     ];
+
+    public function setRawResponseAttribute($value)
+    {
+        $this->attributes['raw_response'] = is_string($value) ? $value : json_encode($value);
+    }
+
+    public function getRawResponseAttribute($value)
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $decoded = json_decode($value, true);
+        return (json_last_error() === JSON_ERROR_NONE) ? $decoded : $value;
+    }
 
     public function user()
     {

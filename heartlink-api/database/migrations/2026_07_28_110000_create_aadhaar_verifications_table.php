@@ -30,7 +30,7 @@ return new class extends Migration
             $table->string('pincode')->nullable();
             $table->string('country')->nullable();
             $table->longText('photo')->nullable(); // Base64 encoded eKYC photo
-            $table->json('raw_response')->nullable(); // Full JSON response payload from provider
+            $table->longText('raw_response')->nullable(); // Full JSON response payload from provider
             $table->string('status')->default('VERIFIED');
             $table->timestamp('verified_at')->nullable();
             $table->timestamps();

@@ -66,7 +66,12 @@ export default function ProfileScreen() {
     user?.isVerified === true ||
     user?.isVerified === 1 ||
     user?.isVerified === '1' ||
-    user?.isVerified === 'true';
+    user?.isVerified === 'true' ||
+    user?.is_aadhaar_verified === true ||
+    user?.is_aadhaar_verified === 1 ||
+    user?.is_aadhaar_verified === '1' ||
+    user?.is_aadhaar_verified === 'true' ||
+    !!user?.aadhaar_number;
 
   const scrollY = React.useRef(new Animated.Value(0)).current;
 
@@ -466,7 +471,7 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = async () => {
-    if (!user?.is_verified && !editName.trim()) {
+    if (!isVerifiedUser && !editName.trim()) {
       setErrorMsg('Full name cannot be empty.');
       setErrorAlertVisible(true);
       return;
@@ -492,12 +497,12 @@ export default function ProfileScreen() {
       interests: editInterests,
     };
 
-    if (!user?.is_verified) {
+    if (!isVerifiedUser) {
       updatedPayload.name = editName.trim();
       updatedPayload.age = parseInt(editAge, 10) || 25;
       updatedPayload.gender = editGender;
     }
-    // Display name is always updatable
+    // Display name is always updatable by user
     updatedPayload.display_name = editDisplayName.trim() || user?.display_name || (editName.trim() ? editName.trim().split(' ')[0] : 'Member');
 
     try {
@@ -956,7 +961,7 @@ export default function ProfileScreen() {
                 ]}
                 numberOfLines={1}
               >
-                {profileUser.name}
+                {profileUser.display_name || profileUser.name}
               </Text>
               {renderVerifiedBadge(user, 16, { marginLeft: 4 })}
             </View>
@@ -990,7 +995,7 @@ export default function ProfileScreen() {
               <View style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={styles.inputLabel}>Full Name</Text>
-                  {user?.is_verified && (
+                  {isVerifiedUser && (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Ionicons name="lock-closed" size={11} color="#00C853" style={{ marginRight: 3 }} />
                       <Text style={{ fontSize: 10, fontWeight: '800', color: '#00C853' }}>Verified (Locked)</Text>
@@ -1000,12 +1005,12 @@ export default function ProfileScreen() {
                 <TextInput
                   style={[
                     styles.modalInput,
-                    user?.is_verified && { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }
+                    isVerifiedUser && { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }
                   ]}
                   value={editName}
                   onChangeText={setEditName}
-                  editable={!user?.is_verified}
-                  maxLength={25}
+                  editable={!isVerifiedUser}
+                  maxLength={50}
                   placeholder="Full Name"
                   placeholderTextColor={theme.textFaint}
                 />
@@ -1015,14 +1020,14 @@ export default function ProfileScreen() {
               <View style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={styles.inputLabel}>Display Name</Text>
-                  <Text style={{ fontSize: 10, color: theme.textFaint }}>How others see you</Text>
+                  <Text style={{ fontSize: 10, color: theme.textFaint }}>How others see you (Editable)</Text>
                 </View>
                 <TextInput
                   style={styles.modalInput}
                   value={editDisplayName}
                   onChangeText={setEditDisplayName}
                   editable={true}
-                  maxLength={25}
+                  maxLength={35}
                   placeholder="Display Name"
                   placeholderTextColor={theme.textFaint}
                 />
@@ -1034,18 +1039,21 @@ export default function ProfileScreen() {
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                     <Text style={styles.inputLabel}>Age</Text>
-                    {user?.is_verified && (
-                      <Ionicons name="lock-closed" size={11} color="#00C853" />
+                    {isVerifiedUser && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons name="lock-closed" size={11} color="#00C853" style={{ marginRight: 2 }} />
+                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#00C853' }}>Locked</Text>
+                      </View>
                     )}
                   </View>
                   <TextInput
                     style={[
                       styles.modalInput,
-                      user?.is_verified && { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }
+                      isVerifiedUser && { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }
                     ]}
                     value={editAge}
                     onChangeText={setEditAge}
-                    editable={!user?.is_verified}
+                    editable={!isVerifiedUser}
                     keyboardType="numeric"
                     placeholder="Age"
                     placeholderTextColor={theme.textFaint}
@@ -1069,14 +1077,14 @@ export default function ProfileScreen() {
               <View style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                   <Text style={styles.inputLabel}>Gender</Text>
-                  {user?.is_verified && (
+                  {isVerifiedUser && (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Ionicons name="lock-closed" size={11} color="#00C853" style={{ marginRight: 3 }} />
                       <Text style={{ fontSize: 10, fontWeight: '800', color: '#00C853' }}>Verified (Locked)</Text>
                     </View>
                   )}
                 </View>
-                {user?.is_verified ? (
+                {isVerifiedUser ? (
                   <View style={[styles.modalInput, { opacity: 0.65, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', justifyContent: 'center' }]}>
                     <Text style={{ color: theme.textPrimary, fontSize: 14, fontWeight: '600' }}>{user?.gender || editGender}</Text>
                   </View>
