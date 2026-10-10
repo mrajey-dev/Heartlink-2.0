@@ -1,0 +1,45 @@
+name: Heart Link API CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+    paths:
+      - 'heartlink-api/**'
+      - '.github/workflows/deploy-heartlink-api.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Laravel API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, bcmath, pdo_mysql, sqlite3, pdo_sqlite, curl, xml, zip
+          coverage: none
+
+      - name: Validate Composer configuration
+        working-directory: heartlink-api
+        run: composer validate --no-check-publish
+
+      - name: Install locked dependencies
+        working-directory: heartlink-api
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Check Laravel syntax
+        working-directory: heartlink-api
+        run: |
+          find app routes config database -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
